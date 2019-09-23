@@ -1,3 +1,44 @@
+Release 060221
+* [nt]roff: With the ".hylang" request, the individual parts of words
+  composed by "-" or "\(em" characters are now subject to hyphenation.
+* troff: The ".fspacewidth" request has been introduced to set the width
+  of the space character of a font.
+* troff: For monospaced fonts, the space width is now set to the size of
+  the "space" character in the AFM/TrueType/OpenType font metrics. This
+  matches the traditional behavior of the "post" device with the "Courier"
+  font, but was previously not done for "ps", which led to incorrect
+  formatting.
+* troff: Non-ASCII small characters were erroneously mapped to uppercase
+  input characters. They are now mapped to lowercase input characters as
+  it is done for ASCII characters.
+* troff: When a regular font was chosen as fallback for an expert font,
+  non-ASCII characters were selected from the regular font even if a
+  matching character in the expert font existed.
+* [nt]roff: Additional conditions are available with ".if": "c" to test
+  for a glyph in the current font, "d" to test for the existence of a
+  macro, and "r" to test for the existence of a number register.
+* [nt]roff: Three additional operators for numeric expressions are
+  available: "<>" (not equal), "<?" (minimum), and ">?" (maximum).
+* [nt]roff: The input line number is now adjusted at a different place,
+  fixing many glitches which previously caused it to be wrong.
+* tbl: The ".lf" troff request is now used internally to adjust troff's
+  idea of the current input file and line number, making troff warnings
+  more helpful.
+* tbl: The ".warn" troff request is now used internally to save, disable,
+  and restore warning messages around those portions of tbl output which
+  use potentially undefined requests or registers.
+* pic: The comments before ".PS" containing bounding box information are
+  now prefixed by '.\"' instead of '...' for compatibility with ".warn".
+* [nt]roff: The "\n[.warn]" number register is now properly changed after
+  a call to ".warn" with no arguments.
+* pic/dpost: The PostScript implementation of the "Dl" (draw line)
+  operation now rounds the current point to the troff device resolution
+  when testing for equality. This is another fix for "box fill 0" in pic.
+* troff/dpost: A "x X LC_CTYPE localename" device command has been added.
+  This ensures that troff and dpost use the same locale for generating
+  PDF bookmark entries.
+* dpost: CFF font data is now ASCII hex encoded in PostScript output.
+
 Release 060208
 * troff: Eastern European characters for Unicode/PostScript conversion
   have been added (patch by Vladimir B. Machulsky).

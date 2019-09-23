@@ -186,6 +186,22 @@ New and extended requests
 
 	The remaining arguments are handled as described for ".fp".
 
+.fspacewidth ff [width]					troff only
+	sets the width of the space character in font "ff" to "width",
+	which is given in units of 1/72000 of an inch multiplied by the
+	current point size or 1/1000 of an em (as in AFM kerning pair
+	definitions). If only one argument is present, the space width
+	is set to the width of the "space" glyph as obtained from the
+	font metrics file. If the space width for a font is not set
+	explicitly using this request, it defaults to 1/3 em for
+	variable-width fonts, or to the width of the "space" glyph
+	for monospaced fonts.
+	  When the width of spaces in output is actually computed,
+	the space size as set by ".ss" is also taken into account.
+	The space width as defined above is used directly with
+	".ss 12", which is the default. Otherwise, it is multiplied
+	by the ss setting divided by 12.
+
 .ftr ff abcd...						troff only
 	is a font-specific variant of the ".tr" request. If the current
 	character originates from font "ff", character "a" is translated
@@ -214,6 +230,19 @@ New and extended requests
 	mechanism. Note that hyphenation is disabled by default if troff
 	is used directly, and can be switched on using the ".hy" request,
 	which is what many macro packages do.
+	  This request also makes parts of words composed by "-" or
+	"\(em" characters subject to hyphenation. Traditionally, the only
+	hyphenation points in such words had been the hyphens/dashes.
+
+.if
+	The following new conditions are available:
+
+	.if c G		true if a glyph "G" exists in the current font,
+			where "G" is either an ASCII or localized input
+			character, a troff special character "\(xx" or
+			"\[xxx]", or a "\U'xxxx'" escape sequence
+	.if d xx	true if there is a request, macro, or string "xx"
+	.if r xx	true if there is a number register "xx"
 
 .kern [0|1]						troff only
 	Disables (0) or enables pairwise kerning. The default is enabled
@@ -492,6 +521,16 @@ New number registers
 	prints the current year (2005 etc.).
 
 
+New numeric expressions
+=======================
+
+a<>b	is 1 if the expression "a" is not equal to "b", or 0 otherwise.
+
+a<?b	is the minimum of "a" and "b".
+
+a>?b	is the maximum of "a" and "b".
+
+
 Warning bits and names
 ======================
 
@@ -526,7 +565,7 @@ currently defined:
 131072	font	Warn when a font cannot be found. This warning is enabled
 		by default.
 	all	All warnings except "di", "mac", and "reg". This may be the
-		best choice when using tbl, eqn, or existing macro packages.
+		best choice when using existing macro packages.
 	w	All warnings.
 
 
@@ -568,6 +607,10 @@ x X BleedAt left-offset top-offset width height
 x X CropAt left-offset top-offset width height
 	results from the ".cropat" request and passes the given values
 	in device units.
+
+x X LC_CTYPE localename
+	advises the post-processor to set the LC_CTYPE locale category
+	to "localename".
 
 x X PaperSize x y setmedia
 	results from the ".mediasize" or ".papersize" requests and gives
@@ -632,4 +675,4 @@ x X TrimAt left-offset top-offset width height
 	in device units.
 
 
-Gunnar Ritter                                                   2/5/06
+Gunnar Ritter                                                   2/19/06

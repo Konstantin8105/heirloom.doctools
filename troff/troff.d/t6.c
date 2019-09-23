@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)t6.c	1.119 (gritter) 1/24/06
+ * Sccsid @(#)t6.c	1.123 (gritter) 2/21/06
  */
 
 /*
@@ -575,7 +575,7 @@ tchar setch(int delim)
 	if (c == 0 && warn & WARN_CHAR)
 		errprint("missing glyph \\%c%s%s", delim, temp,
 				delim == '[' ? "]" : "");
-	if (c == 0)
+	if (c == 0 && !tryglf)
 		c = ' ';
 	return c;
 }
@@ -1239,6 +1239,38 @@ casess(void)
 	noscale = 0;
 }
 
+void
+casefspacewidth(void)
+{
+	struct namecache	*np;
+	struct afmtab	*a;
+	int	f, n, i;
+
+	lgf++;
+	if (skip(1))
+		return;
+	if ((i = getrq()) >= 256)
+		i = maybemore(i, 2);
+	if ((f = findft(i)) < 0)
+		return;
+	if (skip(0)) {
+		fontab[f][0] = dev.res * dev.unitwidth / 72 / 3;
+		if (afmtab && (i = fontbase[f]->afmpos - 1) >= 0) {
+			a = afmtab[i];
+			np = afmnamelook(a, "space");
+			if (np->afpos != 0)
+				fontab[f][0] = fontab[f][np->afpos];
+		}
+	} else {
+		noscale++;
+		n = atoi();
+		noscale--;
+		unitsPerEm = 1000;
+		fontab[f][0] = unitconv(n);
+	}
+	zapwcache(1);
+}
+
 
 tchar xlss(void)
 {
@@ -1691,13 +1723,13 @@ setpapersize(int setmedia)
 void
 casepapersize(void)
 {
-	return setpapersize(0);
+	setpapersize(0);
 }
 
 void
 casemediasize(void)
 {
-	return setpapersize(1);
+	setpapersize(1);
 }
 
 static void
@@ -1724,19 +1756,19 @@ cutat(struct box *bp)
 void
 casetrimat(void)
 {
-	return cutat(&trimat);
+	cutat(&trimat);
 }
 
 void
 casebleedat(void)
 {
-	return cutat(&bleedat);
+	cutat(&bleedat);
 }
 
 void
 casecropat(void)
 {
-	return cutat(&cropat);
+	cutat(&cropat);
 }
 
 static void
@@ -1760,6 +1792,7 @@ hang(int **tp)
 		n = atoi();
 		noscale--;
 		if (fbits(k) == j && !ismot(k)) {
+			unitsPerEm = 1000;
 			n = unitconv(n);
 			if (tp[j] == NULL)
 				tp[j] = calloc(NCHARS, sizeof *tp);
@@ -1828,6 +1861,7 @@ casekernpair(void)
 	if (d == UNPAD)
 		d = ' ';
 	setfbits(d, g);
+	unitsPerEm = 1000;
 	n = unitconv(n);
 	kadd(c, d, n);
 done:
@@ -1863,6 +1897,7 @@ kernsingle(int **tp)
 			continue;
 		if (tp[f] == NULL)
 			tp[f] = calloc(NCHARS, sizeof *tp);
+		unitsPerEm = 1000;
 		tp[f][c] = unitconv(n);
 	}
 	font = savfont;
@@ -2014,7 +2049,7 @@ int
 un2tr(int c, int *fp)
 {
 	extern char	ifilt[];
-	struct unimap	*up;
+	struct unimap	*um, *up;
 	int	i, j;
 
 	switch (c) {
@@ -2055,11 +2090,20 @@ un2tr(int c, int *fp)
 		if ((i = ufmap(c, font, fp)) != 0)
 			return i;
 		if ((c&~0xffff) == 0 && unimap[c>>8] != NULL &&
-				(up = unimap[c>>8][c&0377]) != NULL)
+				(um = unimap[c>>8][c&0377]) != NULL) {
+			up = um;
+			do
+				if ((j = postchar1(up->u.psc, font)) != 0) {
+					*fp = font;
+					return j;
+				}
+			while ((up = up->next) != NULL);
+			up = um;
 			do
 				if ((j = postchar(up->u.psc, fp)) != 0)
 					return j;
 			while ((up = up->next) != NULL);
+		}
 		if (fallbacktab[font])
 			for (j = 0; fallbacktab[font][j] != 0; j++) {
 				if ((i = findft(fallbacktab[font][j])) < 0)
@@ -2080,7 +2124,7 @@ un2tr(int c, int *fp)
 		} else {
 			if (warn & WARN_CHAR)
 				errprint("no glyph available for %U", c);
-			return ' ';
+			return tryglf ? 0 : ' ';
 		}
 	}
 }

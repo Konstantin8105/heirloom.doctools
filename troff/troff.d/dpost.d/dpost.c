@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)dpost.c	1.134 (gritter) 2/1/06
+ * Sccsid @(#)dpost.c	1.137 (gritter) 2/19/06
  */
 
 /*
@@ -668,6 +668,7 @@ static void	t_cutat(const char *, struct box *, char *);
 static void	t_track(char *);
 static void	t_strack(void);
 static void	t_pdfmark(char *);
+static void	t_locale(char *);
 
 static int	mb_cur_max;
 
@@ -1709,6 +1710,8 @@ devcntrl(
 		    t_track(buf);
 		else if ( strcmp(str, "PDFMark") == 0 )
 		    t_pdfmark(buf);
+		else if ( strcmp(str, "LC_CTYPE") == 0 )
+		    t_locale(buf);
 		else if ( strcmp(str, "BeginPath") == 0 )
 		    beginpath(buf, FALSE);
 		else if ( strcmp(str, "DrawPath") == 0 )
@@ -2351,11 +2354,11 @@ ple32(const char *cp)
 
 static const char ps_adobe_font_[] = "%!PS-AdobeFont-";
 static const char ps_truetypefont_[] = "%!PS-TrueTypeFont-";
+static const char hex[] = "0123456789abcdef";
 
 static void
 supplypfb(char *font, char *path, FILE *fp)
 {
-    const char	hex[] = "0123456789abcdef";
     char	buf[30];
     long	length;
     int	i, c = EOF, n, type = 0, lastc = EOF;
@@ -2446,7 +2449,9 @@ supplyotf(char *font, char *path, FILE *fp)
 	struct stat	st;
 	char	*contents;
 	size_t	size, offset, length;
+	int	i;
 	int	fsType;
+	const char StartData[] = " StartData ";
 
 	if (fstat(fileno(fp), &st) < 0)
 		error(FATAL, "cannot stat %s", path);
@@ -2474,16 +2479,24 @@ supplyotf(char *font, char *path, FILE *fp)
         	fprintf(sf, "%%%%+ font %s\n", font);
 	fprintf(rf, "%%%%BeginResource: font %s\n", font);
 	fprintf(rf, "/FontSetInit /ProcSet findresource begin\n");
-	fprintf(rf, "%%%%BeginData: %ld Binary Bytes\n",
-			(long)(length + 13 + strlen(font) + 12));
-	fprintf(rf, "/%s %12d StartData ", font, length);
-	fwrite(&contents[offset], 1, length, rf);
-	fprintf(rf, "\n%%%%EndData\n");
+	fprintf(rf, "/%s %d ", font, length);
+	fprintf(rf, "currentfile /ASCIIHexDecode filter cvx exec\n");
+	for (i = 0; StartData[i]; i++) {
+		putc(hex[(StartData[i]&0360)>>4], rf);
+		putc(hex[StartData[i]&017], rf);
+	}
+	putc('\n', rf);
+	for (i = offset; i < offset+length; i++) {
+		putc(hex[(contents[i]&0360)>>4], rf);
+		putc(hex[contents[i]&017], rf);
+		if (i > offset && (i - offset + 1) % 34 == 0)
+			putc('\n', rf);
+	}
+	fprintf(rf, ">\n");
 	fprintf(rf, "%%%%EndResource\n");
 	free(contents);
 	got_otf = 1;
 	LanguageLevel = MAX(LanguageLevel, 3);
-	Binary++;
 }
 
 static void
@@ -4354,4 +4367,18 @@ orderbookmarks(void)
 		refs[k] = i;
 		lvl = k;
 	}
+}
+
+static void
+t_locale(char *lp)
+{
+	static char	*savlp;
+
+	if (savlp && strcmp(lp, savlp) == 0)
+		return;
+	free(savlp);
+	savlp = malloc(strlen(lp) + 1);
+	sscanf(lp, "%s", savlp);
+	setlocale(LC_CTYPE, savlp);
+	mb_cur_max = MB_CUR_MAX;
 }

@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n1.c	1.60 (gritter) 2/5/06
+ * Sccsid @(#)n1.c	1.63 (gritter) 2/17/06
  */
 
 /*
@@ -512,7 +512,8 @@ verrprint(const char *s, va_list ap)
 	fdprintf(stderr, "%s: ", progname);
 	vfdprintf(stderr, s, ap);
 	if (numtab[CD].val > 0)
-		fdprintf(stderr, "; line %d, file %s", numtab[CD].val,
+		fdprintf(stderr, "; line %d, file %s",
+			 numtab[CD].val + (nlflg == 0 && frame == stk),
 			 cfname[ifi] ? cfname[ifi] : "");
 	if (xflag && realpage)
 		fdprintf(stderr, "; page %ld", realpage);
@@ -934,11 +935,8 @@ g0:
 		if (!isascii(k) || gchtab[k]==0)
 			return(i);
 		if (k == '\n') {
-			if (cbits(i) == '\n') {
+			if (cbits(i) == '\n')
 				nlflg++;
-				if (ip == 0)
-					numtab[CD].val++; /* line number */
-			}
 			return(k);
 		}
 		if (k == FLSS) {
@@ -1002,8 +1000,6 @@ g0:
 		while (cbits(i = getch0()) != '\n')
 			;
 		nlflg++;
-		if (ip == 0)
-			numtab[CD].val++;
 		return(i);
 	case ESC:	/* double backslash */
 		i = eschar;
@@ -1072,21 +1068,18 @@ gx:
 	}
 	switch (k) {
 
-	case 'p':	/* spread */
-		spread++;
-		goto g0;
 	case '[':
 		if (xflag == 0)
 			goto dfl;
 		/*FALLTHRU*/
 	case '(':	/* special char name */
-		if ((i = setch(k)) == 0)
+		if ((i = setch(k)) == 0 && !tryglf)
 			goto g0;
 		return(i);
 	case 'U':	/* Unicode character */
 		if (xflag == 0)
 			goto dfl;
-		if ((i = setuc()) == 0)
+		if ((i = setuc()) == 0 && !tryglf)
 			goto g0;
 		return(i);
 	case 'E':	/* printable version of current eschar */
@@ -1094,6 +1087,16 @@ gx:
 			goto dfl;
 		i = PRESC;
 		goto gx;
+	}
+	if (tryglf) {
+		pbbuf[pbp++] = j;
+		return(eschar);
+	}
+	switch (k) {
+
+	case 'p':	/* spread */
+		spread++;
+		goto g0;
 	case 's':	/* size indicator */
 		setps();
 		goto g0;
@@ -1327,6 +1330,8 @@ g2:
 			i = ifilt[i];
 		} else
 			illseq(i, NULL, 0);
+		if (i == '\n')
+			numtab[CD].val++; /* line number */
 	}
 	if (cbits(i) == IMP && !raw)
 		goto again;
