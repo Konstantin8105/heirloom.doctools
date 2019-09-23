@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n3.c	1.174 (gritter) 11/1/06
+ * Sccsid @(#)n3.c	1.180 (gritter) 12/17/06
  */
 
 /*
@@ -231,6 +231,10 @@ _growcontab(struct contab **contp, int *NMp, struct contab ***hashp)
 			if (s->contp >= onc && s->contp < &onc[*NMp])
 				s->contp = (struct contab *)
 					((char *)(s->contp) + j);
+		for (i = 0; i <= dilev; i++)
+			if (d[i].soff >= onc && d[i].soff < &onc[*NMp])
+				d[i].soff = (struct contab *)
+					((char *)(d[i].soff) + j);
 	}
 	*NMp += inc;
 	return *contp;
@@ -885,6 +889,11 @@ rbf (void)		/*return next char from blist[] block*/
 		else
 			return(popi());
 	}
+	if (ip == -2) {
+		errprint("Bad storage while processing paragraph");
+		ip = 0;
+		done2(-5);
+	}
 	/* this is an inline expansion of rbf0: dirty! */
 	i = corebuf[ip];
 	/* end of rbf0 */
@@ -965,15 +974,9 @@ popi(void)
 	} else
 		if (p->loopf & LOOP_FREE)
 			ffree(p->newip);
-	if (p->flags & FLAG_PARAGRAPH) {
-		static jmp_buf	jmp;
-
-		ffree(p->contp->mx);
-		memcpy(&jmp, p->jmp, sizeof jmp);
-		free(p);
-		longjmp(jmp, 1);
-	}
 	free(p);
+	if (frame->flags & FLAG_PARAGRAPH)
+		longjmp(*frame->jmp, 1);
 	return(c);
 }
 
@@ -1544,12 +1547,9 @@ prwatch(struct contab *contp, int rq, int prc)
 		while ((c = rbf()) != 0) {
 			while (isxfunc(c, CHAR))
 				c = charout[sbits(c)].ch;
-#if !defined (NROFF) && defined (EUC)
 			if (iscopy(c) && (k = wctomb(&buf[j], cbits(c))) > 0)
 				j += k;
-			else
-#endif	/* !NROFF && EUC */
-			if (ismot(c))
+			else if (ismot(c))
 				buf[j++] = '?';
 			else if ((k = cbits(c)) < 0177) {
 				if (isprint(k))
@@ -1777,7 +1777,8 @@ casesubstring(void)
 						st = 1;
 				}
 				if (st == 1) {
-					wbf(tp[j]);
+					if (tp)
+						wbf(tp[j]);
 					if (j >= n2)
 						break;
 				}
@@ -2180,14 +2181,14 @@ int
 maybemore(int sofar, int flags)
 {
 	char	c, buf[NC+1], pb[] = { '\n', 0 };
-	int	i = 2, n, _raw = raw, _init = init;
+	int	i = 2, n, _raw = raw, _init = init, _app = app;
 
 	if (xflag < 2)
 		return sofar;
 	if (xflag == 2)
 		raw = 1;
 	else
-		init++;
+		app = 0;
 	buf[0] = sofar&BYTEMASK;
 	buf[1] = (sofar>>BYTE)&BYTEMASK;
 	do {
@@ -2210,6 +2211,7 @@ maybemore(int sofar, int flags)
 				cpushback(&buf[2]);
 			raw = _raw;
 			init = _init;
+			app = _app;
 			if (flags & 2) {
 				if (i > 3 && xflag >= 3)
 					sofar = -2;
@@ -2237,6 +2239,7 @@ maybemore(int sofar, int flags)
 		cpushback(pb);
 	raw = _raw;
 	init = _init;
+	app = _app;
 	return MAXRQ2 + n;
 }
 

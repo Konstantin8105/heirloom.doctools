@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)ext.h	1.102 (gritter) 11/5/06
+ * Sccsid @(#)ext.h	1.107 (gritter) 01/20/07
  */
 
 /*
@@ -271,6 +271,7 @@ extern	int	nextfile(void);
 extern	int	popf(void);
 extern	void	flushi(void);
 extern	int	getach(void);
+extern	int	rgetach(void);
 extern	void	casenx(void);
 extern	int	getname(void);
 extern	void	caseso(void);
@@ -370,10 +371,12 @@ extern	int	roman(int, int (*)(tchar));
 extern	int	roman0(int, int (*)(tchar), char *, char *);
 extern	int	abc(int, int (*)(tchar));
 extern	int	abc0(int, int (*)(tchar));
-#define	atoi()	xxatoi()
-extern	int	atoi();
-#define	atof()	xxatof()
-extern	float	atof();
+#undef	atoi
+#define	atoi	xxatoi
+extern	int	atoi(void);
+#undef	atof
+#define	atof	xxatof
+extern	float	atof(void);
 extern	long long	atoi0(void);
 extern	double	atof0(void);
 extern	void	setnr(const char *, int, int);
@@ -553,6 +556,7 @@ extern	void	setdraw(void);
 extern	void	casefc(void);
 extern	tchar	setfield(int);
 extern	tchar	setpenalty(void);
+extern	tchar	setdpenal(void);
 extern	tchar	mkxfunc(int, int);
 extern	void	localize(void);
 extern	void	caselc_ctype(void);

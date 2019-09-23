@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n4.c	1.92 (gritter) 11/5/06
+ * Sccsid @(#)n4.c	1.99 (gritter) 12/25/06
  */
 
 /*
@@ -236,17 +236,15 @@ sl:
 				i = pgne % (ll - in);
 				if (i == 0 && pgne != 0)
 					i = 1;
-			} else {
+			} else
 				i = ne + adspc;		
-				if (gflag) {
-					if (ce || rj || !fi ? pendnf :
-							pendw != NULL)
-						i += wne - wsp;
-					else if (nwd) {
-						i += sps;
-						if (seflg || spflg)
-							i += ses;
-					}
+			if (gflag) {
+				if (ce || rj || !fi ? pendnf : pendw != NULL)
+					i += wne - wsp;
+				else if (nwd || pgchars) {
+					i += sps;
+					if (seflg || spflg)
+						i += ses;
 				}
 			}
 			break;
@@ -421,6 +419,8 @@ sl:
 			i = hypp;
 		} else if (strcmp(&name[1], "hypp2") == 0) {
 			i = hypp2;
+		} else if (strcmp(&name[1], "hypp3") == 0) {
+			i = hypp3;
 		} else if (strcmp(&name[1], "padj") == 0) {
 			i = padj;
 		} else if (strcmp(&name[1], "ev") == 0) {
@@ -493,6 +493,8 @@ sl:
 			i = wne - wsp;
 		else if (strcmp(&name[1], "dilev") == 0)
 			i = dilev;
+		else if (strcmp(&name[1], "defpenalty") == 0)
+			i = dpenal ? dpenal - INFPENALTY0 - 1 : 0;
 		else
 			goto s0;
 	} else {
@@ -826,7 +828,7 @@ agetch(void)
 }
 
 int
-atoi()
+atoi(void)
 {
 	struct acc	a;
 
@@ -837,7 +839,7 @@ atoi()
 }
 
 float
-atof()
+atof(void)
 {
 	struct acc	a;
 
@@ -1257,6 +1259,30 @@ a1:
 		j = INCH;
 		i = 6;
 		break;
+	case 'D':	/* Didot points */
+		if (!xflag)
+			goto dfl;
+		j = INCH * 24;	/* following H. R. Bosshard, */
+		i = 1621;	/* Technische Grundlagen zur */
+		break;		/* Satzherstellung, Berne 1980, p. 17 */
+	case 'C':	/* Cicero */
+		if (!xflag)
+			goto dfl;
+		j = INCH * 24 * 12;
+		i = 1621;
+		break;
+	case 't':	/* printer's points */
+		if (!xflag)
+			goto dfl;
+		j = INCH * 100;	/* following Knuth */
+		i = 7227;
+		break;
+	case 'T':	/* printer's picas */
+		if (!xflag)
+			goto dfl;
+		j = INCH * 100 * 4;
+		i = 2409;
+		break;
 	case 'M':	/*Ems/100*/
 		if (!xflag)
 			goto dfl;
@@ -1471,7 +1497,7 @@ setr(void)
 	termc = getach();
 	rq = getrq(3);
 	lgf--;
-	if ((numtp = findr(rq)) == NULL || skip(1))
+	if (skip(1) || (numtp = findr(rq)) == NULL)
 		return;
 	j = inumb(&numtp->val);
 	if (nonumb)
@@ -1497,9 +1523,9 @@ casnr1(int flt, int local)
 	lgf++;
 	skip(1);
 	rq = getrq(3);
+	skip(!local);
 	if ((numtp = _findr(rq, 0, 1, local, NULL)) == NULL)
 		goto rtn;
-	skip(!local);
 	a = _inumb(&numtp->val, flt ? &numtp->fval : NULL, flt, NULL);
 	if (nonumb)
 		goto rtn;
@@ -1775,10 +1801,15 @@ _inumb(int *n, float *fp, int flt, int *relative)
 	struct acc	i;
 	register int j, f;
 	register tchar ii;
+	int	nv = 0;
+	float	fv = 0;
 
 	f = 0;
 	lgf++;
 	if (n) {
+		nv = *n;
+		if (fp)
+			fv = *fp;
 		if ((j = cbits(ii = getch())) == '+')
 			f = 1;
 		else if (j == '-')
@@ -1789,9 +1820,9 @@ _inumb(int *n, float *fp, int flt, int *relative)
 	i = _atoi(flt);
 	lgf--;
 	if (n && f && !flt)
-		i.n = *n + f * i.n;
+		i.n = nv + f * i.n;
 	if (fp && f && flt)
-		i.f = *fp + f * i.f;
+		i.f = fv + f * i.f;
 	if (!flt) i.n = quant(i.n, res);
 	vflag = 0;
 	res = dfactd = dfact = 1;

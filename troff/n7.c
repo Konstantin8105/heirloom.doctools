@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n7.c	1.150 (gritter) 11/5/06
+ * Sccsid @(#)n7.c	1.169 (gritter) 12/25/06
  */
 
 /*
@@ -48,13 +48,6 @@
 
 #include <stdlib.h>
 #include <limits.h>
-#if defined (EUC) && defined (NROFF)
-#ifdef	__sun
-#include <widec.h>
-#else
-#include <wchar.h>
-#endif
-#endif /* EUC && NROFF */
 #include "tdef.h"
 #ifdef NROFF
 #include "tw.h"
@@ -62,7 +55,7 @@
 #include "pt.h"
 #ifdef NROFF
 #define GETCH gettch
-tchar	gettch();
+tchar	gettch(void);
 #endif
 #ifndef NROFF
 #define GETCH getch
@@ -77,18 +70,10 @@ tchar	gettch();
 #include <math.h>
 #include <string.h>
 #include <ctype.h>
-#if defined (EUC) && defined (NROFF)
-#include <wctype.h>
-#endif /* EUC && NROFF */
 #include "ext.h"
-#if defined (EUC) && defined (NROFF)
-char	mbbuf2[MB_LEN_MAX + 1];
-char	*mbbuf2p = mbbuf2;
-tchar	mtbuf[MB_LEN_MAX + 1];
-tchar	*mtbufp;
-int	pendmb = 0;
+#if defined (EUC) && defined (NROFF) && defined (ZWDELIMS)
 wchar_t	cwc, owc, wceoll;
-#endif /* EUC && NROFF */
+#endif /* EUC && NROFF && ZWDELIMS */
 int	brflg;
 
 #undef	iswascii
@@ -99,7 +84,7 @@ static tchar	adjbit(tchar);
 static void	sethtdp(void);
 static void	leftend(tchar, int, int);
 static void	parword(void);
-static void	pbreak(void);
+static void	parfmt(void);
 #ifndef	NROFF
 #define	nroff		0
 extern int	lastrst;
@@ -155,8 +140,8 @@ restart:
 		text();
 		return;
 	}
-	if ((pa || padj) && pglines == 0 && pgchars && !ce && !rj && fi) {
-		pbreak();
+	if ((pa || padj) && pglines == 0 && pgchars) {
+		parfmt();
 		goto restart;
 	}
 	if (minspsz && !brflg && ad && !admod)
@@ -190,7 +175,8 @@ restart:
 	if (lastl + un > dip->maxl)
 		dip->maxl = lastl + un;
 	horiz(un);
-	pchar(mkxfunc(INDENT, un));
+	if (un != 0)
+		pchar(mkxfunc(INDENT, un));
 #ifdef NROFF
 	if (adrem % t.Adj)
 		resol = t.Hor; 
@@ -201,7 +187,7 @@ restart:
 #endif
 	adrem = (adrem / resol) * resol;
 	for (i = line; nc > 0; ) {
-		if ((c = cbits(j = *i++) & ~MBMASK) == ' ' || c == STRETCH) {
+		if ((c = cbits(j = *i++)) == ' ' || c == STRETCH) {
 			if (xflag && !fi && dilev || iszbit(j) || isadjspc(j))
 				goto std;
 			pad = 0;
@@ -213,8 +199,7 @@ restart:
 				minflg = _minflg;
 				pad += width(j);
 				nc--;
-			} while ((c = cbits(j = *i++) & ~MBMASK) == ' ' ||
-					c == STRETCH);
+			} while ((c = cbits(j = *i++)) == ' ' || c == STRETCH);
 			pad += kernadjust(i[-2], i[-1]);
 			i--;
 			pad += adsp;
@@ -468,13 +453,6 @@ nofill(void)
 		}
 		adsp = adrem = 0;
 		nwd = 10000;
-		if (frame->flags & FLAG_PARAGRAPH) {
-			if (pshapes) {
-				j = pglnout < pshapes ? pglnout : pshapes - 1;
-				un = pgin[j];
-			}
-			pglnout++;
-		}
 	}
 	nexti = GETCH();
 	leftend(nexti, !ce && !rj && !pendnf, !isdi(nexti));
@@ -552,7 +530,8 @@ ckul(void)
 		font = sfont;
 		mchbits();
 	}
-	if (it && (!itc || !pendw && !pendnf) && (--it == 0) && itmac)
+	if (it && !pglines && (!itc || !pendw && !pendnf) &&
+			(--it == 0) && itmac)
 		control(itmac, 0);
 }
 
@@ -703,8 +682,8 @@ newline(int a)
 nl1:
 	ejf = dip->hnl = numtab[NL].val = 0;
 	ejl = frame->tail_cnt;
-	if (donef) {
-		if ((!nc && !wch) || ndone)
+	if (donef || ndone && pgchars && !pglines) {
+		if ((!nc && !wch && !pglines) || ndone)
 			done1(0);
 		ndone++;
 		donef = 0;
@@ -717,7 +696,7 @@ nl1:
 		numtab[PN].val = npn;
 		npn = npnflg = 0;
 	}
-	prwatchn(PN);
+	prwatchn(&numtab[PN]);
 nlpn:
 	if (numtab[PN].val == pfrom) {
 		print++;
@@ -744,6 +723,7 @@ nl2:
 			trap |= control(olt[i], 0);
 		nolt = 0;
 		free(olt);
+		olt = NULL;
 	}
 nlt:
 	if (dip != d)
@@ -967,7 +947,7 @@ movword(void)
 	over = 0;
 	wp = wordp;
 	if (!nwd) {
-		while ((c = cbits(i = *wp++) & ~MBMASK) == ' ') {
+		while ((c = cbits(i = *wp++)) == ' ') {
 			if (iszbit(i))
 				break;
 			wch--;
@@ -1179,7 +1159,7 @@ setnel(void)
 {
 	if (!nc) {
 		linep = line;
-		if (un1 >= 0) {
+		if (un1 >= 0 && (!pgwords || pglines)) {
 			un = un1;
 			un1 = -1;
 		}
@@ -1200,13 +1180,13 @@ getword(int x)
 	register int j, k = 0, w;
 	register tchar i = 0, *wp, nexti, gotspc = 0, t;
 	int noword, n, inword = 0;
-#if defined (EUC) && defined (NROFF)
+#if defined (EUC) && defined (NROFF) && defined (ZWDELIMS)
 	wchar_t *wddelim;
 	char mbbuf3[MB_LEN_MAX + 1];
 	char *mbbuf3p;
 	int wbf;
 	tchar m;
-#endif /* EUC && NROFF */
+#endif /* EUC && NROFF && ZWDELIMS */
 
 	noword = 0;
 	if (x)
@@ -1221,33 +1201,13 @@ getword(int x)
 	over = wne = wch = 0;
 	hyoff = 0;
 	memset(wdpenal, 0, wdsize * sizeof *wdpenal);
-#if defined (EUC) && defined (NROFF)
-	mtbufp = mtbuf;
-	if (pendmb) {
-		while(*mtbufp) {
-			switch(*mtbufp & MBMASK) {
-			case LASTOFMB:
-			case BYTE_CHR:
-				storeword(*mtbufp++, -1);
-				break;
-
-			default:
-				storeword(*mtbufp++, 0);
-			}
-		}
-		mtbufp = mtbuf;
-		pendmb = 0;
-		goto g1;
-	}
-#endif /* EUC && NROFF */
 	n = 0;
 	while (1) {	/* picks up 1st char of word */
 		j = cbits(i = GETCH());
-#if defined (EUC) && defined (NROFF)
+#if defined (EUC) && defined (NROFF) && defined (ZWDELIMS)
 		if (multi_locale)
-			if (collectmb(i))
-				continue;
-#endif /* EUC && NROFF */
+			collectmb(i);
+#endif /* EUC && NROFF && ZWDELIMS */
 		if (j == '\n') {
 			wne = wch = 0;
 			noword = 1;
@@ -1294,7 +1254,7 @@ getword(int x)
 		break;
 	}
 	seflg = 0;
-#if defined (EUC) && defined (NROFF)
+#if defined (EUC) && defined (NROFF) && defined (ZWDELIMS)
 	if (!multi_locale)
 		goto a0;
 	if (wddlm && iswprint(wceoll) && iswprint(cwc) &&
@@ -1310,16 +1270,7 @@ getword(int x)
 				while (*wddelim) {
 					if ((n = wctomb(mbbuf3, *wddelim++))
 					    > 0) {
-						mbbuf3[n] = 0;
-						n--;
-						mbbuf3p = mbbuf3 + n;
-						while(n) {
-							m = *(mbbuf3p-- - n--) &
-							    0xff | MIDDLEOFMB |
-							    ZBIT;
-							storeword(m, 0);
-						}
-						m = *mbbuf3p & 0xff | LASTOFMB;
+						m = setuc0(wddelim[-1]);
 						storeword(m, -1);
 					} else {
 						storeword(' ' | chbits, sps);
@@ -1332,7 +1283,7 @@ getword(int x)
 		}
 	}
 a0:
-#endif /* EUC && NROFF */
+#endif /* EUC && NROFF && ZWDELIMS */
 	if (spbits && xflag) {
 		t = ' ' | spbits;
 		w = width(t);
@@ -1383,27 +1334,7 @@ g0:
 	}
 	j = width(i);
 	numtab[HP].val += j;
-#if !defined (EUC) || !defined (NROFF)
 	storeword(i, j);
-#else	/* EUC && NROFF */
-	if (multi_locale) {
-		mtbufp = mtbuf;
-		while(*mtbufp) {
-			switch(*mtbufp & MBMASK) {
-			case LASTOFMB:
-			case BYTE_CHR:
-				storeword(*mtbufp++, j);
-				break;
-
-			default:
-				storeword(*mtbufp++, 0);
-			}
-		}
-		mtbufp = mtbuf;
-	} else {
-		storeword(i, j);
-	}
-#endif /* EUC && NROFF */
 	if (1) {
 		int	oev = ev;
 		nexti = GETCH();
@@ -1422,11 +1353,10 @@ g1:		nexti = GETCH();
 	j = cbits(i = nexti);
 	if (!ismot(i) && j != ohc)
 		inword = 1;
-#if defined (EUC) && defined (NROFF)
+#if defined (EUC) && defined (NROFF) && defined (ZWDELIMS)
 	if (multi_locale)
-		if (collectmb(i))
-			goto g1;
-#endif /* EUC && NROFF */
+		collectmb(i);
+#endif /* EUC && NROFF && ZWDELIMS */
 	{
 		static int sentchar[] =
 			{ '.', '?', '!', ':', 0 }; /* sentence terminators */
@@ -1436,23 +1366,22 @@ g1:		nexti = GETCH();
 		transchar[5] = DAGGER;
 		if (j != '\n' && j != ' ' || ismot(i) || iszbit(i) ||
 				isadjspc(i))
-#if defined (EUC) && defined (NROFF)
+#if defined (EUC) && defined (NROFF) && defined (ZWDELIMS)
 			if (!multi_locale)
-#endif /* EUC && NROFF */
+#endif /* EUC && NROFF && ZWDELIMS */
 			goto g0;
-#if defined (EUC) && defined (NROFF)
+#if defined (EUC) && defined (NROFF) && defined (ZWDELIMS)
 			else {
 				if (!wdbdg || (iswascii(cwc) && iswascii(owc)))
 					goto g0;
 				if ((wbf = (*wdbdg)(owc, cwc, 1)) < 5) {
-					pendmb++;
 					storeword((wbf < 3) ? ZWDELIM(1) :
 						  ZWDELIM(2), 0);
 					*wordp = 0;
 					goto rtn;
 				} else goto g0;
 			}
-#endif /* EUC && NROFF */
+#endif /* EUC && NROFF && ZWDELIMS */
 		wp = wordp-1;	/* handle extra space at end of sentence */
 		sp = *sentch ? sentch : sentchar;
 		tp = *transch ? transch : transchar;
@@ -1475,9 +1404,9 @@ g1:		nexti = GETCH();
 		cont:;
 		}
 	}
-#if defined (EUC) && defined (NROFF)
+#if defined (EUC) && defined (NROFF) && defined (ZWDELIMS)
 	wceoll = owc;
-#endif /* EUC && NROFF */
+#endif /* EUC && NROFF && ZWDELIMS */
 	*wordp = 0;
 	numtab[HP].val += xflag ? width(i) : sps;
 rtn:
@@ -1537,7 +1466,12 @@ storeword(register tchar c, register int w)
 	}
 s1:
 	if (isxfunc(c, PENALTY)) {
-		wdpenal[max(0, wordp - word - 1)] = sbits(c);
+		wdpenal[max(0, wordp - word - 1)] = sbits(c) | 0x80000000;
+		return;
+	}
+	if (isxfunc(c, DPENAL)) {
+		if ((wdpenal[max(0, wordp - word - 1)]&0x80000000) == 0)
+			wdpenal[max(0, wordp - word - 1)] = sbits(c);
 		return;
 	}
 	if (w == -1)
@@ -1547,6 +1481,8 @@ s1:
 	wne += w;
 	*wordp++ = c;
 	wch++;
+	if (dpenal)
+		wdpenal[max(0, wordp - word - 1)] = dpenal;
 }
 
 
@@ -1583,53 +1519,17 @@ tchar gettch(void)
 
 
 #endif
-#if defined (EUC) && defined (NROFF)
+#if defined (EUC) && defined (NROFF) && defined (ZWDELIMS)
 int
 collectmb(tchar i)
 {
-	int busy;
-
-	*mtbufp++ = i;
-	*mbbuf2p++ = i & BYTEMASK;
-	*mtbufp = *mbbuf2p = 0;
-	if (ismot(i)) {
-		mtbufp = mtbuf;
-		mbbuf2p = mbbuf2;
-		owc = 0;
-		cwc = 0;
-		return(busy = 0);
-	}
-	if ((i & MBMASK) == MIDDLEOFMB) {
-		if (mtbufp <= (mtbuf + mb_cur_max)) {
-			busy = 1;
-		} else {
-			*(mtbufp - 1) &= ~MBMASK;
-			goto gotmb;
-		}
-	} else {
-		if ((i & MBMASK) == LASTOFMB)
-			*(mtbufp - 1) &= ~MBMASK;
-gotmb:
-		mtbufp = mtbuf;
-		owc = cwc;
-		if ((*mbbuf2&~(wchar_t)0177) == 0) {
-			cwc = *mbbuf2;
-		} else if (mbtowc(&cwc, mbbuf2, mb_cur_max) <= 0) {
-			mtbufp = mtbuf;
-			while (*mtbufp) {
-				setcbits(*mtbufp, (*mtbufp & 0x1ff));
-				mtbufp++;
-			}
-			mtbufp = mtbuf;
-		}
-		mbbuf2p = mbbuf2;
-		busy = 0;
-	}
-	return(busy);
+	owc = cwc;
+	cwc = tr2un(cbits(i), fbits(i));
+	return(0);
 }
 
 
-#endif /* EUC && NROFF */
+#endif /* EUC && NROFF && ZWDELIMS */
 
 static tchar
 adjbit(tchar c)
@@ -1808,7 +1708,7 @@ lspcomp(int idiff)
  */
 
 static double
-penalty(int k, int s, int h, int h2)
+penalty(int k, int s, int h, int h2, int h3)
 {
 	double	t, d;
 
@@ -1826,6 +1726,8 @@ penalty(int k, int s, int h, int h2)
 		t += hypp;
 	if (h2 && hypp2)
 		t += hypp2;
+	if (h3 && hypp3)
+		t += hypp3;
 	t = t * t * t;
 	if (t > MAXPENALTY)
 		t = MAXPENALTY;
@@ -1833,9 +1735,10 @@ penalty(int k, int s, int h, int h2)
 }
 
 static void
-parcomp(void)
+parcomp(int start)
 {
-	double	*cost, *_cost, t;
+	double	*cost, *_cost;
+	long double	t;
 	int	*prevbreak, *hypc, *_hypc, *brcnt, *_brcnt;
 	int	i, j, k, m, h, v, s;
 
@@ -1846,10 +1749,11 @@ parcomp(void)
 	_brcnt = calloc(pgsize + 1, sizeof *_brcnt);
 	brcnt = &_brcnt[1];
 	prevbreak = calloc(pgsize, sizeof *prevbreak);
-	cost[-1] = 0;
-	for (i = 0; i < pgwords; i++)
+	for (i = -1; i < start; i++)
+		cost[i] = 0;
+	for (i = start; i < pgwords; i++)
 		cost[i] = HUGE_VAL;
-	for (i = 0; i < pgwords; i++) {
+	for (i = start; i < pgwords; i++) {
 		if (pshapes) {
 			j = brcnt[i-1];
 			if (j < pshapes)
@@ -1858,7 +1762,7 @@ parcomp(void)
 				nel = pgll[pshapes-1] - pgin[pshapes-1];
 		} else if (un != in) {
 			nel = ll;
-			nel -= i ? in : un;
+			nel -= i > start ? in : un;
 		}
 		k = pgwordw[i] + pglgsw[i];
 		m = pglsphc[i] + pglgsh[i];
@@ -1876,7 +1780,8 @@ parcomp(void)
 					t = 0;
 				else
 					t = penalty(v, s, pghyphw[j],
-						pghyphw[j] && hypc[i-1]);
+						pghyphw[j] && hypc[i-1],
+						pghyphw[j] && j >= pglastw);
 				t += pgpenal[j];
 				t += cost[i-1];
 				/*fdprintf(stderr, "%c%c%c%c to %c%c%c%c "
@@ -1894,7 +1799,7 @@ parcomp(void)
 						1 + brcnt[i-1],
 						brcnt[j]
 					);*/
-				if (t <= cost[j]) {
+				if ((double)t <= cost[j]) {
 					if (pghyphw[j])
 						h = hypc[i-1] + 1;
 					else
@@ -1938,15 +1843,15 @@ parcomp(void)
 				(char)para[pgwordp[i]+3]
 			);*/
 	pglines = 0;
-	memset(pgopt, 0, pgsize * sizeof *pgopt);
+	memset(&pgopt[pglnout], 0, (pgsize - pglnout) * sizeof *pgopt);
 	i = j = pgwords - 1;
 	do {
 		pglines++;
 		j = prevbreak[j];
 		pgopt[i--] = j--;
-	} while (j >= 0 && i >= 0);
-	memmove(&pgopt[1], &pgopt[i+2], pglines * sizeof *pgopt);
-	pgopt[0] = 0;
+	} while (j >= start && i >= pglnout);
+	memmove(&pgopt[pglnout+1], &pgopt[i+2], pglines * sizeof *pgopt);
+	pgopt[pglnout] = start;
 	free(_cost);
 	free(_hypc);
 	free(prevbreak);
@@ -1972,6 +1877,8 @@ growpgsize(void)
 	pglgeh = realloc(pglgeh, pgsize * sizeof *pglgeh);
 	pgin = realloc(pgin, pgsize * sizeof *pgin);
 	pgll = realloc(pgll, pgsize * sizeof *pgll);
+	pgwdin = realloc(pgwdin, pgsize * sizeof *pgwdin);
+	pgwdll = realloc(pgwdll, pgsize * sizeof *pgwdll);
 	pglno = realloc(pglno, pgsize * sizeof *pglno);
 	pgpenal = realloc(pgpenal, pgsize * sizeof *pgpenal);
 	if (pgwordp == NULL || pgwordw == NULL || pghyphw == NULL ||
@@ -1981,7 +1888,7 @@ growpgsize(void)
 			pglgsw == NULL || pglgew == NULL ||
 			pglgsh == NULL || pglgeh == NULL ||
 			pgin == NULL || pgll == NULL || pglno == NULL ||
-			pgpenal == NULL) {
+			pgpenal == NULL || pgwdin == NULL || pgwdin == NULL) {
 		errprint("out of memory justifying paragraphs");
 		done(02);
 	}
@@ -2001,6 +1908,7 @@ parlgzero(int i)
 static float
 makepgpenal(int p)
 {
+	p &= ~0x80000000;
 	p -= INFPENALTY0 + 1;
 	if (p >= INFPENALTY0)
 		return INFPENALTY;
@@ -2019,12 +1927,16 @@ parword(void)
 	if (pgwords + 1 >= pgsize)
 		growpgsize();
 	hc = shc ? shc : HYPHEN;
+	pglastw = pgwords;
 	wp = wordp;
 	a = w = 0;
 	pglno[pgwords] = numtab[CD].val;
 	pgspacp[pgwords] = pgspacs;
 	pgpenal[pgwords] = 0;
-	while ((c = cbits(i = *wp++) & ~MBMASK) == ' ') {
+	pgwdin[pgwords] = in;
+	pgwdll[pgwords] = ll;
+	un1 = -1;
+	while ((c = cbits(i = *wp++)) == ' ') {
 		if (iszbit(i))
 			break;
 		wch--;
@@ -2102,7 +2014,8 @@ parword(void)
 #endif	/* !NROFF */
 		}
 		if (pghyphw[pgwords] || wp > word && maybreak(wp[-1])) {
-			pghyphw[pgwords] -= kernadjust(wp[-1], wp[0]);
+			if (pghyphw[pgwords])
+				pghyphw[pgwords] -= kernadjust(wp[-1], wp[0]);
 			pgne += pgwordw[pgwords];
 			pgwordp[++pgwords] = pgchars;
 			if (pgwords + 1 >= pgsize)
@@ -2116,6 +2029,8 @@ parword(void)
 			pgadspc[pgwords] = 0;
 			pglsphc[pgwords] = 0;
 			pgpenal[pgwords] = 0;
+			pgwdin[pgwords] = in;
+			pgwdll[pgwords] = ll;
 			parlgzero(pgwords+1);
 		}
 		i = *wp++;
@@ -2148,31 +2063,63 @@ parword(void)
 	pgadspc[pgwords] = 0;
 	pglsphc[pgwords] = 0;
 	pgpenal[pgwords] = 0;
+	pgwdin[pgwords] = in;
+	pgwdll[pgwords] = ll;
 	parlgzero(pgwords);
 	if (spread)
 		tbreak();
 }
 
-void
-parpr(void)
+static void
+pbreak(int sprd, struct s *s)
 {
-	int	i, j, k = 0, nw, w, stretches, _spread = spread, hc, savlnmod;
-	int	savll, savcd, savun;
-	tchar	c, e, lastc, savic, lgs;
+	int	j;
 
-	savic = ic;
-	ic = 0;
-	savlnmod = lnmod;
-	lnmod = 0;
+	if (sprd)
+		adflg |= 5;
+	if (pshapes) {
+		j = pglnout < pshapes ? pglnout : pshapes - 1;
+		un = pgin[j];
+	}
+	nlflg = 1;
+	tbreak();
+	pglnout++;
+	if (trap) {
+		extern jmp_buf	sjbuf;
+		jmp_buf	savsjbuf;
+		if (setjmp(*s->jmp) == 0) {
+			nlflg = 1;
+			memcpy(&savsjbuf, &sjbuf, sizeof sjbuf);
+			mainloop();
+		}
+		memcpy(&sjbuf, &savsjbuf, sizeof sjbuf);
+	}
+}
+
+void
+parpr(struct s *s)
+{
+	int	i, j, k = 0, nw, w, stretches, _spread = spread, hc;
+	int	savll, savin, savcd, lastin, lastll, curin, curll, ignel = 0;
+	tchar	c, e, lastc, lgs;
+
 	savll = ll;
+	savin = in;
+	curin = 0;
+	lastin = 0;
+	curll = -1;
+	lastll = 0;
 	savcd = numtab[CD].val;
-	savun = un;
 	hc = shc ? shc : HYPHEN;
 	nw = 0;
 	for (i = 0; i < pgwords; i++) {
 		lgs = 0;
 		numtab[CD].val = pglno[i];
-		if (pgopt[k] == i) {
+		if (!ignel) {
+			lastin = pgwdin[i];
+			lastll = pgwdll[i];
+		}
+		if (k == 0 || pgopt[k] == i) {
 			if (k++ > 0) {
 				if (pghyphw[i-1]) {
 #ifndef	NROFF
@@ -2195,19 +2142,32 @@ parpr(void)
 					if (letsps)
 						storelsp(c, 0);
 				}
-				adflg |= 5;
-				un = 0;
-				tbreak();
+				pbreak(1, s);
+				if (i >= pgwords)
+					break;
 			}
 			if (pshapes) {
+				if (k == 1)
+					parcomp(0);
 				j = k-1 < pshapes ? k-1 : pshapes - 1;
 				ll = pgll[j];
 				un = pgin[j];
 				nel = ll - un;
-			} else if (in != un)
+			} else if (k > 1 && (in != curin || ll != curll)) {
+				curin = lastin = in;
+				curll = lastll = ll;
+				ignel = 1;
+				parcomp(i);
+			} else if (lastin != curin || lastll != curll) {
+				in = curin = lastin;
+				ll = curll = lastll;
+				if (k > 1)
+					un = in;
 				nel = ll - un;
+				parcomp(i);
+			}
+			nel = ll - un;
 			nw = nwd = 1;
-			storeline(FILLER, 0);
 			leftend(para[pgwordp[i]], admod != 1 && admod != 2, 1);
 		} else {
 			for (j = pgspacp[i]; j < pgspacp[i+1]; j++) {
@@ -2215,7 +2175,7 @@ parpr(void)
 				minflg = minspsz && ad && !admod;
 				w = width(c);
 				adspc += minspc;
-				if (j == pgspacp[i] && i > 0 && nwd > 1)
+				if (j == pgspacp[i] && i > 0)
 					w += kernadjust(para[pgwordp[i]-1], c);
 				if (j == pgspacp[i+1]-1)
 					w += kernadjust(c, para[pgwordp[i]]);
@@ -2246,52 +2206,30 @@ parpr(void)
 		nwd += stretches;
 		nw++;
 	}
-	if (nel - adspc < 0 && nwd > 1 || _spread)
-		adflg |= 5;
-	un = 0;
-	tbreak();
-	pgwords = pgchars = pgspacs = pglines = pgne = 0;
-	ic = savic;
-	lnmod = savlnmod;
+	pbreak(nel - adspc < 0 && nwd > 1 || _spread, s);
+	pgwords = pgchars = pgspacs = pglines = pgne = pglastw = 0;
 	ll = savll;
+	in = un = savin;
 	numtab[CD].val = savcd;
-	un = savun;
 }
 
 static void
-pardi(void)
+parfmt(void)
 {
-	struct d	dt, *dp;
-	struct contab	*cp;
 	int	_nlflg = nlflg;
 	int	_spread = spread;
+	struct s	*s;
 
-	if (dip != d)
-		wbt(0);
-	memset(&dt, 0, sizeof dt);
-	dp = dip;
-	dip = &dt;
-	dip->curd = makerq(NULL);
-	dip->op = finds(dip->curd, 1, 1);
-	newmn->rq = dip->curd;
-	newmn->flags = FLAG_PARAGRAPH;
-	maddhash(newmn);
-	cp = newmn;
-	parpr();
-	wbt(0);
+	if (pgchars == 0)
+		return;
+	setnel();
 	pglnout = 0;
+	s = frame;
 	nxf->jmp = malloc(sizeof *nxf->jmp);
-	if (setjmp(*nxf->jmp) == 0) {
-		pushi((filep)cp->mx, dip->curd, FLAG_PARAGRAPH);
-		cp->flags |= FLAG_USED;
-		frame->contp = cp;
-		dip = dp;
-		offset = dip->op;
-		fi = 0;
-		nlflg = 1;
-		mainloop();
-	}
-	fi = 1;
+	pushi(-2, 0, FLAG_PARAGRAPH);
+	parpr(frame);
+	while (frame != s)
+		ch = popi();
 	nlflg = _nlflg;
 	if (_spread == 1 && pshapes > pglnout) {
 		memmove(&pgin[0], &pgin[pglnout],
@@ -2301,14 +2239,4 @@ pardi(void)
 		pshapes -= pglnout;
 	} else
 		pshapes = 0;
-}
-
-static void
-pbreak(void)
-{
-	if (pgchars == 0)
-		return;
-	setnel();
-	parcomp();
-	pardi();
 }

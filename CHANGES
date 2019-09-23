@@ -1,3 +1,101 @@
+Release 070202
+* [nt]roff: The "\J" escape sequence has been introduced to specify a
+  default line breaking penalty; useful to discourage line breaks within
+  a person's name or a formula. Relative values in the "\j" sequence now
+  refer to the default penalty value.
+* dpost: A manual page has been added since it has now been released by
+  Sun under the CDDL license.
+* -man macros: The ".TP" macro has been fixed not to spread the initial
+  string. This is particularly for use in combination with "-mpadj" since
+  paragraph-at-once line breaking can lead to more spreading in the first
+  line.
+* [nt]roff: Special characters like "\}" do now terminate environment
+  names in arguments to the ".ev" and ".evc" requests as with other names.
+  Thus ".ev \}" is no longer misinterpreted as an attempt to change to an
+  environment named "\}". (Bugreport by Dirk-Wilhelm Peters.)
+* dpost: Cast size_t arguments to long for printf (Stefan Tramm).
+* The reference manual now uses the free TeX Gyre Termes fonts available
+  from <http://www.janusz.nowacki.strefa.pl/>. For this and the other
+  documentation texts, README files have been added to explain which
+  fonts are needed in order to build them. (Thanks to Werner Lemberg for
+  notification.)
+* Several manual pages have been moved from "BSD Compatibility" to the
+  standard sections if they had not actually been part of the SVR4 BSD
+  compatibility package.
+
+Release 061212
+* [nt]roff: Relative numbers can be used with the ".pshape" request now;
+  they refer to the preceding indent and line length pair, or, for the
+  initial pair, to the standard indent and line lenght settings.
+* [nt]roff: A warning of the "range" category is now printed when the
+  indent is set to a value exceeding the line length.
+* troff: In ".ad p" mode, when a line break was inserted after an
+  existing hyphen or em dash, another hyphen was added when the previous
+  characters formed a kerning pair. This has been fixed.
+* troff: In ".ad p" mode, when the character before the first interword
+  space formed a kerning pair with the space character, the line length
+  was incorrectly computed, and the line was prolongated by this amount.
+  This has been fixed.
+* troff: The "\{", "\}", and "\x" escape sequences inhibited kerning in
+  the adjustment computation but not in the output routine, which could
+  lead to prolongated output lines. They now inhibit kerning completely.
+* eqn: Generated equations no longer start with "\x'0'". This allows
+  kerning with the preceding character in an inline equation.
+* nroff: The content of a "\X" function is now ignored (instead of being
+  printed with zero width).
+* nroff: Combining UTF-8 characters are now assumed to have width zero.
+* nroff: The ".rd" request has been fixed; it had not been working since
+  the last release.
+* troff: The ".rd" request now accepts locale-dependent input characters.
+* [nt]roff: Fixed an error in ".ad p" mode which could lead to core dumps
+  with ".ev" requests that were not properly paired.
+* nroff: Hyphenation of words containing non-ASCII characters now really
+  works; such characters were erroneously dropped with the last release,
+  leading to incorrect hyphenations in some cases.
+* troff: Use of the "\s+[n]", "\s-[n]", "\s+'n'", or "\s-'n'" escape
+  sequence forms now leaves the arithmetic unit handling in a clean
+  state. The previous failure to do so lead to wrong numeric results
+  under certain circumstances; in particular, it caused the "over" eqn
+  keyword to produce incorrect output.
+
+Release 061114
+* [nt]roff: The units "t" (printer's point), "T" (printer's pica), "D"
+  (Didot point) and "C" (cicero) have been introduced.
+* [nt]roff: ".ad p" mode no longer employs a temporary diversion; the
+  lines are now written directly to the current output level, possibly
+  interrupted by trap processing. This makes it possible to use "'in"
+  and ".ll" inside a paragraph, although the line breaking decisions
+  may be suboptimal in this case.
+* [nt]roff: The ".hypp" request now accepts a third argument specifying
+  a penalty for hyphenating the last word of a paragraph.
+* nroff: Characters are now internally stored as 64-bit integers as
+  in troff. As a consequence, hyphenation of words in international
+  languages now works if non-ASCII characters are involved.
+* [nt]roff: A memory allocation error that could occur with extensive
+  use of output-line traps has been fixed.
+* [nt]roff: A control character written in a diversion is now correctly
+  interpreted when the diversion is re-read (unless in groff compatibility
+  mode). This fixes the ".AU" macro of "-mm".
+* [nt]roff: The "\R" escape sequence works correctly again; in the last
+  release, it had inserted the letter "R" into the text.
+* [nt]roff: Long names including a string in their name are now handled
+  correctly, e.g. ".nr x\*yz 1" no longer tries to set the register "x\*y"
+  to the value "z".
+* [nt]roff: Fixed some more memory access problems that had been introduced
+  with support for local variables.
+* [nt]roff: Fixed a non-local goto error that could lead to segmentation
+  faults with ".ad p" at the end of the input.
+* [nt]roff: Fixed a problem in ".bp" that could lead to the page number
+  being reset to zero in ".ad p" mode.
+* [nt]roff: A null pointer dereference in ".ad p" mode that occured when
+  nofill mode was activated while a partial paragraph was present has been
+  fixed.
+* -ms: The ".IX" index macro now works in ".padj" mode.
+* -me: The ".(x" and ".)x" index macros now work in ".padj" mode.
+* A "-mpadj" macro set has been added. It simply executes ".do padj"
+  and is useful to enable paragraph-at-once adjustment from the command
+  line.
+
 Release 061106
 * [nt]roff: Support for paragraph-based justification has been added,
   enabled with ".ad p". The "Justification in Heirloom Troff" document

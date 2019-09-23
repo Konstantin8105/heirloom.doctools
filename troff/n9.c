@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n9.c	1.66 (gritter) 11/5/06
+ * Sccsid @(#)n9.c	1.72 (gritter) 12/25/06
  */
 
 /*
@@ -636,28 +636,59 @@ rtn:
 }
 
 
-tchar
-setpenalty(void)
+static int
+readpenalty(int *valp)
 {
-	tchar	c, delim;
-	int	n;
+	int	n, t;
 
-	if (ismot(delim = getch()))
-		return 0;
+	t = dpenal ? dpenal - INFPENALTY0 - 1 : 0;
 	noscale++;
-	n = atoi();
+	n = inumb(&t);
 	noscale--;
 	if (nonumb)
 		return 0;
-	c = getch();
-	if (!issame(c, delim))
-		nodelim(delim);
 	if (n > INFPENALTY0)
 		n = INFPENALTY0;
 	else if (n < -INFPENALTY0)
 		n = -INFPENALTY0;
 	n += INFPENALTY0 + 1;
-	return mkxfunc(PENALTY, n);
+	*valp = n;
+	return 1;
+}
+
+static int
+getpenalty(int *valp)
+{
+	tchar	c, delim;
+
+	if (ismot(delim = getch()))
+		return 0;
+	if (readpenalty(valp) == 0)
+		return 0;
+	c = getch();
+	if (!issame(c, delim)) {
+		nodelim(delim);
+		return 0;
+	}
+	return 1;
+}
+
+tchar
+setpenalty(void)
+{
+	int	n;
+
+	if (getpenalty(&n))
+		return mkxfunc(PENALTY, n);
+	return 0;
+}
+
+tchar
+setdpenal(void)
+{
+	if (getpenalty(&dpenal))
+		return mkxfunc(DPENAL, dpenal);
+	return 0;
 }
 
 
@@ -675,8 +706,8 @@ mkxfunc(int f, int s)
 void
 localize(void)
 {
-	extern int	wdbindf();
-	extern wchar_t	*wddelim();
+	extern int	wdbindf(wchar_t, wchar_t, int);
+	extern wchar_t	*wddelim(wchar_t, wchar_t, int);
 	char	*codeset;
 
 	codeset = nl_langinfo(CODESET);
@@ -1125,39 +1156,19 @@ illseq(int wc, const char *mb, int n)
 void
 storerq(int i)
 {
-	tchar	tp[NSRQ+1];
+	tchar	tp[2];
 
-	tp[0] = mkxfunc(RQ1, i & 037);
-	tp[1] = mkxfunc(RQ2, i >> 5 & 037);
-	tp[2] = mkxfunc(RQ3, i >> 10 & 037);
-	tp[3] = mkxfunc(RQ4, i >> 15 & 037);
-	tp[4] = mkxfunc(RQ5, i >> 20 & 037);
-	tp[5] = 0;
+	tp[0] = mkxfunc(RQ, i);
+	tp[1] = 0;
 	pushback(tp);
 }
 
 int
 fetchrq(tchar *tp)
 {
-	int	i;
-
-	i = 0;
-	if (ismot(tp[0]) || !isxfunc(tp[0], RQ1))
+	if (ismot(tp[0]) || !isxfunc(tp[0], RQ))
 		return 0;
-	i |= sbits(tp[0]) & 037;
-	if (ismot(tp[1]) || !isxfunc(tp[1], RQ2))
-		return 0;
-	i |= (sbits(tp[1]) & 037) << 5;
-	if (ismot(tp[2]) || !isxfunc(tp[2], RQ3))
-		return 0;
-	i |= (sbits(tp[2]) & 037) << 10;
-	if (ismot(tp[3]) || !isxfunc(tp[3], RQ4))
-		return 0;
-	i |= (sbits(tp[3]) & 037) << 15;
-	if (ismot(tp[4]) || !isxfunc(tp[4], RQ5))
-		return 0;
-	i |= (sbits(tp[4]) & 037) << 20;
-	return i;
+	return sbits(tp[0]);
 }
 
 void

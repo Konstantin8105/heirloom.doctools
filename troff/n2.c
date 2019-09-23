@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n2.c	1.38 (gritter) 11/2/06
+ * Sccsid @(#)n2.c	1.44 (gritter) 11/14/06
  */
 
 /*
@@ -58,20 +58,8 @@
 #include <setjmp.h>
 #ifdef EUC
 #include <limits.h>
-#ifdef NROFF
-#include <stddef.h>
-#ifdef	__sun
-#include <widec.h>
-#else
-#include <wchar.h>
-#endif
 #include <ctype.h>
 #include <unistd.h>
-
-char mbobuf[MB_LEN_MAX] = {0};
-wchar_t wchar;
-int	nmb1 = 0;
-#endif /* NROFF */
 #endif /* EUC */
 #include "tdef.h"
 #ifdef NROFF
@@ -115,9 +103,17 @@ pchar(register tchar i)
 	case IMP:
 	case RIGHT:
 	case LEFT:
+		if (xflag) {
+			i = j = FILLER;	/* avoid kerning in output routine */
+			goto dfl;
+		}
 		return 1;
 	case HX:
 		hx = 1;
+		if (xflag) {
+			i = j = FILLER;	/* avoid kerning in output routine */
+			goto dfl;
+		}
 		return 1;
 	case XON:
 		xon = 1;
@@ -126,23 +122,20 @@ pchar(register tchar i)
 		xon = 0;
 		goto dfl;
 	case PRESC:
-		if (dip == &d[0] || frame->flags & FLAG_PARAGRAPH && isdi(i))
+		if (dip == &d[0])
 			j = eschar;	/* fall through */
-		if (frame->flags & FLAG_PARAGRAPH && isdi(i))
-			setcbits(i, j);
 	default:
 	dfl:
 		if (!xflag || !isdi(i)) {
-#if !defined (EUC) || !defined (NROFF)
 			setcbits(i, tflg ? trnttab[j] : trtab[j]);
-#else	/* EUC && NROFF */
-			if (!multi_locale || (!(j & CSMASK) && !(j & MBMASK1)))
-				setcbits(i, tflg ? trnttab[j] : trtab[j]);
-#endif /* EUC && NROFF */
 			if (xon == 0)
 				setcbits(i, ftrans(fbits(i), cbits(i)));
 		}
 	}
+#ifdef	NROFF
+	if (xon && xflag)
+		return 1;
+#endif	/* NROFF */
 	pchar1(i);
 	return 1;
 }
@@ -152,7 +145,7 @@ void
 pchar1(register tchar i)
 {
 	static int	_olt;
-	static tchar	_olp[5];
+	tchar	_olp[1];
 	register int j;
 	filep	savip;
 	extern void ptout(tchar);
@@ -208,9 +201,7 @@ pchar1(register tchar i)
 	if (cbits(i) == 'x')
 		fmtchar = fmtchar;
 	if (_olt) {
-		_olp[_olt - 1] = i;
-		if (_olt++ < NSRQ)
-			return;
+		_olp[0] = i;
 		olt[nolt++] = fetchrq(_olp);
 		_olt = 0;
 	}
@@ -227,11 +218,11 @@ outtp(tchar i)
 {
 	int	j = cbits(i);
 
-#if !defined (NROFF) && defined (EUC)
+#ifdef	EUC
 	if (iscopy(i))
 		fdprintf(ptid, "%lc", j);
 	else
-#endif	/* !NROFF && EUC */
+#endif	/* EUC */
 		fdprintf(ptid, "%c", j);
 }
 
@@ -383,8 +374,6 @@ done(int x)
 
 	error |= x;
 	dl = app = ds = lgf = 0;
-	if ((pa || padj) && pglines == 0 && pgchars)
-		tbreak();
 	if (i = em) {
 		donef = -1;
 		em = 0;
