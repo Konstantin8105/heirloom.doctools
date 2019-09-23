@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)tdef.h	1.50 (gritter) 10/14/05
+ * Sccsid @(#)tdef.h	1.52 (gritter) 10/22/05
  */
 
 /*
@@ -419,6 +419,7 @@ struct	s {	/* stack frame */
 	tchar	pch;
 	int	lastpbp;
 	int	mname;
+	int	frame_cnt;
 };
 
 extern struct contab {
@@ -615,6 +616,7 @@ void cvtime(void);
 int ctoi(register char *);
 void mesg(int);
 void errprint(const char *, ...);
+#define	fdprintf	xxfdprintf
 void fdprintf(int, char *, ...);
 char *roff_sprintf(char *, char *, ...);
 int control(register int, register int);
@@ -639,6 +641,7 @@ void getpn(register char *);
 void setrpt(void);
 void casedb(void);
 void casexflag(void);
+void caserecursionlimit(void);
 /* n2.c */
 int pchar(register tchar);
 void pchar1(register tchar);

@@ -1,9 +1,9 @@
 #
-# Sccsid @(#)heirloom-doctools.spec	1.11 (gritter) 9/10/05
+# Sccsid @(#)heirloom-doctools.spec	1.13 (gritter) 10/25/05
 #
 Summary: The Heirloom Documentation Tools.
 Name: heirloom-doctools
-Version: 051015
+Version: 051025
 Release: 1
 License: Other
 Source: %{name}-%{version}.tar.bz2
@@ -14,12 +14,14 @@ BuildRoot: %{_tmppath}/%{name}-root
 
 %define	bindir		/usr/ucb
 %define	mandir		/usr/share/man
-%define	docdir		/usr/ucblib/doctools
+%define	libdir		/usr/ucblib
+%define	docdir		%{libdir}/doctools
 %define	macdir		%{docdir}/tmac
 %define	fntdir		%{docdir}/font
 %define	tabdir		%{docdir}/nterm
 %define	hypdir		%{docdir}/hyphen
 %define	pstdir		%{docdir}/font/devpost/postscript
+%define	refdir		%{libdir}/reftools
 %define	pubdir		/usr/pub
 
 %define	xcc		gcc
@@ -30,12 +32,18 @@ BuildRoot: %{_tmppath}/%{name}-root
 #
 # Combine the settings defined above.
 #
-%define	makeflags	ROOT=%{buildroot} INSTALL=install YACC=%{yacc} MACDIR=%{macdir} FNTDIR=%{fntdir} TABDIR=%{tabdir} HYPDIR=%{hypdir} PUBDIR=%{pubdir} BINDIR=%{bindir} PSTDIR=%{pstdir} MANDIR=%{mandir} CC=%{xcc} CFLAGS=%{cflags} CPPFLAGS=%{cppflags}
+%define	makeflags	ROOT=%{buildroot} INSTALL=install YACC=%{yacc} MACDIR=%{macdir} FNTDIR=%{fntdir} TABDIR=%{tabdir} HYPDIR=%{hypdir} PUBDIR=%{pubdir} BINDIR=%{bindir} PSTDIR=%{pstdir} LIBDIR=%{libdir} REFDIR=%{refdir} MANDIR=%{mandir} CC=%{xcc} CFLAGS=%{cflags} CPPFLAGS=%{cppflags}
 
 %description
 The Heirloom Documentation Tools provide troff, nroff, and related
 utilities to format manual pages and other documents for output on
-terminals and printers.
+terminals and printers. They are portable and enhanced versions of
+the respective OpenSolaris utilities, which descend to ditroff and
+the historical Unix troff. troff provides advanced typographical
+features such as kerning, tracking, and hanging characters. It can
+access PostScript Type 1, OpenType, and TrueType fonts directly.
+Internationalized hyphenation, international paper sizes, and UTF-8
+input are supported.
 
 %prep
 rm -rf %{buildroot}
@@ -48,7 +56,8 @@ make %{makeflags}
 make %{makeflags} install
 
 rm -f filelist.rpm
-for f in %{bindir} %{macdir} %{fntdir} %{tabdir} %{hypdir} %{pstdir} %{pubdir}
+for f in %{bindir} %{macdir} %{fntdir} %{tabdir} %{hypdir} %{pstdir} %{pubdir} \
+	%{libdir} %{refdir}
 do
 	if test -d %{buildroot}/$f
 	then
