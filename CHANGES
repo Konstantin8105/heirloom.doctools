@@ -1,3 +1,15 @@
+Release 051107
+* The "checknr" utility has been added from OpenSolaris source code.
+* The "ptx" utility has been added from Unix 7th Edition source code.
+* When a locale-dependent or font-specific character was used directly
+  after a macro that ended with a font switch, it was chosen from the
+  old font. This has been fixed.
+* The ".hidechar" request now works correctly if the selected font is
+  not the current font.
+* eqn: More narrow spaces are inserted at some roman/italic font changes
+  now to better match the appearance of the current fonts.
+* grap: The file "grap.defines" has been moved to $(LIBDIR).
+
 Release 051031
 * The "-mpm" macros and the "pm" program have been added from Plan 9 source
   code. They form a "-ms"-like package for vertical justification; the file
