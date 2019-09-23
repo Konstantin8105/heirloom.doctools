@@ -18,10 +18,15 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)e.h	1.5 (gritter) 8/13/05
+ * Sccsid @(#)e.h	1.7 (gritter) 10/30/05
  */
 
 #include <stdio.h>
+
+#if defined (__GLIBC__) && defined (_IO_getc_unlocked)
+#undef	getc
+#define	getc(f)	_IO_getc_unlocked(f)
+#endif
 
 #define	FATAL	1
 #define	ROM	'1'
@@ -34,9 +39,9 @@
 #endif /* NEQN */
 
 #ifndef NEQN
-#define	VERT(n)	((((n)+1)/3)*3)
+#define	VERT(n)	(n)
 #define POINT	72
-#define EM(m, ps)	(int)((((float)(m)*(ps) * resolution) / POINT))
+#define EM(m, ps)	((((float)(m)*(ps) * resolution) / POINT))
 #else /* NEQN */
 #define	VERT(n)	(20 * (n))
 #endif /* NEQN */
@@ -47,7 +52,7 @@ extern int	ct;
 extern int	lp[];
 extern int	used[];	/* available registers */
 extern int	ps;	/* dflt init pt size */
-extern int	resolution;	/* resolution of ditroff */
+#define	resolution	72	/* was: resolution of ditroff */
 extern int	deltaps;	/* default change in ps */
 extern int	gsize;	/* global size */
 extern int	gfont;	/* global font */
@@ -58,10 +63,15 @@ extern int	linect;	/* line number in current file */
 extern int	eqline;	/* line where eqn started */
 extern int	svargc;
 extern char	**svargv;
-extern int	eht[];
-extern int	ebase[];
-extern int	lfont[];
-extern int	rfont[];
+#ifndef	NEQN
+extern float	eht[100];
+extern float	ebase[100];
+#else	/* NEQN */
+extern int	eht[100];
+extern int	ebase[100];
+#endif	/* NEQN */
+extern int	lfont[100];
+extern int	rfont[100];
 extern int	yyval;
 extern int	*yypv;
 extern int	yylval;
@@ -105,7 +115,11 @@ int eqn(int, char **);
 int getline(char **, size_t *);
 void do_inline(void);
 void putout(int);
+#ifndef	NEQN
+float max(float, float);
+#else	/* NEQN */
 int max(int, int);
+#endif	/* NEQN */
 int oalloc(void);
 void ofree(int);
 void setps(int);
