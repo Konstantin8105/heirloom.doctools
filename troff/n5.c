@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n5.c	1.124 (gritter) 01/20/07
+ * Sccsid @(#)n5.c	1.127 (gritter) 3/9/07
  */
 
 /*
@@ -64,8 +64,6 @@
 #include "tw.h"
 #endif
 #include "pt.h"
-
-extern void mchbits(void);
 
 /*
  * troff5.c
@@ -532,6 +530,8 @@ casein(void)
 {
 	register int i;
 
+	if (pa || padj)
+		tbreak();
 	if (skip(0))
 		i = in1;
 	else 
@@ -543,6 +543,9 @@ casein(void)
 	if (!nc && !pgwords) {
 		un = in;
 		setnel();
+	} else if (pgwords) {
+		pgflags[pgwords] |= PG_NEWIN;
+		pgwdin[pgwords] = in;
 	}
 }
 
@@ -560,6 +563,10 @@ casell(void)
 	ll = i;
 	chkin(in, ll, "");
 	setnel();
+	if (pgwords) {
+		pgflags[pgwords] |= PG_NEWLL;
+		pgwdll[pgwords] = ll;
+	}
 }
 
 
@@ -584,6 +591,8 @@ caseti(void)
 
 	if (skip(1))
 		return;
+	if (pa || padj)
+		tbreak();
 	i = max(hnumb(&in), 0);
 	tbreak();
 	un1 = i;
@@ -1208,8 +1217,11 @@ getev(int *nxevp, char **namep)
 				name = realloc(name, (sz += 8) * sizeof *name);
 			name[i++] = c;
 		} while (c);
-		if (*name == 0)
+		if (*name == 0) {
+			free(name);
+			name = NULL;
 			valid = 0;
+		}
 	}
 	flushi();
 	*namep = name;
@@ -1353,8 +1365,10 @@ evc(struct env *dp, struct env *sp)
 	dp->_pgll = NULL;
 	dp->_pgwdin = NULL;
 	dp->_pgwdll = NULL;
+	dp->_pgflags = NULL;
 	dp->_pglno = NULL;
 	dp->_pgpenal = NULL;
+	dp->_inlevp = NULL;
 	if (dp->_brnl < INT_MAX)
 		dp->_brnl = 0;
 	if (dp->_brpnl < INT_MAX)
@@ -1474,10 +1488,14 @@ evcline(struct env *dp, struct env *sp)
 	memcpy(dp->_pgwdin, sp->_pgwdin, dp->_pgsize * sizeof *dp->_pgwdin);
 	dp->_pgwdll = malloc(dp->_pgsize * sizeof *dp->_pgwdll);
 	memcpy(dp->_pgwdll, sp->_pgwdll, dp->_pgsize * sizeof *dp->_pgwdll);
+	dp->_pgflags = malloc(dp->_pgsize * sizeof *dp->_pgflags);
+	memcpy(dp->_pgflags, sp->_pgflags, dp->_pgsize * sizeof *dp->_pgflags);
 	dp->_pglno = malloc(dp->_pgsize * sizeof *dp->_pglno);
 	memcpy(dp->_pglno, sp->_pglno, dp->_pgsize * sizeof *dp->_pglno);
 	dp->_pgpenal = malloc(dp->_pgsize * sizeof *dp->_pgpenal);
 	memcpy(dp->_pgpenal, sp->_pgpenal, dp->_pgsize * sizeof *dp->_pgpenal);
+	dp->_inlevp = malloc(dp->_ainlev * sizeof *dp->_inlevp);
+	memcpy(dp->_inlevp, sp->_inlevp, dp->_ninlev * sizeof *dp->_inlevp);
 	dp->_pgwords = sp->_pgwords;
 	dp->_pgchars = sp->_pgchars;
 	dp->_pgspacs = sp->_pgspacs;
@@ -1537,11 +1555,17 @@ relsev(struct env *ep)
 	ep->_pgwdin = NULL;
 	free(ep->_pgwdll);
 	ep->_pgwdll = NULL;
+	free(ep->_pgflags);
+	ep->_pgflags = NULL;
 	free(ep->_pglno);
 	ep->_pglno = NULL;
 	free(ep->_pgpenal);
 	ep->_pgpenal = NULL;
 	ep->_pgsize = 0;
+	free(ep->_inlevp);
+	ep->_inlevp = NULL;
+	ep->_ninlev = 0;
+	ep->_ainlev = 0;
 }
 
 void

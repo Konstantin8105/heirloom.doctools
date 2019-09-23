@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)ext.h	1.107 (gritter) 01/20/07
+ * Sccsid @(#)ext.h	1.110 (gritter) 3/5/07
  */
 
 /*
@@ -92,6 +92,7 @@ extern	int	dfactd;
 extern	int	diflg;
 extern	int	dilev;
 extern	int	donef;
+extern	int	donep;
 extern	int	dotT;
 extern	int	dpn;
 extern	int	dl;
@@ -558,6 +559,8 @@ extern	tchar	setfield(int);
 extern	tchar	setpenalty(void);
 extern	tchar	setdpenal(void);
 extern	tchar	mkxfunc(int, int);
+extern	void	pushinlev(void);
+extern	tchar	popinlev(void);
 extern	void	localize(void);
 extern	void	caselc_ctype(void);
 extern	void	casepsbb(void);

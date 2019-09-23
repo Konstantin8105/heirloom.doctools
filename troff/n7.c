@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n7.c	1.169 (gritter) 12/25/06
+ * Sccsid @(#)n7.c	1.174 (gritter) 3/12/07
  */
 
 /*
@@ -1879,6 +1879,7 @@ growpgsize(void)
 	pgll = realloc(pgll, pgsize * sizeof *pgll);
 	pgwdin = realloc(pgwdin, pgsize * sizeof *pgwdin);
 	pgwdll = realloc(pgwdll, pgsize * sizeof *pgwdll);
+	pgflags = realloc(pgflags, pgsize * sizeof *pgflags);
 	pglno = realloc(pglno, pgsize * sizeof *pglno);
 	pgpenal = realloc(pgpenal, pgsize * sizeof *pgpenal);
 	if (pgwordp == NULL || pgwordw == NULL || pghyphw == NULL ||
@@ -1887,7 +1888,9 @@ growpgsize(void)
 			pglgsc == NULL || pglgec == NULL ||
 			pglgsw == NULL || pglgew == NULL ||
 			pglgsh == NULL || pglgeh == NULL ||
-			pgin == NULL || pgll == NULL || pglno == NULL ||
+			pgin == NULL || pgll == NULL ||
+			pgwdin == NULL || pgwdll == NULL ||
+			pgflags == NULL || pglno == NULL ||
 			pgpenal == NULL || pgwdin == NULL || pgwdin == NULL) {
 		errprint("out of memory justifying paragraphs");
 		done(02);
@@ -1935,6 +1938,8 @@ parword(void)
 	pgpenal[pgwords] = 0;
 	pgwdin[pgwords] = in;
 	pgwdll[pgwords] = ll;
+	if (pgwords == 0)
+		pgflags[pgwords] = 0;
 	un1 = -1;
 	while ((c = cbits(i = *wp++)) == ' ') {
 		if (iszbit(i))
@@ -1956,6 +1961,8 @@ parword(void)
 		if (wdpenal[wp-word-1])
 			pgpenal[pgwords] = makepgpenal(wdpenal[wp-word-1]);
 	}
+	if (wch == 0)
+		return;
 	pgspacp[pgwords+1] = pgspacs;
 	if (--wp > wordp && pgchars > 0)
 		w += kernadjust(para[pgchars-1], wordp[0]);
@@ -2031,6 +2038,7 @@ parword(void)
 			pgpenal[pgwords] = 0;
 			pgwdin[pgwords] = in;
 			pgwdll[pgwords] = ll;
+			pgflags[pgwords] = 0;
 			parlgzero(pgwords+1);
 		}
 		i = *wp++;
@@ -2065,13 +2073,14 @@ parword(void)
 	pgpenal[pgwords] = 0;
 	pgwdin[pgwords] = in;
 	pgwdll[pgwords] = ll;
+	pgflags[pgwords] = 0;
 	parlgzero(pgwords);
 	if (spread)
 		tbreak();
 }
 
 static void
-pbreak(int sprd, struct s *s)
+pbreak(int sprd, int lastf, struct s *s)
 {
 	int	j;
 
@@ -2090,6 +2099,8 @@ pbreak(int sprd, struct s *s)
 		if (setjmp(*s->jmp) == 0) {
 			nlflg = 1;
 			memcpy(&savsjbuf, &sjbuf, sizeof sjbuf);
+			if (donep && lastf)
+				donef = -1;
 			mainloop();
 		}
 		memcpy(&sjbuf, &savsjbuf, sizeof sjbuf);
@@ -2100,7 +2111,7 @@ void
 parpr(struct s *s)
 {
 	int	i, j, k = 0, nw, w, stretches, _spread = spread, hc;
-	int	savll, savin, savcd, lastin, lastll, curin, curll, ignel = 0;
+	int	savll, savin, savcd, lastin, lastll, curin, curll;
 	tchar	c, e, lastc, lgs;
 
 	savll = ll;
@@ -2115,10 +2126,10 @@ parpr(struct s *s)
 	for (i = 0; i < pgwords; i++) {
 		lgs = 0;
 		numtab[CD].val = pglno[i];
-		if (!ignel) {
+		if (i == 0 || pgflags[i] & PG_NEWIN)
 			lastin = pgwdin[i];
+		if (i == 0 || pgflags[i] & PG_NEWLL)
 			lastll = pgwdll[i];
-		}
 		if (k == 0 || pgopt[k] == i) {
 			if (k++ > 0) {
 				if (pghyphw[i-1]) {
@@ -2142,7 +2153,7 @@ parpr(struct s *s)
 					if (letsps)
 						storelsp(c, 0);
 				}
-				pbreak(1, s);
+				pbreak(1, i >= pgwords, s);
 				if (i >= pgwords)
 					break;
 			}
@@ -2154,13 +2165,14 @@ parpr(struct s *s)
 				un = pgin[j];
 				nel = ll - un;
 			} else if (k > 1 && (in != curin || ll != curll)) {
-				curin = lastin = in;
-				curll = lastll = ll;
-				ignel = 1;
+				savin = curin = lastin = in;
+				savll = curll = lastll = ll;
+				un = in;
+				nel = ll - un;
 				parcomp(i);
 			} else if (lastin != curin || lastll != curll) {
-				in = curin = lastin;
-				ll = curll = lastll;
+				savin = in = curin = lastin;
+				savll = ll = curll = lastll;
 				if (k > 1)
 					un = in;
 				nel = ll - un;
@@ -2206,7 +2218,11 @@ parpr(struct s *s)
 		nwd += stretches;
 		nw++;
 	}
-	pbreak(nel - adspc < 0 && nwd > 1 || _spread, s);
+	pbreak(nel - adspc < 0 && nwd > 1 || _spread, 1, s);
+	if (pgflags[pgwords] & PG_NEWIN)
+		savin = pgwdin[pgwords];
+	if (pgflags[pgwords] & PG_NEWLL)
+		savll = pgwdll[pgwords];
 	pgwords = pgchars = pgspacs = pglines = pgne = pglastw = 0;
 	ll = savll;
 	in = un = savin;

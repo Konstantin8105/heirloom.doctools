@@ -1,3 +1,47 @@
+Release 070318
+* [nt]roff: The concept of an "inline environment" has been introduced.
+  An inline environment contains the values of the current point size, the
+  current font, the current escape character, and other similar parameters.
+  It can be saved with "\@{" and then restored with "\@}". Unlike the "\s0"
+  and "\fP" escape sequences, inline environments form a stack. Thus after
+  executing "\fB...\@{\fR...\@{\fI...\@}...\@}", the current font is "B"
+  again, while it would be "I" with "\fB...\fR...\fI...\fP...\fP". Inline
+  environments can be used to represent constructs like "<i>...</i>" in
+  HTML, which would be translated as "\@{\fI...\@}".
+* [nt]roff: A modulo zero operation (N%0) is now ignored and causes a
+  warning of the "range" type to be issued. It could previously lead to
+  a core dump because of an arithmetic exception.
+* [nt]roff: In paragraph-at-once adjustment mode, ".in" and ".ll", when
+  invoked from traps, now have a permanent effect; such settings were
+  previously discarded at the end of the paragraph. What still does not
+  work is "'in" outside a trap with a value relative to the indent set
+  inside a trap.
+* [nt]roff: An internal problem with paragraph-at-once line breaking mode
+  has been fixed; it caused a ".in" or ".ll" command to be ignored under
+  rare circumstances.
+* [nt]roff: At the end of input in paragraph-at-once line breaking mode,
+  make sure that any partial paragraph is flushed before executing other
+  termination procedures. The previous failure to do so lead to missing
+  output at the end of the document if it did not fit on the current page.
+* troff, dpost: OpenType and TrueType fonts with Unicode platformID cmap
+  tables are now supported for reading Unicode character mapping tables.
+  Previously, only Microsoft platformID cmap tables were supported, and
+  others were ignored.
+* troff, dpost: Fixed a null pointer dereference that occurred when an
+  illegal glyph ID was encountered in the "liga" table of an OpenType
+  font.
+* troff, dpost: Apple TrueType fonts with a "true" header magic are now
+  actually supported; they could previously only be read by otfdump.
+* [nt]roff: ".ev \}" has now been actually fixed (Bugreport by Dirk-Wilhelm
+  Peters.)
+* -man macros: ".P" is now recognized; it is the same as ".PP".
+* -man macros: ".I \fR other-args" is not ignored anymore; same for
+  ".B", ".SM", and ".SB".
+* Unix 6th Edition manual macro packages have been added.
+* -mandoc macros: Recognize Unix 6th Edition pages.
+* showfont.sh: Font file arguments with absolute path names are now
+  supported.
+
 Release 070202
 * [nt]roff: The "\J" escape sequence has been introduced to specify a
   default line breaking penalty; useful to discourage line breaks within

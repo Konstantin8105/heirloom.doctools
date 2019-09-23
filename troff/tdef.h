@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)tdef.h	1.159 (gritter) 12/19/06
+ * Sccsid @(#)tdef.h	1.161 (gritter) 3/9/07
  */
 
 /*
@@ -462,6 +462,12 @@ enum flags {
 	FLAG_PARAGRAPH	= 040
 };
 
+enum {
+	PG_NONE		= 00,
+	PG_NEWIN	= 01,
+	PG_NEWLL	= 02
+};
+
 struct	d {	/* diversion */
 	filep	op;
 	int	dnl;
@@ -563,6 +569,23 @@ extern const struct numtab initnumtab[];
 struct acc {
 	long long	n;
 	double	f;
+};
+
+/* inline environment */
+struct inlev {
+	int	_apts;
+	int	_apts1;
+	int	_pts;
+	int	_pts1;
+	int	_font;
+	int	_font1;
+	int	_cc;
+	int	_c2;
+	int	_ohc;
+	int	_hyf;
+	int	_tabc;
+	int	_dotc;
+	int	_dpenal;
 };
 
 /* the infamous environment block */
@@ -748,8 +771,12 @@ struct acc {
 #define	pgll	env._pgll
 #define	pgwdin	env._pgwdin
 #define	pgwdll	env._pgwdll
+#define	pgflags	env._pgflags
 #define	pglno	env._pglno
 #define	pgpenal	env._pgpenal
+#define	ninlev	env._ninlev
+#define	ainlev	env._ainlev
+#define	inlevp	env._inlevp
 #define	evname	env._evname
 
 extern struct env {
@@ -917,6 +944,10 @@ extern struct env {
 	int	*_pgwdin;
 	int	*_pgwdll;
 	int	*_pglno;
+	int	*_pgflags;
 	float	*_pgpenal;
+	int	_ninlev;
+	int	_ainlev;
+	struct inlev	*_inlevp;
 	char	*_evname;
 } env, initenv;
