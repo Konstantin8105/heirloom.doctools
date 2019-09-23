@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)t6.c	1.96 (gritter) 10/4/05
+ * Sccsid @(#)t6.c	1.98 (gritter) 10/14/05
  */
 
 /*
@@ -54,6 +54,7 @@
 
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <limits.h>
 #include "tdef.h"
@@ -986,6 +987,7 @@ casefp(void)
 	register int i, j;
 	char *file, *supply;
 
+	lgf++;
 	skip();
 	if ((i = xflag ? atoi() : cbits(getch()) - '0') < 0 || i > nfonts)
 	bad:	errprint("fp: bad font position %d", i);
@@ -1021,7 +1023,6 @@ casefp(void)
 int
 setfp(int pos, int f, char *truename)	/* mount font f at position pos[0...nfonts] */
 {
-	extern int snprintf(char *, size_t, const char *, ...);
 	char longname[4096], *shortname, *ap;
 	char *fpout;
 	int nw;
@@ -1232,7 +1233,6 @@ onefont(char *prefix, char *file, char *type)
 static char *
 getfontpath(char *file, char *type)
 {
-	extern int sprintf(char *, const char *, ...);
 	char	*path, *troffonts, *tp, *tq, c;
 
 	if ((troffonts = getenv("TROFFONTS")) != NULL) {
@@ -1263,7 +1263,6 @@ getfontpath(char *file, char *type)
 int
 loadafm(int nf, int rq, char *file, char *supply, int required)
 {
-	extern int sprintf(char *, const char *, ...);
 	struct stat	st;
 	int	fd;
 	char	*path, *contents;
@@ -1545,6 +1544,7 @@ casepapersize(void)
 	int	x = 0, y = 0, n;
 	char	buf[NC];
 
+	lgf++;
 	if (skip())
 		return;
 	c = cbits(ch);
@@ -1810,6 +1810,7 @@ casefeature(void)
 	struct afmtab	*a;
 	int	f, i, j;
 
+	lgf++;
 	skip();
 	if ((i = getrq()) >= 256)
 		i = maybemore(i, 0);

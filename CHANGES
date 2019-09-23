@@ -1,3 +1,17 @@
+Release 051015
+* troff, dpost, otfdump: Handle TrueType files with version 3.0 "post" table
+  and no Microsoft/Unicode "cmap" subtable.
+* otfdump: Kerning information was omitted for all but the first font when
+  multiple font file arguments were given. This has been fixed.
+* troff: Fonts that contain possible ligatures (fi, fl, etc.) in their file
+  names are now mounted correctly.
+* dpost: Allow only the glyph at position 0 to be named ".notdef" when
+  generating Type 42 font data.
+* dpost: No longer leaves a stale temporary file in /var/tmp.
+* tbl: Inspects the first 4000 rows of a table now (instead of the first 200)
+  in order to determine column widths and "T{" blocks.
+* tbl: Can handle more than 62 "T{" blocks per table now.
+
 Release 051011
 * troff/dpost: Support for OpenType fonts has been added. This includes
   support for CFF-based (PostScript) OpenType fonts as well as support for

@@ -23,9 +23,10 @@
 /*
  * Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)otf.c	1.26 (gritter) 10/8/05
+ * Sccsid @(#)otf.c	1.32 (gritter) 10/14/05
  */
 
+#include <stdio.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -1493,7 +1494,9 @@ static int	nExtraStrings;
 static char *
 getSID(int n)
 {
-	if (ttf == 2) {
+	if (ttf == 3) {
+		/*EMPTY*/;
+	} else if (ttf == 2) {
 		if (n >= 0 && n < nWGL)
 			return (char *)WGL[n].s;
 		n -= nWGL;
@@ -1514,8 +1517,6 @@ getSID(int n)
 static void
 error(const char *fmt, ...)
 {
-	extern int	vsnprintf(char *, size_t, const char *, va_list);
-	extern int	snprintf(char *, size_t, const char *, ...);
 	char	buf[4096];
 	va_list	ap;
 	int	n;
@@ -1978,7 +1979,6 @@ get_ttf_post_2_5(int o)
 static void
 unichar(int gid, int c)
 {
-	extern int	snprintf(char *, size_t, const char *, ...);
 	int	i;
 	char	*sp;
 
@@ -2047,8 +2047,9 @@ get_ttf_post_3_0(int o)
 	int	platformID;
 	int	encodingID;
 	int	offset;
-	int	i;
+	int	i, n;
 	int	gotit = 0;
+	char	*sp;
 
 	ttf = 2;
 	if (pos_cmap < 0)
@@ -2067,8 +2068,23 @@ get_ttf_post_3_0(int o)
 		if (platformID == 3 && encodingID == 1)
 			gotit |= get_ms_unicode_cmap(o + offset);
 	}
-	if (gotit <= 0)
-		error("no Microsoft/Unicode cmap subtable format 4 found");
+	if (gotit <= 0) {
+		ttf = 3;
+		ExtraStrings = calloc(numGlyphs, sizeof *ExtraStrings);
+		sp = ExtraStringSpace = malloc(n = 12 * numGlyphs);
+		strcpy(sp, ".notdef");
+		ExtraStrings[0] = sp;
+		sp += 8;
+		nExtraStrings = 1;
+		onechar(0, 0);
+		for (i = 1; i < numGlyphs; i++) {
+			ExtraStrings[i] = sp;
+			sp += snprintf(sp, n - (sp - ExtraStringSpace),
+					"index0x%02X", i) + 1;
+			nExtraStrings++;
+			onechar(i, i);
+		}
+	}
 }
 
 static void
@@ -3019,7 +3035,7 @@ otfcff(const char *path,
 	return ok;
 }
 
-uint32_t
+static uint32_t
 CalcTableChecksum(uint32_t sum, const char *cp, int length)
 {
 	while (length > 0) {
@@ -3094,6 +3110,7 @@ start_of_next_glyph(int *start, int offset)
 static void
 sfnts2(struct table *tp, FILE *fp)
 {
+	const char	hex[] = "0123456789ABCDEF";
 	int	i, o, length, next = -1;
 	int	start = 0;
 
@@ -3109,7 +3126,8 @@ sfnts2(struct table *tp, FILE *fp)
 		}
 		if (i == next)
 			fprintf(fp, "00><");
-		fprintf(fp, "%02X", contents[o+i]&0377);
+		putc(hex[(contents[o+i]&0360)>>4], fp);
+		putc(hex[contents[o+i]&017], fp);
 	}
 	while (i++ % 4)
 		fprintf(fp, "00");
@@ -3205,10 +3223,11 @@ otft42(char *font, char *path, char *_contents, size_t _size, FILE *fp)
 		}
 		fprintf(fp, "/CharStrings %d dict dup begin\n", nc);
 		for (i = 0; i < nc; i++) {
-			if ((cp = GID2SID(i)) != NULL)
+			if ((cp = GID2SID(i)) != NULL &&
+					(i == 0 || strcmp(cp, ".notdef")))
 				fprintf(fp, "/%s %d def\n", cp, i);
 			else
-				fprintf(fp, "/GLYPH@%d %d def\n", i, i);
+				fprintf(fp, "/index0x%02X %d def\n", i, i);
 		}
 		fprintf(fp, "end readonly def\n");
 		fprintf(fp, "/sfnts[");
