@@ -1,3 +1,25 @@
+Release 051011
+* troff/dpost: Support for OpenType fonts has been added. This includes
+  support for CFF-based (PostScript) OpenType fonts as well as support for
+  most TrueType fonts.
+* otfdump: New utility that prints the contents of an OpenType font file in
+  an ASCII format just as troff interprets it.
+* troff: A ".ftr" request has been introduced as a font-specific variant of
+  the ".tr" request.
+* troff: A ".feature" request has been introduced to access special features
+  of OpenType fonts.
+* troff: Kerning is now applied to pairs of characters that originate from
+  the same font mounted at two different positions.
+* dpost: Can now access all characters in a large PostScript font, not only
+  the first 255.
+* dpost: If the data in a PFB file to be included does not end with a
+  newline character, add one to the generated PostScript to achieve a
+  consistent DSC structure (Bugreport by Sebastian Leusch).
+* dpost: The limit of characters with "x X" commands has been raised from
+  50 to 4096. This in particular allows to supply fonts with long path
+  names.
+* The "-mcolor" macros have been added from Plan 9 sources.
+
 Release 050920
 * troff: The handling of locale-dependent characters in copy mode has been
   fixed. Previously when such a character was given e.g. in an argument to

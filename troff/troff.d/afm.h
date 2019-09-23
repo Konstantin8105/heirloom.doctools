@@ -23,18 +23,33 @@
 /*
  * Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)afm.h	1.11 (gritter) 9/20/05
+ * Sccsid @(#)afm.h	1.16 (gritter) 10/2/05
  */
 
+#ifndef	TROFF_AFM_H
+#define	TROFF_AFM_H
+
 struct kernpair {
-	short	ch1;
-	short	ch2;
+	unsigned short	ch1;
+	unsigned short	ch2;
 	short	k;
 };
 
 struct namecache {
 	short	afpos;
 	short	fival[2];
+	unsigned short	gid;
+};
+
+struct charpair {
+	unsigned short	ch1;
+	unsigned short	ch2;
+};
+
+struct feature {
+	char	*name;
+	struct charpair	*pairs;
+	int	npairs;
 };
 
 extern struct afmtab {
@@ -51,14 +66,21 @@ extern struct afmtab {
 	struct namecache	*namecache;
 	int	nameprime;
 	struct kernpair	*kernpairs;
+	struct charpair	*gid2tr;
 	int	nkernpairs;
 	int	kernprime;
 	int	nspace;
+	struct feature	**features;
 	int	rq;
 	int	lineno;
 	int	nchars;
 	int	capheight;
 	int	xheight;
+	enum {
+		TYPE_AFM,
+		TYPE_OTF,
+		TYPE_TTF
+	}	type;
 } **afmtab;
 extern int nafm;
 
@@ -67,8 +89,25 @@ extern	int		**fontab;
 extern	char		**kerntab;
 extern	short		**codetab;
 
+extern unsigned short	unitsPerEm;
+
 extern	int	afmget(struct afmtab *, char *, size_t);
+extern	int	otfget(struct afmtab *, char *, size_t);
 extern	struct namecache	*afmnamelook(struct afmtab *, const char *);
 extern	int	afmgetkern(struct afmtab *, int, int);
 extern	void	makefont(int, char *, char *, char *, char *, int);
 extern	int	unitconv(int);
+extern	void	afmalloc(struct afmtab *, int);
+extern	void	afmremap(struct afmtab *);
+extern	int	afmmapname(const char *, int, int);
+extern	void	afmaddchar(struct afmtab *, int, int, int, int, int[],
+			char *, int, int, int);
+extern	struct kernpair	*afmkernlook(struct afmtab *, int, int);
+extern	int	nextprime(int n);
+#ifdef	DPOST
+#include <stdio.h>
+extern	int	otfcff(const char *, char *, size_t, size_t *, size_t *);
+extern	int	otft42(char *, char *, char *, size_t, FILE *);
+#endif
+
+#endif	/* !TROFF_AFM_H */

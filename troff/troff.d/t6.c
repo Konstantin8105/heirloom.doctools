@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)t6.c	1.88 (gritter) 9/18/05
+ * Sccsid @(#)t6.c	1.96 (gritter) 10/4/05
  */
 
 /*
@@ -82,6 +82,7 @@ int	**lhangtab;
 int	**rhangtab;
 int	**kernafter;
 int	**kernbefore;
+int	**ftrtab;
 struct tracktab	*tracktab;
 int	sbold = 0;
 int	kern = 0;
@@ -114,6 +115,7 @@ width(register tchar j)
 	if (i==ohc)
 		return(0);
 	i = trtab[i];
+	i = ftrans(fbits(j), i);
 	if (i < 32)
 		return(0);
 	if (sfbits(j) == oldbits) {
@@ -173,7 +175,7 @@ getcw(register int i)
 		goto g1;
 	}
 	if ((j = fitab[xfont][i]) == 0) {	/* it's not on current font */
-		int ii, jj;
+		int ii, jj, t;
 		/* search through search list of xfont
 		 * to see what font it ought to be on.
 		 * first searches explicit fallbacks, then
@@ -184,7 +186,8 @@ getcw(register int i)
 			for (jj = 0; fallbacktab[xfont][jj] != 0; jj++) {
 				if ((ii = findft(fallbacktab[xfont][jj])) < 0)
 					continue;
-				j = fitab[ii][i];
+				t = ftrans(ii, i + 32) - 32;
+				j = fitab[ii][t];
 				if (j != 0) {
 					xfont = ii;
 					goto found;
@@ -193,7 +196,8 @@ getcw(register int i)
 		}
 		if (smnt) {
 			for (ii=smnt, jj=0; jj < nfonts; jj++, ii=ii % nfonts + 1) {
-				j = fitab[ii][i];
+				t = ftrans(ii, i + 32) - 32;
+				j = fitab[ii][t];
 				if (j != 0) {
 					/*
 					 * troff traditionally relies on the
@@ -296,7 +300,9 @@ kernadjust(tchar c, tchar d)
 	if (!kern || ismot(c) || ismot(d))
 		return 0;
 	c = trtab[cbits(c)] | c & SFMASK;
+	c = ftrans(fbits(c), cbits(c)) | c & SFMASK;
 	d = trtab[cbits(d)] | d & SFMASK;
+	d = ftrans(fbits(d), cbits(d)) | d & SFMASK;
 	return getkw(c, d);
 }
 
@@ -396,7 +402,7 @@ getkw(tchar c, tchar d)
 {
 	struct knode	*kp;
 	struct afmtab	*a;
-	int	f, i, j, k, n, s;
+	int	f, g, i, j, k, n, s;
 	float	z;
 
 	lastkern = 0;
@@ -405,6 +411,7 @@ getkw(tchar c, tchar d)
 	if (sbits(c) != sbits(d))
 		return 0;
 	f = fbits(c);
+	g = fbits(d);
 	if ((s = sbits(c)) == 0) {
 		s = xpts;
 		if (f == 0)
@@ -418,8 +425,8 @@ getkw(tchar c, tchar d)
 	if (i >= 32 && j >= 32) {
 		if (ktable != NULL && (kp = klook(c, d)) != NULL)
 			k = kp->n;
-		else if (fbits(c) == fbits(d) && afmtab &&
-				(n = (fontbase[f]->afmpos)-1) >= 0) {
+		else if ((n = (fontbase[f]->afmpos)-1) >= 0 &&
+				n == (fontbase[g]->afmpos)-1) {
 			a = afmtab[n];
 			k = afmgetkern(a, i - 32, j - 32);
 		}
@@ -1001,8 +1008,9 @@ casefp(void)
 				supply = NULL;
 			if (loadafm(i?i:-1, j, file, supply, 0) == 0) {
 				if (i == 0)
-					goto bad;
-				setfp(i, j, file);
+					errprint("fp: cannot mount %s", file);
+				else
+					setfp(i, j, file);
 			}
 			free(file);
 			free(supply);
@@ -1265,6 +1273,11 @@ loadafm(int nf, int rq, char *file, char *supply, int required)
 	if (nf < 0 || nf > nfonts)
 		nf = nfonts + 1;
 	path = getfontpath(file, "afm");
+	if (access(path, 0) < 0) {
+		path = getfontpath(file, "otf");
+		if (access(path, 0) < 0)
+			path = getfontpath(file, "ttf");
+	}
 	a = calloc(1, sizeof *a);
 	for (i = 0; i < nafm; i++)
 		if (strcmp(afmtab[i]->path, path) == 0) {
@@ -1349,7 +1362,9 @@ done:	afmtab = realloc(afmtab, (nafm+1) * sizeof *afmtab);
 	if (supply) {
 		char	*data;
 		if (strcmp(supply, "pfb") == 0 || strcmp(supply, "pfa") == 0 ||
-				strcmp(supply, "t42") == 0)
+				strcmp(supply, "t42") == 0 ||
+				strcmp(supply, "otf") == 0 ||
+				strcmp(supply, "ttf") == 0)
 			data = getfontpath(file, supply);
 		else
 			data = getfontpath(supply, NULL);
@@ -1576,6 +1591,7 @@ hang(int **tp)
 	int	savfont = font, savfont1 = font1;
 	tchar	k;
 
+	lgf++;
 	skip();
 	if ((i = getrq()) >= 256)
 		i = maybemore(i, 0);
@@ -1618,6 +1634,7 @@ casekernpair(void)
 	int	f, g, i, n;
 	tchar	c, d;
 
+	lgf++;
 	skip();
 	if ((i = getrq()) >= 256)
 		i = maybemore(i, 0);
@@ -1669,6 +1686,7 @@ kernsingle(int **tp)
 	int	f, i, n;
 	tchar	c;
 
+	lgf++;
 	skip();
 	if ((i = getrq()) >= 256)
 		i = maybemore(i, 0);
@@ -1704,6 +1722,110 @@ void
 casekernbefore(void)
 {
 	kernsingle(kernbefore);
+}
+
+void
+caseftr(void)
+{
+	int	savfont = font, savfont1 = font1;
+	int	f, i, j;
+	tchar	k;
+
+	lgf++;
+	skip();
+	if ((i = getrq()) >= 256)
+		i = maybemore(i, 0);
+	if ((f = findft(i)) < 0)
+		return;
+	font = font1 = f;
+	mchbits();
+	if (skip())
+		goto done;
+	while ((i = cbits(k=getch())) != '\n') {
+		if (ismot(k))
+			goto done;
+		if (ismot(k = getch()))
+			goto done;
+		if ((j = cbits(k)) == '\n')
+			j = ' ';
+		ftrtab[f][i] = j;
+	}
+done:
+	font = savfont;
+	font1 = savfont1;
+	mchbits();
+}
+
+static int
+getfeature(struct afmtab *a, int f)
+{
+	char	name[NC];
+	int	ch1, ch2, c, i, j, minus;
+	struct feature	*fp;
+
+	if (skip())
+		return 0;
+	switch (c = getach()) {
+	case '-':
+		c = getach();
+		minus = 1;
+		break;
+	case '+':
+		c = getach();
+		/*FALLTHRU*/
+	default:
+		minus = 0;
+		break;
+	case 0:
+		return 0;
+	}
+	for (i = 0; i < sizeof name - 2; i++) {
+		name[i] = c;
+		if ((c = getach()) == 0)
+			break;
+	}
+	name[i+1] = 0;
+	for (i = 0; fp = a->features[i]; i++)
+		if (strcmp(fp->name, name) == 0) {
+			for (j = 0; j < fp->npairs; j++) {
+				ch1 = fp->pairs[j].ch1;
+				ch2 = fp->pairs[j].ch2;
+				if (minus) {
+					if (ftrtab[f][ch1] == ch2)
+						ftrtab[f][ch1] = ch1;
+				} else {
+					ftrtab[f][ch1] = ch2;
+				}
+			}
+			break;
+		}
+	if (fp == NULL)
+		errprint("no feature named %s in font %s", name, a->fontname);
+	return 1;
+}
+
+void
+casefeature(void)
+{
+	struct afmtab	*a;
+	int	f, i, j;
+
+	skip();
+	if ((i = getrq()) >= 256)
+		i = maybemore(i, 0);
+	if ((f = findft(i)) < 0)
+		return;
+	if ((j = (fontbase[f]->afmpos) - 1) < 0 ||
+			(a = afmtab[j])->type != TYPE_OTF &&
+			a->type != TYPE_TTF) {
+		errprint("font %s is not an OpenType font", macname(i));
+		return;
+	}
+	if (a->features == NULL) {
+		errprint("font %s has no OpenType features", a->fontname);
+		return;
+	}
+	while (getfeature(a, f) != 0);
 }
 
 #include "unimap.h"
