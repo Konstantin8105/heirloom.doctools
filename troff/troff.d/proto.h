@@ -1,7 +1,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)proto.h	1.41 (gritter) 4/8/06
+ * Sccsid @(#)proto.h	1.44 (gritter) 4/25/06
  */
 
 /* t6.c */
@@ -39,6 +39,7 @@ void casefdeferlig(void);
 void casefp(int);
 void casefps(void);
 int setfp(int, int, char *);
+int nextfp(void);
 void casecs(void);
 void casebd(void);
 void casevs(void);
@@ -50,6 +51,7 @@ void casefallback(void);
 void casehidechar(void);
 void casefzoom(void);
 void casekern(void);
+void casefkern(void);
 void casepapersize(void);
 void casemediasize(void);
 void casetrimat(void);
@@ -65,6 +67,8 @@ void casefeature(void);
 int un2tr(int, int *);
 int tr2un(tchar, int);
 tchar setuc0(int);
+tchar setanchor(void);
+tchar setlink(void);
 int pts2u(int);
 double u2pts(int);
 /* t10.c */

@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)t6.c	1.135 (gritter) 4/8/06
+ * Sccsid @(#)t6.c	1.140 (gritter) 4/25/06
  */
 
 /*
@@ -91,6 +91,7 @@ int	sbold = 0;
 int	kern = 0;
 struct box	mediasize, bleedat, trimat, cropat;
 int	psmaxcode;
+struct ref	*anchors, *links;
 
 int
 width(register tchar j)
@@ -205,6 +206,8 @@ getcw(register int i)
 		}
 		if (smnt) {
 			for (ii=smnt, jj=0; jj < nfonts; jj++, ii=ii % nfonts + 1) {
+				if (fontbase[ii] == NULL)
+					continue;
 				t = ftrans(ii, i + 32) - 32;
 				j = fitab[ii][t];
 				if (j != 0) {
@@ -414,6 +417,8 @@ findchar(tchar c)
 		}
 		if (smnt) {
 			for (ii=smnt, jj=0; jj < nfonts; jj++, ii=ii % nfonts + 1) {
+				if (fontbase[ii] == NULL)
+					continue;
 				if (fitab[ii][i] != 0) {
 					f = ii;
 					goto found;
@@ -471,8 +476,8 @@ getkw(tchar c, tchar d)
 		if (ktable != NULL && (kp = klook(c, d)) != NULL)
 			k = kp->n;
 		else if ((n = (fontbase[f]->afmpos)-1) >= 0 &&
-				n == (fontbase[g]->afmpos)-1) {
-			a = afmtab[n];
+				n == (fontbase[g]->afmpos)-1 &&
+				(a = afmtab[n])->nokern == 0) {
 			I = i - 32;
 			J = j - 32;
 			if (I >= nchtab + 128)
@@ -567,6 +572,8 @@ postchar(const char *temp, int *fp)
 	}
 	if (smnt) {
 		for (i=smnt, j=0; j < nfonts; j++, i=i % nfonts + 1) {
+			if (fontbase[i] == NULL)
+				continue;
 			if ((c = postchar1(temp, i)) != 0) {
 				*fp = i;
 				return c;
@@ -652,13 +659,18 @@ int
 findft(register int i, int required)
 {
 	register int k;
+	char	*mn, *mp;
 
-	if ((k = i - '0') >= 0 && k <= nfonts && k < smnt)
+	if ((k = i - '0') >= 0 && k <= nfonts && k < smnt && fontbase[k])
 		return(k);
 	for (k = 0; fontlab[k] != i; k++)
 		if (k > nfonts) {
+			mn = macname(i);
+			if ((k = strtol(mn, &mp, 10)) >= 0 && k <= nfonts &&
+					fontbase[k])
+				break;
 			if (required && warn & WARN_FONT)
-				errprint("%s: no such font", macname(i));
+				errprint("%s: no such font", mn);
 			return(-1);
 		}
 	return(k);
@@ -1124,13 +1136,13 @@ addlig(int f, tchar *from, int to)
 	 * Fi, and Fl, hide them. The ".flig" request is intended for
 	 * use in combination with expert fonts only.
 	 */
-	if (to == LIG_FF)
+	if (to == LIG_FF && fitab[f][LIG_FF-32] >= 0)
 		if (codetab[f][fitab[f][LIG_FF-32]] < 32)
 			fitab[f][LIG_FF-32] = 0;
-	if (to == LIG_FFI)
+	if (to == LIG_FFI && fitab[f][LIG_FFI-32] >= 0)
 		if (codetab[f][fitab[f][LIG_FFI-32]] < 32)
 			fitab[f][LIG_FFI-32] = 0;
-	if (to == LIG_FFL)
+	if (to == LIG_FFL && fitab[f][LIG_FFL-32] >= 0)
 		if (codetab[f][fitab[f][LIG_FFL-32]] < 32)
 			fitab[f][LIG_FFL-32] = 0;
 }
@@ -1171,6 +1183,7 @@ dellig(int f, tchar *from)
 			free(lgrevtab[f][lp->to]);
 			lgrevtab[f][lp->to] = NULL;
 			free(lp);
+			break;
 		}
 	}
 }
@@ -1298,7 +1311,7 @@ casefp(int spec)
 
 	lgf++;
 	skip(0);
-	if ((i = xflag ? atoi() : cbits(getch()) - '0') < 0 || i > nfonts)
+	if ((i = xflag ? atoi() : cbits(getch()) - '0') < 0 || i > 255)
 	bad:	errprint("fp: bad font position %d", i);
 	else if (skip(0) || !(j = getrq()))
 		errprint("fp: no font name");
@@ -1306,7 +1319,7 @@ casefp(int spec)
 		if (j >= 256)
 			j = maybemore(j, 3);
 		if (skip(0) || !getname()) {
-			if (i == 0)
+			if (i == 0 || i > nfonts)
 				goto bad;
 			setfp(i, j, 0);
 		} else {		/* 3rd argument = filename */
@@ -1433,6 +1446,19 @@ setfp(int pos, int f, char *truename)	/* mount font f at position pos[0...nfonts
 	if (pos == 0)
 		ch = (tchar) FONTPOS | (tchar) f << 22;
 	return(pos);
+}
+
+int
+nextfp(void)
+{
+	int	i;
+
+	for (i = 1; i <= nfonts; i++)
+		if (fontbase[i] == NULL)
+			return i;
+	if (i <= 255)
+		return i;
+	return 0;
 }
 
 void
@@ -1680,8 +1706,8 @@ loadafm(int nf, int rq, char *file, char *supply, int required, enum spec spec)
 	struct afmtab	*a;
 	int	i, have = 0;
 
-	if (nf < 0 || nf > nfonts)
-		nf = nfonts + 1;
+	if (nf < 0)
+		nf = nextfp();
 	path = getfontpath(file, "afm");
 	if (access(path, 0) < 0) {
 		path = getfontpath(file, "otf");
@@ -1923,6 +1949,23 @@ void
 casekern(void)
 {
 	kern = skip(0) || atoi() ? 1 : 0;
+}
+
+void
+casefkern(void)
+{
+	struct afmtab	*a;
+	int	f, i;
+
+	lgf++;
+	if (skip(1))
+		return;
+	if ((i = getrq()) >= 256)
+		i = maybemore(i, 2);
+	if ((f = findft(i, 1)) < 0 || (i = fontbase[f]->afmpos - 1) < 0)
+		return;
+	a = afmtab[i];
+	a->nokern = skip(0) || atoi() ? 0 : 1;
 }
 
 static void
@@ -2413,9 +2456,12 @@ un2tr(int c, int *fp)
 					return i;
 			}
 		if (smnt)
-			for (i = smnt, j=0; j < nfonts; j++, i = i % nfonts + 1)
+			for (i = smnt, j=0; j < nfonts; j++, i = i % nfonts + 1) {
+				if (fontbase[i] == NULL)
+					continue;
 				if ((i = ufmap(c, i, fp)) != 0)
 					return i;
+			}
 		*fp = font;
 		if (c < 040 && c == ifilt[c] || c >= 040 && c < 0177)
 			return c;
@@ -2466,6 +2512,87 @@ setuc0(int n)
 		setfbits(c, f);
 	}
 	return c;
+}
+
+static char *
+getref(void)
+{
+	int	a = 0, i, c, delim;
+	char	*np = NULL;
+
+	if ((delim = getach()) != 0) {
+		for (i = 0; ; i++) {
+			if (i + 1 >= a)
+				np = realloc(np, a += 32);
+			if ((c = getach()) == 0) {
+				if (cbits(ch) == ' ') {
+					ch = 0;
+					c = ' ';
+				} else {
+					nodelim(delim);
+					break;
+				}
+			}
+			if (c == delim)
+				break;
+			np[i] = c;
+		}
+		np[i] = 0;
+	}
+	return np;
+}
+
+static tchar
+mkxfunc(int f, int s)
+{
+	tchar	t = XFUNC;
+	setfbits(t, f);
+	setsbits(t, s);
+	return t;
+}
+
+tchar
+setanchor(void)
+{
+	static int	cnt;
+	struct ref	*rp;
+	char	*np;
+
+	if ((np = getref()) != NULL) {
+		rp = calloc(1, sizeof *rp);
+		rp->cnt = ++cnt;
+		rp->name = np;
+		rp->next = anchors;
+		anchors = rp;
+		return mkxfunc(ANCHOR, cnt);
+	} else
+		return mkxfunc(ANCHOR, 0);
+}
+
+tchar
+setlink(void)
+{
+	static int	cnt;
+	struct ref	*rp;
+	char	*np;
+	int	sv;
+
+	sv = linkin;
+	if (linkin = !linkin) {
+		if ((np = getref()) != NULL) {
+			rp = calloc(1, sizeof *rp);
+			rp->cnt = ++cnt;
+			rp->name = np;
+			rp->next = links;
+			links = rp;
+			linkin = cnt;
+			return mkxfunc(LINKON, cnt);
+		} else {
+			linkin = -1;
+			return mkxfunc(LINKON, 0);
+		}
+	} else
+		return mkxfunc(LINKOFF, sv > 0 ? sv : 0);
 }
 
 int

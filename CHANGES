@@ -1,3 +1,37 @@
+Release 060430
+* troff/dpost: Links and anchors in PDF documents can now be defined;
+  "\A" and "\T" escape sequences have been introduced for this.
+* [nt]roff: Tail-recursion elimination for macro calls has been added.
+  This allows recursive macro calls of arbitrary depths when the call
+  to itself occurs in the last line of the macro.
+* troff: The ".fkern" request has been introduced to disable the use of
+  the kerning tables of specific fonts.
+* [nt]roff: The "\V" escape sequence has been introduced; it prints the
+  value of an environment variable.
+* troff: An explicit "N" font register argument to the ".fp" request may
+  now be an arbitrary number between 1 and 255.
+* troff: The "\n[.fp]" number register has been introduced to make it
+  possible to determine the next unused font register.
+* [nt]roff: The "-daS" command line option has been added to define the
+  string "a" to "S".
+* [nt]roff: The ".output" request has been added to write a command to
+  intermediate output regardless of whether there is a current diversion
+  or not (unlike "\!").
+* [nt]roff: A warning is now issued when a non-ASCII byte is found in
+  a name (of a request, number register, etc.) with the "input" warning
+  category.
+* [nt]roff: Long request names as second arguments to macro definitions
+  (as in ".de xx longname") are now handled correctly.
+* [nt]roff: The ".close" request has been fixed; repeated calls to it
+  could previously result in lost file stream descriptors.
+* troff, otfdump, dpost: The end of floating point values in CFF data is
+  now properly recognized; the previous failure to do so could result in
+  errors like "invalid operand b0 range 255" with valid OpenType fonts.
+* troff: In TrueType fonts with version 3.0 "post" tables, characters that
+  lack a Unicode mapping can now be accessed as "\[index0xN]".
+* [nt]roff: The need for the sbrk() system call has been eliminated; the
+  regular system malloc() is now used.
+
 Release 060409
 * dpost: An error that could lead to invalid PostScript output when the
   last character of a long output string sequence was a backslash has

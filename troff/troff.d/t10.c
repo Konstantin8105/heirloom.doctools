@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)t10.c	1.65 (gritter) 4/2/06
+ * Sccsid @(#)t10.c	1.70 (gritter) 4/25/06
  */
 
 /*
@@ -114,6 +114,9 @@ struct dev dev;
 struct Font **fontbase;
 
 int Nfont;
+
+static void	ptanchor(int);
+static void	ptlink(int);
 
 void
 growfonts(int n)
@@ -358,12 +361,16 @@ ptout(register tchar i)
 	b = dip->blss + lss;
 	lead += dip->blss + lss;
 	dip->blss = 0;
+	if (linkout)
+		linkhp = hpos;
 	for (k = oline; k < olinep; )
 		k = ptout0(k, olinep);	/* now passing a pointer! */
 	olinep = oline;
 	lead += dip->alss;
 	a = dip->alss;
 	dip->alss = 0;
+	if (linkout)
+		ptlink(linkout);
 	/*
 	fdprintf(ptid, "x xxx end of line: hpos=%d, vpos=%d\n", hpos, vpos);
 */
@@ -444,6 +451,23 @@ ptout0(tchar *pi, tchar *pend)
 		temp[2] = 0;
 		ptfpcmd(0, temp);
 		return(pi+outsize);
+	}
+	if (k == XFUNC) {
+		switch (fbits(i)) {
+		case ANCHOR:
+			ptanchor(sbits(i));
+			return(pi+outsize);
+		case LINKON:
+			linkout = sbits(i);
+			linkhp = hpos + esc;
+			return(pi+outsize);
+		case LINKOFF:
+			ptlink(sbits(i));
+			linkout = 0;
+			return(pi+outsize);
+		default:
+			return(pi+outsize);
+		}
 	}
 	if (sfbits(i) == oldbits) {
 		xfont = pfont;
@@ -619,6 +643,19 @@ ptout0(tchar *pi, tchar *pend)
 	return(pi+outsize);
 }
 
+static void
+pttrack(int always)
+{
+	static int	mtrack;
+
+	if (xflag && lasttrack) {
+		if (always || mtrack != lasttrack)
+			fdprintf(ptid, "x X Track %d\n", lasttrack);
+		mtrack = lasttrack;
+	} else
+		mtrack = 0;
+}
+
 void
 ptps(void)
 {
@@ -644,6 +681,7 @@ ptps(void)
 		fdprintf(ptid, "s%d\n", (int)s);	/* really should put out string rep of size */
 	mpts = i;
 	mzoom = z;
+	pttrack(0);
 }
 
 void
@@ -651,8 +689,7 @@ ptfont(void)
 {
 	mfont = xfont;
 	fdprintf(ptid, "f%d\n", xfont);
-	if (xflag && lasttrack)
-		fdprintf(ptid, "x X Track %d\n", lasttrack);
+	pttrack(1);
 }
 
 void
@@ -740,6 +777,37 @@ ptlocale(const char *cp)
 	fdprintf(ptid, "x X LC_CTYPE %s\n", lp);
 }
 
+static void
+ptanchor(int n)
+{
+	struct ref	*rp;
+
+	if (ascii)
+		return;
+	for (rp = anchors; rp; rp = rp->next)
+		if (rp->cnt == n) {
+			fdprintf(ptid, "x X Anchor %d,%d %s\n",
+				vpos + lead - lss, hpos + esc, rp->name);
+			break;
+		}
+}
+
+static void
+ptlink(int n)
+{
+	struct ref	*rp;
+
+	if (ascii)
+		return;
+	for (rp = links; rp; rp = rp->next)
+		if (rp->cnt == n) {
+			fdprintf(ptid, "x X Link %d,%d,%d,%d %s\n",
+				linkhp, vpos + pts2u(1),
+				hpos + esc, vpos - pts * 8 / 10,
+				rp->name);
+		}
+}
+
 void
 newpage(int n)	/* called at end of each output page (we hope) */
 {
@@ -751,7 +819,9 @@ newpage(int n)	/* called at end of each output page (we hope) */
 	if (ascii)
 		return;
 	fdprintf(ptid, "p%d\n", n);	/* new page */
-	for (i = 0; i <= nfonts; i++)
+	for (i = 0; i <= nfonts; i++) {
+		if (fontbase[i] == NULL)
+			continue;
 		if (afmtab && fontbase[i]->afmpos) {
 			struct afmtab	*a = afmtab[(fontbase[i]->afmpos)-1];
 			if (a->encpath == NULL)
@@ -762,6 +832,7 @@ newpage(int n)	/* called at end of each output page (we hope) */
 				ptsupplyfont(a->fontname, a->supply);
 		} else if (fontbase[i]->namefont && fontbase[i]->namefont[0])
 			fdprintf(ptid, "x font %d %s\n", i, fontbase[i]->namefont);
+	}
 	ptps();
 	ptfont();
 	ptpapersize();

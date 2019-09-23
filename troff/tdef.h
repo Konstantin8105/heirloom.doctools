@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)tdef.h	1.72 (gritter) 4/3/06
+ * Sccsid @(#)tdef.h	1.78 (gritter) 4/27/06
  */
 
 /*
@@ -139,6 +139,11 @@
 #define	HX	035	/* next character is value of \x'...' */
 #define	FONTPOS	036	/* position of font \f(XX encoded in top */
 
+#define	XFUNC	013	/* extended function codes, type in fbits: */
+#define	ANCHOR	0001	/* anchor definition */
+#define	LINKON	0002	/* link start */
+#define	LINKOFF	0003	/* link end */
+
 #define	HYPHEN	c_hyphen
 #define	EMDASH	c_emdash	/* \(em */
 #define	RULE	c_rule		/* \(ru */
@@ -170,7 +175,6 @@ extern	int	NS;	/* name buffer */
 #define	DSIZE	512	/* disk sector size in chars */
 
 extern	int	NM;	/* requests + macros */
-#define	DELTA	1024	/* delta core bytes */
 #define	NHYP	40	/* max hyphens per word */
 #define	NTAB	40	/* tab stops */
 #define	NSO	5	/* "so" depth */
@@ -248,6 +252,8 @@ endif NROFF
 #define	iscopy(n)	((n) & COPYBIT)
 #define	AUTOLIG		(01ULL << 29)	/* ligature substituted automatically */
 #define	islig(n)	((n) & AUTOLIG)
+#define	TAILBIT		(01ULL << 29)	/* tail recursion */
+#define	istail(n)	(((n) & (TAILBIT|MOT|'\n')) == (TAILBIT|'\n'))
 #define	DIBIT		(01ULL << 28)	/* written in a diversion */
 #define	isdi(n)		((n) & DIBIT)
 
@@ -284,6 +290,8 @@ endif NROFF
 #define	isblbit(n)	((n) & BLBIT)
 #define	COPYBIT	0x20000000	 /* wide character in copy mode */
 #define	iscopy(n)	((n) & COPYBIT)
+#define	TAILBIT	0x10000000	/* tail recursion */
+#define	istail(n)	(((n) & (TAILBIT|MOT|'\n')) == (TAILBIT|'\n'))
 #define	ABSCHAR		0400	/* absolute char number in this font */
 #define	AUTOLIG	0		/* ligature substituted automatically */
 #define	islig(n)	((n) ? 0 : 0)
@@ -361,8 +369,7 @@ endif NROFF
  * "temp file" parameters.  macros and strings
  * are stored in an array of linked blocks,
  * which may be in memory and an array called
- * corebuf[], if INCORE is set during
- * compilation, or otherwise in a file called trtmp$$.
+ * corebuf[].
 
  * The numerology is delicate if filep is 16 bits:
 	#define BLK 128
@@ -505,13 +512,14 @@ struct	s {	/* stack frame */
 	int	nargs;
 	struct s *pframe;
 	filep	pip;
-	int	pnchar;
-	tchar	prchar;
+	int	*argt;
+	tchar	*argsp;
 	int	ppendt;
 	tchar	pch;
 	int	lastpbp;
 	int	mname;
 	int	frame_cnt;
+	int	tail_cnt;
 };
 
 extern struct contab {
@@ -617,6 +625,9 @@ extern const struct numtab initnumtab[];
 #define	it	env._it
 #define	itmac	env._itmac
 #define	lnsize	env._lnsize
+#define	linkin	env._linkin
+#define	linkout	env._linkout
+#define	linkhp	env._linkhp
 #define	dicthnj	env._dicthnj
 #define	hyext	env._hyext
 #define	hyptr	env._hyptr
@@ -693,6 +704,9 @@ extern struct env {
 	int	_it;
 	int	_itmac;
 	int	_lnsize;
+	int	_linkin;
+	int	_linkout;
+	int	_linkhp;
 	void	*_dicthnj;
 	int	_hyext;
 	tchar	*_hyptr[NHYP];
@@ -745,6 +759,7 @@ void pchar1(register tchar);
 void outascii(tchar);
 void oputs(register char *);
 void flusho(void);
+void caseoutput(void);
 void done(int);
 void done1(int);
 void done2(int);

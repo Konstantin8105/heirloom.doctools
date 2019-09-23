@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n1.c	1.67 (gritter) 4/3/06
+ * Sccsid @(#)n1.c	1.75 (gritter) 4/26/06
  */
 
 /*
@@ -86,6 +86,7 @@ char *xxxvers = "@(#)roff:n1.c	2.13";
 
 #define	MAX_RECURSION_DEPTH	512
 static int	max_recursion_depth = MAX_RECURSION_DEPTH;
+static int	max_tail_depth;
 
 jmp_buf sjbuf;
 filep	ipl[NSO];
@@ -109,6 +110,7 @@ static char *sprintlong(char *s, long, int);
 static char *sprintn(char *s, long n, int b);
 #define	vfdprintf	xxvfdprintf
 static void vfdprintf(int fd, const char *fmt, va_list ap);
+static void _setenv(void);
 
 #ifdef	DEBUG
 int	debug = 0;	/*debug flag*/
@@ -203,9 +205,13 @@ main(int argc, char **argv)
 			ptid = 1;
 			continue;
 		case 'r':
+		case 'd':
 			if (&argv[0][2] != '\0' && strlen(&argv[0][2]) >= 2 && &argv[0][3] != '\0')
-			eibuf = roff_sprintf(ibuf+strlen(ibuf), ".nr %c %s\n",
-				argv[0][2], &argv[0][3]); 
+			eibuf = roff_sprintf(ibuf+strlen(ibuf), ".%s %c %s%s\n",
+				argv[0][1] == 'd' ? "ds" : "nr",
+				argv[0][2],
+				argv[0][1] == 'd' ? "\"" : "",
+				&argv[0][3]); 
 			else 
 				errprint("wrong options");
 			continue;
@@ -295,7 +301,8 @@ start:
 loop:
 	xflag = _xflag;
 	copyf = lgf = nb = nflush = nlflg = 0;
-	if (ip && rbf0(ip) == 0 && dip == d && ejf && frame->pframe <= ejl) {
+	if (ip && rbf0(ip) == 0 && dip == d && ejf &&
+			frame->pframe->tail_cnt <= ejl) {
 		nflush++;
 		trap = 0;
 		eject((struct s *)0);
@@ -390,17 +397,8 @@ init0(void)
 void
 init1(char a)
 {
-	register char	*p;
 	register int i;
 
-	p = tmp_name;
-	if (a == 'a')
-		p = &p[9];
-	if ((ibf = mkstemp(p)) == -1) {
-		errprint("cannot create temp file.");
-		exit(-1);
-	}
-	unlkp = p;
 	for (i = NTRTAB; --i; )
 		trtab[i] = i;
 	trtab[UNPAD] = ' ';
@@ -439,20 +437,15 @@ init2(void)
 	cpushback(ibuf);
 	ibufp = ibuf;
 	nx = mflg;
-	frame = stk = (struct s *)setbrk(DELTA);
+	frame = stk = calloc(1, sizeof *stk);
 	stk->frame_cnt = 0;
 	dip = &d[0];
-	nxf = frame + 1;
+	nxf = calloc(1, sizeof *nxf);
 	initenv = env;
-#ifdef INCORE
 	for (i = 0; i < NEV; i++) {
 		extern tchar *corebuf;
 		((struct env *)corebuf)[i] = env;
 	}
-#else
-	for (i = NEV; i--; )
-		write(ibf, (char *) & env, sizeof(env));
-#endif
 }
 
 
@@ -812,6 +805,8 @@ int
 control(register int a, register int b)
 {
 	register int	j;
+	int	newip;
+	struct s	*p;
 
 	if (a == 0 || (j = findmn(a)) == -1) {
 		nosuch(a);
@@ -823,6 +818,9 @@ control(register int a, register int b)
 	 * recursion limit of MAX_RECURSION_DEPTH was chosen as
 	 * it is extremely unlikely that a correct nroff/troff
 	 * invocation would exceed this value.
+	 *
+	 * The depth of tail-recursive macro calls is not limited
+	 * by default.
 	 */
 
 	if (max_recursion_depth > 0 && frame->frame_cnt > max_recursion_depth) {
@@ -830,6 +828,13 @@ control(register int a, register int b)
 		    "Exceeded maximum stack size (%d) when "
 		    "executing macro %s. Stack dump follows",
 		    max_recursion_depth, macname(frame->mname));
+		edone(02);
+	}
+	if (max_tail_depth > 0 && frame->tail_cnt > max_tail_depth) {
+		errprint(
+		    "Exceeded maximum recursion depth (%d) when "
+		    "executing macro %s. Stack dump follows",
+		    max_tail_depth, macname(frame->mname));
 		edone(02);
 	}
 
@@ -842,10 +847,29 @@ control(register int a, register int b)
 #endif	/* DEBUG */
 	if (contab[j].f == 0) {
 		nxf->nargs = 0;
+		tailflg = 0;
 		if (b)
 			collect();
 		flushi();
-		return pushi((filep)contab[j].mx, a);
+		newip = pushi((filep)contab[j].mx, a);
+		p = frame->pframe;
+		if (tailflg && b && p != stk &&
+				p->ppendt == 0 &&
+				p->pch == 0 &&
+				p->pip == frame->pip &&
+				p->lastpbp == frame->lastpbp) {
+			frame->pframe = p->pframe;
+			frame->frame_cnt--;
+			if (p->nargs > 0) {
+				free(p->argt);
+				free(p->argsp);
+			}
+			*p = *frame;
+			free(frame);
+			frame = p;
+		}
+		tailflg = 0;
+		return newip;
 	} else if (b) {
 		(*contab[j].f)(0);
 		return 0;
@@ -910,8 +934,10 @@ g0:
 			fdprintf(stderr, "getch: ch is %x (%c)\n",
 				ch, (ch&0177) < 040 ? 0177 : ch&0177);
 #endif	/* DEBUG */
-		if (cbits(i) == '\n')
+		if (cbits(i) == '\n') {
 			nlflg++;
+			tailflg = istail(i);
+		}
 		ch = 0;
 		return(i);
 	}
@@ -936,8 +962,10 @@ g0:
 		if (gchtab[k]==0)
 			return(i);
 		if (k == '\n') {
-			if (cbits(i) == '\n')
+			if (cbits(i) == '\n') {
 				nlflg++;
+				tailflg = istail(i);
+			}
 			return(k);
 		}
 		if (k == FLSS) {
@@ -1001,6 +1029,7 @@ g0:
 		while (cbits(i = getch0()) != '\n')
 			;
 		nlflg++;
+		tailflg = istail(i);
 		return(i);
 	case ESC:	/* double backslash */
 		i = eschar;
@@ -1057,6 +1086,11 @@ g0:
 	case 'N':	/* absolute character number */
 		i = setabs();
 		goto gx;
+	case 'V':	/* environment variable */
+		if (xflag == 0)
+			break;
+		_setenv();
+		goto g0;
 	case '.':	/* . */
 		i = '.';
 gx:
@@ -1162,6 +1196,14 @@ gx:
 	case 'r':	/* full em up */
 	case 'd':	/* half em down */
 		return(sethl(k));
+	case 'A':	/* set anchor */
+		if (xflag == 0 || (j = setanchor()) == 0)
+			goto g0;
+		return(j);
+	case 'T':
+		if (xflag == 0 || (j = setlink()) == 0)
+			goto g0;
+		return(j);
 	case ';':	/* ligature suppressor (only) */
 		if (xflag)
 			goto g0;
@@ -1216,7 +1258,6 @@ again:
 	if (pbp > lastpbp)
 		i = pbbuf[--pbp];
 	else if (ip) {
-#ifdef INCORE
 		extern tchar *corebuf;
 		i = corebuf[ip];
 		if (i == 0)
@@ -1227,9 +1268,6 @@ again:
 				(void)rbf();
 			}
 		}
-#else
-		i = rbf();
-#endif
 	} else {
 		if (donef || ndone)
 			done(0);
@@ -1530,13 +1568,17 @@ getach(void)
 	j = cbits(i = getch());
 #ifndef	EUC
 	if (ismot(i) || j == ' ' || j == '\n' || j & 0200) {
+		if (j >= 0200)
 #else
 #ifndef	NROFF
 	if (ismot(i) || j == ' ' || j == '\n' || j & 0200) {
+		if (j >= 0200)
 #else
 	if (ismot(i) || j == ' ' || j == '\n' || j > 0200) {
+		if (j > 0200)
 #endif	/* NROFF */
 #endif	/* EUC */
+			illseq(j, NULL, -3);
 
 		ch = i;
 		j = 0;
@@ -1549,6 +1591,7 @@ getach(void)
 void
 casenx(void)
 {
+	struct s *pp;
 	lgf++;
 	skip(0);
 	getname();
@@ -1560,10 +1603,19 @@ casenx(void)
 	strcpy(mfiles[nmfi], nextf);
 	nextfile();
 	nlflg++;
+	tailflg = 0;
 	ip = 0;
 	pendt = 0;
-	frame = stk;
-	nxf = frame + 1;
+	while (frame != stk) {
+		pp = frame;
+		frame = frame->pframe;
+		if (pp->nargs > 0) {
+			free(pp->argt);
+			free(pp->argsp);
+		}
+		free(pp);
+	}
+	nxf = calloc(1, sizeof *nxf);
 }
 
 
@@ -1615,6 +1667,46 @@ setuc(void)
 	if (n == 0 || *bp != '\0')
 		return 0;
 	return setuc0(n);
+}
+
+
+static void
+_setenv(void)
+{
+	int	a = 0, i = 0, c, delim;
+	char	*np = NULL, *vp;
+
+	if ((delim = getach()) == 0)
+		return;
+	switch (delim) {
+	case '[':
+		for (;;) {
+			if (i + 1 >= a)
+				np = realloc(np, a += 32);
+			if ((c = getach()) == 0) {
+				nodelim(']');
+				break;
+			}
+			if (c == ']')
+				break;
+			np[i++] = c;
+		}
+		np[i] = 0;
+		break;
+	case '(':
+		np = malloc(a = 3);
+		np[0] = delim;
+		np[1] = getach();
+		np[2] = 0;
+		break;
+	default:
+		np = malloc(a = 2);
+		np[0] = delim;
+		np[1] = 0;
+	}
+	if ((vp = getenv(np)) != NULL)
+		cpushback(vp);
+	free(np);
 }
 
 
@@ -1867,4 +1959,6 @@ caserecursionlimit(void)
 {
 	skip(1);
 	max_recursion_depth = atoi();
+	skip(0);
+	max_tail_depth = atoi();
 }

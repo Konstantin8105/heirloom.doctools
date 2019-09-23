@@ -23,7 +23,7 @@
 /*
  * Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)otf.c	1.52 (gritter) 3/17/06
+ * Sccsid @(#)otf.c	1.55 (gritter) 4/20/06
  */
 
 #include <stdio.h>
@@ -1622,6 +1622,8 @@ cffoper(long *op)
 				buf[i++] = '-';
 			else if (c == 0xf) {
 				buf[i++] = 0;
+				if (s == 0)
+					n++;
 				break;
 			}
 			if ((s = !s) == 0)
@@ -1994,7 +1996,7 @@ unichar(int gid, int c)
 	if (ExtraStrings == NULL)
 		ExtraStrings = calloc(nc, sizeof *ExtraStrings);
 	if (ExtraStringSpace == NULL)
-		ExtraStringSpace = malloc(nc * 8);
+		ExtraStringSpace = malloc(nc * 12);
 	sp = &ExtraStringSpace[ExtraStringSpacePos];
 	ExtraStringSpacePos += 8;
 	ExtraStrings[nExtraStrings] = sp;
@@ -2015,6 +2017,8 @@ addunitab(int c, int u)
 	a->unitab[c] = u;
 #endif
 }
+
+static char	*got_gid;
 
 static int
 get_ms_unicode_cmap(int o, int addchar)
@@ -2056,9 +2060,11 @@ get_ms_unicode_cmap(int o, int addchar)
 				gid = c + d;
 			gid &= 0xffff;
 			if (gid != 0) {
-				if (addchar)
+				if (addchar) {
 					unichar(gid, c);
-				else if (gid < nc) {
+					if (got_gid && gid < nc)
+						got_gid[gid] = 1;
+				} else if (gid < nc) {
 					addunitab(a->gid2tr[gid].ch1, c);
 					addunitab(a->gid2tr[gid].ch2, c);
 				}
@@ -2115,6 +2121,7 @@ get_ttf_post_3_0(int o)
 	char	*sp;
 
 	ttf = 2;
+	got_gid = calloc(numGlyphs, sizeof *got_gid);
 	gotit = get_cmap(1);
 	if (gotit <= 0) {
 		ttf = 3;
@@ -2129,10 +2136,29 @@ get_ttf_post_3_0(int o)
 			ExtraStrings[i] = sp;
 			sp += snprintf(sp, n - (sp - ExtraStringSpace),
 					"index0x%02X", i) + 1;
+			if (sp >= &ExtraStringSpace[n])
+				sp = &ExtraStringSpace[n];
 			nExtraStrings++;
 			onechar(i, i);
 		}
+	} else {
+		n = numGlyphs * 12;
+		if (ExtraStrings == NULL)
+			ExtraStrings = calloc(numGlyphs, sizeof *ExtraStrings);
+		if (ExtraStringSpace == NULL)
+			ExtraStringSpace = malloc(n);
+		sp = &ExtraStringSpace[ExtraStringSpacePos];
+		for (i = 0; i < numGlyphs; i++)
+			if (got_gid[i] == 0) {
+				ExtraStrings[nExtraStrings] = sp;
+				sp += snprintf(sp, n - (sp - ExtraStringSpace),
+						"index0x%02X", i) + 1;
+				if (sp >= &ExtraStringSpace[n])
+					sp = &ExtraStringSpace[n];
+				onechar(i, nWGL + nExtraStrings++);
+			}
 	}
+	free(got_gid);
 }
 
 static void
@@ -2734,9 +2760,9 @@ get_Ligature(int first, int o)
 	}
 	Component[i] = -1;
 	gn = GID2SID(first);
-	if (gn[0] == 'f' && gn[1] == 0 && CompCount > 1) {
+	if (gn && gn[0] == 'f' && gn[1] == 0 && CompCount > 1) {
 		gn = GID2SID(Component[0]);
-		if (gn[0] && gn[1] == 0) switch (gn[0]) {
+		if (gn && gn[0] && gn[1] == 0) switch (gn[0]) {
 		case 'f':
 			if (CompCount == 2) {
 				gn = GID2SID(LigGlyph);
@@ -2880,7 +2906,7 @@ get_SingleSubstitutionFormat1(int o, const char *name)
 {
 	struct feature	*fp;
 	struct cov	*cp;
-	int	c;
+	int	c, d;
 	int	Coverage;
 	int	DeltaGlyphID;
 
@@ -2892,7 +2918,8 @@ get_SingleSubstitutionFormat1(int o, const char *name)
 	DeltaGlyphID = pbe16(&contents[o+4]);
 	fp = add_feature(name);
 	while ((c = get_cov(cp)) >= 0)
-		add_substitution_pair(fp, c, c + DeltaGlyphID);
+		if ((d = c + DeltaGlyphID) < nc)
+			add_substitution_pair(fp, c, d);
 	free_cov(cp);
 }
 

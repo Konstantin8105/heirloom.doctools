@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)nii.c	1.26 (gritter) 4/3/06
+ * Sccsid @(#)nii.c	1.30 (gritter) 4/26/06
  */
 
 /*
@@ -53,7 +53,8 @@
 #include "proto.h"
 #include "ext.h"
 
-struct 	s *frame, *stk, *ejl;
+struct 	s *frame, *stk;
+int	ejl;
 struct	s *nxf;
 
 pid_t	pipeflg = -1;
@@ -88,10 +89,8 @@ int	lastpbp;	/* pbp in previous stack frame */
 int	nx;
 int	mflg;
 tchar	ch = 0;
-int	ibf;
 int	ttyod;
 int	iflg;
-char	*enda;
 int	rargc;
 char	**argp;
 int	*trtab;
@@ -151,7 +150,6 @@ int	nhyp;
 tchar	**hyp;
 tchar	*olinep;
 int	dotT;
-char	*unlkp;
 int	no_out;
 struct	widcache *widcache;
 struct	d *d;
@@ -170,3 +168,4 @@ int	lastrq;
 long	realpage;
 int	tryglf;
 char	*gchtab;
+int	tailflg;

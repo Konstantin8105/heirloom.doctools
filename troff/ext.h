@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)ext.h	1.39 (gritter) 4/3/06
+ * Sccsid @(#)ext.h	1.43 (gritter) 4/26/06
  */
 
 /*
@@ -51,10 +51,8 @@
 extern	char	**argp;
 extern	char	*chname;
 extern	char	*eibuf;
-extern	char	*enda;
 extern	char	*ibufp;
 extern	char	*obufp;
-extern	char	*unlkp;
 extern	char	*xbufp;
 extern	char	*xeibuf;
 extern	char	*cfname[NSO+1];
@@ -64,7 +62,6 @@ extern	char	**mfiles;
 extern	char	*nextf;
 extern	char	obuf[],	*obufp;
 extern	char	*termtab,	*fontfile;
-extern	char	tmp_name[];
 extern	char	xbuf[IBUFSZ];
 extern	filep	apptr;
 extern	filep	ip;
@@ -103,7 +100,6 @@ extern	int	flss;
 extern	int	*fontlab;
 extern	int	gflag;
 extern	int	hflg;
-extern	int	ibf;
 extern	int	ifi;
 extern	int	ifile;
 extern	int	ifl[NSO];
@@ -165,6 +161,7 @@ extern	int	stdi;
 extern	int	stop;
 extern	int	sv;
 extern	int	tabch,	ldrch;
+extern	int	tailflg;
 extern	int	tflg;
 extern	int	totout;
 extern	int	trap;
@@ -181,7 +178,7 @@ extern	int	xflag;
 extern	int	xfont;
 extern	int	xpts;
 extern	int	no_out;
-extern	struct	s	*ejl;
+extern	int	ejl;
 extern	struct	s	*frame,	*stk,	*nxf;
 extern	tchar	**hyp;
 extern	tchar	*olinep;

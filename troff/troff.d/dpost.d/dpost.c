@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)dpost.c	1.142 (gritter) 4/4/06
+ * Sccsid @(#)dpost.c	1.147 (gritter) 4/25/06
  */
 
 /*
@@ -669,6 +669,10 @@ static void	t_track(char *);
 static void	t_strack(void);
 static void	t_pdfmark(char *);
 static void	t_locale(char *);
+static void	t_anchor(char *);
+static void	t_link(char *);
+static void	t_linkcolor(char *);
+static void	t_linkborder(char *);
 
 static int	mb_cur_max;
 
@@ -1712,6 +1716,14 @@ devcntrl(
 		    t_pdfmark(buf);
 		else if ( strcmp(str, "LC_CTYPE") == 0 )
 		    t_locale(buf);
+		else if ( strcmp(str, "Anchor") == 0 )
+		    t_anchor(buf);
+		else if ( strcmp(str, "Link") == 0 )
+		    t_link(buf);
+		else if ( strcmp(str, "SetLinkColor") == 0 )
+		    t_linkcolor(buf);
+		else if ( strcmp(str, "SetLinkBorder") == 0 )
+		    t_linkborder(buf);
 		else if ( strcmp(str, "BeginPath") == 0 )
 		    beginpath(buf, FALSE);
 		else if ( strcmp(str, "DrawPath") == 0 )
@@ -2479,20 +2491,28 @@ supplyotf(char *font, char *path, FILE *fp)
         	fprintf(sf, "%%%%+ font %s\n", font);
 	fprintf(rf, "%%%%BeginResource: font %s\n", font);
 	fprintf(rf, "/FontSetInit /ProcSet findresource begin\n");
-	fprintf(rf, "/%s %d ", font, length);
-	fprintf(rf, "currentfile /ASCIIHexDecode filter cvx exec\n");
-	for (i = 0; StartData[i]; i++) {
-		putc(hex[(StartData[i]&0360)>>4], rf);
-		putc(hex[StartData[i]&017], rf);
+	if (encoding == 5) {
+		fprintf(rf, "%%%%BeginData: %ld Binary Bytes\n",
+				(long)(length + 13 + strlen(font) + 12));
+		fprintf(rf, "/%s %12d StartData ", font, length);
+		fwrite(&contents[offset], 1, length, rf);
+		fprintf(rf, "\n%%%%EndData\n");
+	} else {
+		fprintf(rf, "/%s %d ", font, length);
+		fprintf(rf, "currentfile /ASCIIHexDecode filter cvx exec\n");
+		for (i = 0; StartData[i]; i++) {
+			putc(hex[(StartData[i]&0360)>>4], rf);
+			putc(hex[StartData[i]&017], rf);
+		}
+		putc('\n', rf);
+		for (i = offset; i < offset+length; i++) {
+			putc(hex[(contents[i]&0360)>>4], rf);
+			putc(hex[contents[i]&017], rf);
+			if (i > offset && (i - offset + 1) % 34 == 0)
+				putc('\n', rf);
+		}
+		fprintf(rf, ">\n");
 	}
-	putc('\n', rf);
-	for (i = offset; i < offset+length; i++) {
-		putc(hex[(contents[i]&0360)>>4], rf);
-		putc(hex[contents[i]&017], rf);
-		if (i > offset && (i - offset + 1) % 34 == 0)
-			putc('\n', rf);
-	}
-	fprintf(rf, ">\n");
 	fprintf(rf, "%%%%EndResource\n");
 	free(contents);
 	got_otf = 1;
@@ -3539,7 +3559,7 @@ put1 (
 
 
 static void
-oprep(int maysplit)
+oprep(int maysplit, int stext)
 {
     if ( maysplit && textcount > MAXSTACK )		/* don't put too much on the stack? */
 	endtext();
@@ -3552,10 +3572,12 @@ oprep(int maysplit)
     if ( vpos != lasty )
 	endline();
 
-    starttext();
+    if (stext) {
+        starttext();
 
-    if ( ABS(hpos - lastx) > slop )
-	endstring();
+        if ( ABS(hpos - lastx) > slop )
+	    endstring();
+    }
 }
 
 
@@ -3906,7 +3928,7 @@ addchar (
     static int	lastc;
 
     subfont = 0;
-    oprep(lastc != '\\');
+    oprep(lastc != '\\', 1);
     lastc = c;
     switch ( encoding )  {
 	case 0:
@@ -3971,14 +3993,14 @@ addoctal (
  */
 
 
-    oprep(1);
+    oprep(1, 0);
     if (c >= 128 && fontname[font].afm && fontname[font].afm->encmap) {
 	    c = fontname[font].afm->encmap[c - 128];
 	    subfont = c >> 8;
 	    c &= 0377;
     } else
 	    subfont = 0;
-    oprep(1);
+    oprep(1, 1);
     switch ( encoding )  {
 	case 0:
 	case 1:
@@ -4057,7 +4079,7 @@ charlib (
 
 
     subfont = 0;
-    oprep(1);
+    oprep(1, 1);
     endtext();
 
     if ( lastc < 128 )  {		/* just a simple ASCII character */
@@ -4394,4 +4416,98 @@ t_locale(char *lp)
 	sscanf(lp, "%s", savlp);
 	setlocale(LC_CTYPE, savlp);
 	mb_cur_max = MB_CUR_MAX;
+}
+
+static void
+pref(const char *lp, FILE *fp)
+{
+	int	c;
+
+	while ((c = *lp++ & 0377) != 0 && c != '\n') {
+		if (c >= '0' && c <= '9' || c >= 'a' && c <= 'z' ||
+				c >= 'A' && c <= 'Z')
+			putc(c, fp);
+		else
+			fprintf(fp, "$%2x", c);
+	}
+}
+
+static void
+t_anchor(char *lp)
+{
+	int	v;
+
+	v = strtol(lp, &lp, 10);
+	if ((lp = strchr(lp, ' ')) != NULL) {
+		lp++;
+		endtext();
+		fprintf(tf, "[ /Dest /Anchor$");
+		pref(lp, tf);
+		fprintf(tf, "\n"
+			    "  /View [/XYZ -4 %g 0]\n"
+			    "/DEST pdfmark\n",
+			pagelength - (v >= 0 ? v * 72.0 / res : -4));
+	}
+}
+
+static char linkcolor[60] = "0 0 1";
+static char linkborder[60] = "0 0 1";
+
+static void
+t_link(char *lp)
+{
+	int	llx, lly, urx, ury;
+
+	llx = strtol(lp, &lp, 10);
+	if (*lp) {
+		while (*lp == ',')
+			lp++;
+		lly = strtol(lp, &lp, 10);
+		if (*lp) {
+			while (*lp == ',')
+				lp++;
+			urx = strtol(lp, &lp, 10);
+			if (*lp) {
+				while (*lp == ',')
+					lp++;
+				ury = strtol(lp, &lp, 10);
+				if ((lp = strchr(lp, ' ')) != NULL) {
+					lp++;
+					endtext();
+					fprintf(tf, "[ /Dest /Anchor$");
+					pref(lp, tf);
+					fprintf(tf, "\n"
+						"/Rect [%d %d %d %d]\n"
+						"/Color [%s]\n"
+						"/Border [%s]\n"
+						"/Subtype /Link\n"
+						"/ANN pdfmark\n",
+						llx, -lly, urx, -ury,
+						linkcolor, linkborder);
+				}
+			}
+		}
+	}
+}
+
+static void
+t_linkcolor(char *lp)
+{
+	float	r, g, b;
+
+	r = strtof(lp, &lp);
+	g = strtof(lp, &lp);
+	b = strtof(lp, &lp);
+	snprintf(linkcolor, sizeof linkcolor, "%g %g %g", r, g, b);
+}
+
+static void
+t_linkborder(char *lp)
+{
+	float	bx, by, c;
+
+	bx = strtof(lp, &lp);
+	by = strtof(lp, &lp);
+	c = strtof(lp, &lp);
+	snprintf(linkborder, sizeof linkborder, "%g %g %g", bx, by, c);
 }
