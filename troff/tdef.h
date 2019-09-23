@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)tdef.h	1.83 (gritter) 6/13/06
+ * Sccsid @(#)tdef.h	1.92 (gritter) 7/11/06
  */
 
 /*
@@ -143,6 +143,13 @@
 #define	ANCHOR	0001	/* anchor definition */
 #define	LINKON	0002	/* link start */
 #define	LINKOFF	0003	/* link end */
+#define	LETSP	0004	/* positive letter spacing */
+#define	NLETSP	0005	/* negative letter spacing */
+#define	FLDMARK	0006	/* field marker */
+#define	LETSH	0007	/* expanded letter shapes */
+#define	NLETSH	0010	/* condensed letter shapes */
+
+#define	LAFACT	1000	/* letter adjustment float-to-int conversion factor */
 
 #define	HYPHEN	c_hyphen
 #define	EMDASH	c_emdash	/* \(em */
@@ -187,7 +194,7 @@ extern	int	NCHARS;	/* maximum size of troff character set */
 #define	NWIDCACHE NCHARS	/* number of items in widcache */
 #define	NTRAP	20	/* number of traps */
 #define	NPN	20	/* numbers in "-o" */
-#define	FBUFSZ	256	/* field buf size words */
+#define	FBUFSZ	512	/* field buf size words */
 #define	OBUFSZ	4096	/* bytes */
 #define	IBUFSZ	4096	/* bytes */
 #define	NC	1024	/* cbuf size words */
@@ -318,8 +325,7 @@ endif NROFF
 
 #define	ischar(n)	(((n) & ~BYTEMASK) == 0)
 
-#ifdef EUC
-#ifdef NROFF
+#if defined (EUC) && defined (NROFF)
 #define CSMASK	0x6000	/* colunm of print identifier */
 #define MBMASK	0x1c00	/* bits identifying position in a multibyte char */
 #define MBMASK1	0x1800
@@ -333,8 +339,9 @@ endif NROFF
 #define ZWDELIM1	ZBIT | FIRSTOFMB | ' '	/* non-ASCII word delimiter 1 */
 #define ZWDELIM2	ZBIT | MIDDLEOFMB | ' '	/* non-ASCII word delimiter 2 */
 #define ZWDELIM(c)	((c) == 0) ? ' ' : ((c) == 1) ? ZWDELIM1 : ZWDELIM2
-#endif /* NROFF */
-#endif /* EUC */
+#else	/* !EUC || !NROFF */
+#define	MBMASK	0
+#endif	/* !EUC || !NROFF */
 
 #define	ZONE	5	/* 5 hrs for EST */
 #define	TABMASK	0x3FFFFFFF
@@ -559,10 +566,46 @@ extern const struct numtab initnumtab[];
 
 #define	ics	env._ics
 #define	sps	env._sps
-#define	minsps	env._minsps
 #define	ses	env._ses
 #define	spacesz	env._spacesz
+#ifndef	NROFF
+#define	minsps	env._minsps
 #define	minspsz	env._minspsz
+#define	letspsz	env._letspsz
+#define	letsps	env._letsps
+#define	lspmin	env._lspmin
+#define	lspmax	env._lspmax
+#define	lspnc	env._lspnc
+#define	lsplow	env._lsplow
+#define	lsphigh	env._lsphigh
+#define	lspcur	env._lspcur
+#define	lsplast	env._lsplast
+#define	lshmin	env._lshmin
+#define	lshmax	env._lshmax
+#define	lshwid	env._lshwid
+#define	lshlow	env._lshlow
+#define	lshhigh	env._lshhigh
+#define	lshcur	env._lshcur
+#else	/* NROFF */
+#define	minsps	0
+#define	minspsz	0
+#define	letspsz	0
+#define	letsps	0
+#define	lspmin	0
+#define	lspmax	0
+#define	lspnc	0
+#define	lsplow	0
+#define	lsphigh	0
+#define	lspcur	0
+#define	lsplast	0
+#define	lshmin	0
+#define	lshmax	0
+#define	lshwid	0
+#define	lshlow	0
+#define	lshhigh	0
+#define	lshcur	0
+#endif	/* NROFF */
+#define	fldcnt	env._fldcnt
 #define	lss	env._lss
 #define	lss1	env._lss1
 #define	ll	env._ll
@@ -592,6 +635,8 @@ extern const struct numtab initnumtab[];
 #define	tdelim	env._tdelim
 #define	hyf	env._hyf
 #define	hyoff	env._hyoff
+#define	hlm	env._hlm
+#define	hlc	env._hlc
 #define	un1	env._un1
 #define	tabc	env._tabc
 #define	dotc	env._dotc
@@ -628,11 +673,13 @@ extern const struct numtab initnumtab[];
 #define	pendnf	env._pendnf
 #define	spread	env._spread
 #define	it	env._it
+#define	itc	env._itc
 #define	itmac	env._itmac
 #define	lnsize	env._lnsize
 #define	linkin	env._linkin
 #define	linkout	env._linkout
 #define	linkhp	env._linkhp
+#define	hylang	env._hylang
 #define	dicthnj	env._dicthnj
 #define	hyext	env._hyext
 #define	hyptr	env._hyptr
@@ -643,10 +690,28 @@ extern const struct numtab initnumtab[];
 extern struct env {
 	int	_ics;
 	int	_sps;
-	int	_minsps;
 	int	_ses;
 	int	_spacesz;
+#ifndef	NROFF
+	int	_minsps;
 	int	_minspsz;
+	int	_letspsz;
+	int	_letsps;
+	int	_lspmin;
+	int	_lspmax;
+	int	_lspnc;
+	int	_lsplow;
+	int	_lsphigh;
+	int	_lspcur;
+	int	_lsplast;
+	int	_lshmin;
+	int	_lshmax;
+	int	_lshwid;
+	int	_lshlow;
+	int	_lshhigh;
+	int	_lshcur;
+#endif	/* !NROFF */
+	int	_fldcnt;
 	int	_lss;
 	int	_lss1;
 	int	_ll;
@@ -676,6 +741,8 @@ extern struct env {
 	int	_tdelim;
 	int	_hyf;
 	int	_hyoff;
+	int	_hlm;
+	int	_hlc;
 	int	_un1;
 	int	_tabc;
 	int	_dotc;
@@ -712,11 +779,13 @@ extern struct env {
 	int	_pendnf;
 	int	_spread;
 	int	_it;
+	int	_itc;
 	int	_itmac;
 	int	_lnsize;
 	int	_linkin;
 	int	_linkout;
 	int	_linkhp;
+	char	*_hylang;
 	void	*_dicthnj;
 	int	_hyext;
 	tchar	*_hyptr[NHYP];
@@ -724,259 +793,3 @@ extern struct env {
 	tchar	_line[LNSIZE];
 	tchar	_word[WDSIZE];
 } env, initenv;
-
-/* n1.c */
-int tryfile(char *, char *, int);
-void catch(int);
-void kcatch(int);
-void init0(void);
-void init1(char);
-void init2(void);
-void cvtime(void);
-int ctoi(register char *);
-void mesg(int);
-void errprint(const char *, ...);
-#define	fdprintf	xxfdprintf
-void fdprintf(int, char *, ...);
-char *roff_sprintf(char *, char *, ...);
-int control(register int, register int);
-int getrq2(void);
-int getrq(int);
-tchar getch(void);
-void setxon(void);
-tchar getch0(void);
-void pushback(register tchar *);
-void cpushback(register char *);
-tchar *growpbbuf(void);
-int nextfile(void);
-int popf(void);
-void flushi(void);
-int getach(void);
-void casenx(void);
-int getname(void);
-void caseso(void);
-void casepso(void);
-void caself(void);
-void casecf(void);
-void casesy(void);
-void getpn(register char *);
-void setrpt(void);
-void casedb(void);
-void casexflag(void);
-void caserecursionlimit(void);
-/* n2.c */
-int pchar(register tchar);
-void pchar1(register tchar);
-void outascii(tchar);
-void oputs(register char *);
-void flusho(void);
-void caseoutput(void);
-void done(int);
-void done1(int);
-void done2(int);
-void done3(int);
-void edone(int);
-void casepi(void);
-/* n3.c */
-void *growcontab(void);
-void *growblist(void);
-void caseig(void);
-void casern(void);
-void maddhash(register struct contab *);
-void munhash(register struct contab *);
-void mrehash(void);
-void caserm(void);
-void caseas(void);
-void caseds(void);
-void caseam(void);
-void casede(void);
-int findmn(register int);
-void clrmn(register int);
-filep finds(register int);
-int skip(int);
-int copyb(void);
-void copys(void);
-filep alloc(void);
-void ffree(filep);
-void wbt(tchar);
-void wbf(register tchar);
-void wbfl(void);
-tchar rbf(void);
-tchar rbf0(register filep);
-filep incoff(register filep);
-tchar popi(void);
-int pushi(filep, int);
-char *setbrk(int);
-int getsn(void);
-int setstr(void);
-void collect(void);
-void seta(void);
-void caseda(void);
-void casedi(void);
-void casedt(void);
-void casetl(void);
-void casepc(void);
-void casechop(void);
-void casepm(void);
-void stackdump(void);
-char *macname(int);
-int maybemore(int, int);
-tchar setuc(void);
-int makerq(const char *);
-/* n4.c */
-void *grownumtab(void);
-void setn(void);
-int wrc(tchar);
-void setn1(int, int, tchar);
-void nrehash(void);
-void nunhash(register struct numtab *);
-int findr(register int);
-int usedr(register int);
-int fnumb(register int, register int (*)(tchar));
-int decml(register int, register int (*)(tchar));
-int roman(int, int (*)(tchar));
-int roman0(int, int (*)(tchar), char *, char *);
-int abc(int, int (*)(tchar));
-int abc0(int, int (*)(tchar));
-#define	atoi()	xxatoi()
-int atoi();
-long long atoi0(void);
-long long ckph(void);
-long long atoi1(register tchar);
-void setnr(const char *, int, int);
-void caserr(void);
-void casenr(void);
-void caseaf(void);
-void setaf(void);
-int vnumb(int *);
-int hnumb(int *);
-int inumb(int *);
-int quant(int, int);
-/* n5.c */
-void save_tty(void);
-void casead(void);
-void casena(void);
-void casefi(void);
-void casenf(void);
-void casers(void);
-void casens(void);
-void casespreadwarn(void);
-int chget(int);
-void casecc(void);
-void casec2(void);
-void casehc(void);
-void casetc(void);
-void caselc(void);
-void casehy(void);
-void casenh(void);
-int max(int, int);
-int min(int, int);
-void casece(void);
-void casein(void);
-void casell(void);
-void caselt(void);
-void caseti(void);
-void casels(void);
-void casepo(void);
-void casepl(void);
-void casewh(void);
-void casech(void);
-void casevpt(void);
-int findn(int);
-void casepn(void);
-void casebp(void);
-void casetm(int);
-void casetmc(void);
-void caseopen(void);
-void caseopena(void);
-void casewrite(void);
-void casewritec(void);
-void caseclose(void);
-void casesp(int);
-void casert(void);
-void caseem(void);
-void casefl(void);
-void caseev(void);
-void caseevc(void);
-void caseel(void);
-void caseie(void);
-void caseif(int);
-void casereturn(void);
-void eatblk(int);
-int cmpstr(tchar);
-void caserd(void);
-int rdtty(void);
-void caseec(void);
-void caseeo(void);
-void caseta(void);
-void casene(void);
-void casetr(void);
-void casecu(void);
-void caseul(void);
-void caseuf(void);
-void caseit(void);
-void casemc(void);
-void casemk(void);
-void casesv(void);
-void caseos(void);
-void casenm(void);
-void getnm(int *, int);
-void casenn(void);
-void caseab(void);
-void restore_tty(void);
-void set_tty(void);
-void echo_off(void);
-void echo_on(void);
-/* n7.c */
-int collectmb(tchar);
-void tbreak(void);
-void donum(void);
-void text(void);
-void nofill(void);
-void callsp(void);
-void ckul(void);
-void storeline(register tchar, int);
-void newline(int);
-int findn1(int);
-void chkpn(void);
-int findt(int);
-int findt1(void);
-void eject(struct s *);
-int movword(void);
-void horiz(int);
-void setnel(void);
-int getword(int);
-void storeword(register tchar, register int);
-/* n8.c */
-void hyphen(tchar *);
-int punct(tchar);
-int alph(tchar);
-void caseht(void);
-void casehw(void);
-int exword(void);
-int suffix(void);
-int maplow(register int, int);
-int vowel(int);
-tchar *chkvow(tchar *);
-void digram(void);
-int dilook(int, int, const char [26][13]);
-void casehylang(void);
-/* n9.c */
-tchar setz(void);
-void setline(void);
-int eat(register int);
-void setov(void);
-void setbra(void);
-void setvline(void);
-void setdraw(void);
-void casefc(void);
-tchar setfield(int);
-void localize(void);
-void caselc_ctype(void);
-void casepsbb(void);
-void casewarn(void);
-void nosuch(int);
-void illseq(int, const char *, int);
-void missing(void);
-void nodelim(int);
-void morechars(int);

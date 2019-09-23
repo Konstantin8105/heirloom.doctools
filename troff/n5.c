@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n5.c	1.44 (gritter) 6/16/06
+ * Sccsid @(#)n5.c	1.52 (gritter) 7/9/06
  */
 
 /*
@@ -51,16 +51,14 @@
 #include <fcntl.h>
 #include <stdlib.h>
 #include <ctype.h>
-#ifdef 	EUC
-#ifdef	NROFF
+#if defined (EUC) && defined (NROFF)
 #include <stddef.h>
 #ifdef	__sun
 #include <widec.h>
 #else
 #include <wchar.h>
 #endif
-#endif	/* NROFF */
-#endif	/* EUC */
+#endif	/* EUC && NROFF */
 #include <string.h>
 #include <unistd.h>
 #include "tdef.h"
@@ -68,7 +66,7 @@
 #ifdef	NROFF
 #include "tw.h"
 #endif
-#include "proto.h"
+#include "pt.h"
 
 extern void mchbits(void);
 
@@ -253,6 +251,21 @@ casenh(void)
 	hyf = 0;
 }
 
+
+void
+casehlm(void)
+{
+	int	i;
+
+	if (!skip(0)) {
+		noscale++;
+		i = atoi();
+		noscale = 0;
+		if (!nonumb)
+			hlm = i;
+	} else
+		hlm = -1;
+}
 
 int 
 max(int aa, int bb)
@@ -717,6 +730,26 @@ casesp(int a)
 
 
 void
+casebrp(void)
+{
+	spread++;
+	flushi();
+	pendt++;
+	text();
+}
+
+
+void
+caseblm(void)
+{
+	if (!skip(0))
+		blmac = getrq(1);
+	else
+		blmac = 0;
+}
+
+
+void
 casert(void)
 {
 	register int a, *p;
@@ -945,6 +978,8 @@ caseif(int x)
 	tchar i, j;
 	enum warn w = warn;
 
+	if (x == 3)
+		goto i2;
 	if (x == 2) {
 		notflag = 0;
 		true = iflist ? iflist[ifx] : 0;
@@ -1042,6 +1077,12 @@ i2:
 		copyf--;
 		falsef--;
 	}
+}
+
+void
+casenop(void)
+{
+	caseif(3);
 }
 
 void
@@ -1180,11 +1221,9 @@ int
 rdtty(void)
 {
 	char	onechar;
-#ifdef EUC
-#ifdef NROFF
+#if defined (EUC) && defined (NROFF)
 	int	i, n, col_index;
-#endif /* NROFF */
-#endif /* EUC */
+#endif /* EUC && NROFF */
 
 	onechar = 0;
 	if (read(0, &onechar, 1) == 1) {
@@ -1192,14 +1231,10 @@ rdtty(void)
 			tty++;
 		else 
 			tty = 1;
-#ifndef EUC
+#if !defined (EUC) || !defined (NROFF)
 		if (tty != 3)
 			return(onechar);
-#else
-#ifndef NROFF
-		if (tty != 3)
-			return(onechar);
-#else
+#else	/* EUC && NROFF */
 		if (tty != 3) {
 			if (!multi_locale)
 				return(onechar);
@@ -1239,8 +1274,7 @@ rdtty(void)
 			}
 			return(i);
 		}
-#endif /* NROFF */
-#endif /* EUC */
+#endif /* EUC && NROFF */
 	}
 	popi();
 	tty = 0;
@@ -1384,19 +1418,28 @@ caseuf(void)
 
 
 void
-caseit(void)
+caseit(int cflag)
 {
 	register int i;
 
 	lgf++;
-	it = itmac = 0;
+	it = itc = itmac = 0;
 	noscale++;
 	skip(0);
 	i = atoi();
 	skip(0);
-	if (!nonumb && (itmac = getrq(1)))
+	if (!nonumb && (itmac = getrq(1))) {
 		it = i;
+		itc = cflag;
+	}
 	noscale = 0;
+}
+
+
+void
+caseitc(void)
+{
+	caseit(1);
 }
 
 

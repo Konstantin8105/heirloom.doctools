@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)t6.c	1.147 (gritter) 6/15/06
+ * Sccsid @(#)t6.c	1.155 (gritter) 7/12/06
  */
 
 /*
@@ -65,7 +65,7 @@
 #include <unistd.h>
 #include "ext.h"
 #include "afm.h"
-#include "proto.h"
+#include "pt.h"
 #include "troff.h"
 
 /* fitab[f][c] is 0 if c is not on font f */
@@ -103,6 +103,7 @@ width(register tchar j)
 
 	_minflg = minflg;
 	minflg = minspc = 0;
+	rawwidth = 0;
 	if (j & (ZBIT|MOT)) {
 		if (iszbit(j))
 			return(0);
@@ -134,8 +135,9 @@ width(register tchar j)
 		xpts = ppts;
 	} else 
 		xbits(j, 0);
-	if (widcache[i-32].fontpts == xfont + (xpts<<8) && !setwdf && !_minflg)
-		k = widcache[i-32].width;
+	if (widcache[i-32].fontpts == xfont + (xpts<<8) && !setwdf &&
+			!_minflg && !horscale)
+		k = rawwidth = widcache[i-32].width;
 	else {
 		if (_minflg && i == 32 && cbits(j) != 32)
 			_minflg = 0;
@@ -259,6 +261,10 @@ getcw(register int i)
 	k = *(p + j);
 	if (dev.anysize == 0 || xflag == 0 || (z = zoomtab[xfont]) == 0)
 		z = 1;
+	if (horscale) {
+		z *= horscale;
+		nocache = 1;
+	}
  g1:
 	if (!bd)
 		bd = bdtab[ofont];
@@ -271,6 +277,7 @@ getcw(register int i)
 		cs = (cs * EMPTS(x)) / 36;
 	}
 	k = (k * z * u2pts(xpts) + (Unitwidth / 2)) / Unitwidth;
+	rawwidth = k;
 	s = xpts;
 	lasttrack = 0;
 	if (s <= tracktab[ofont].s1 && tracktab[ofont].n1) {
@@ -290,8 +297,8 @@ getcw(register int i)
 			lasttrack = r;
 		}
 	}
-	k += lasttrack;
-	if (nocache|bd)
+	k += lasttrack + lettrack;
+	if (nocache|bd|lettrack)
 		widcache[i].fontpts = 0;
 	else {
 		widcache[i].fontpts = xfont + (xpts<<8);
@@ -773,6 +780,12 @@ mchbits(void)
 		minsps = width(' ' | chbits);
 		spacesz = k;
 	}
+	if (letspsz) {
+		k = spacesz;
+		spacesz = letspsz;
+		letsps = width(' ' | chbits);
+		spacesz = k;
+	}
 	sps = width(' ' | chbits);
 	zapwcache(1);
 }
@@ -780,7 +793,7 @@ mchbits(void)
 void
 setps(void)
 {
-	register int i, j = 0;
+	register int i, j = 0, k;
 
 	i = cbits(getch());
 	if (ischar(i) && isdigit(i)) {		/* \sd or \sdd */
@@ -808,12 +821,23 @@ setps(void)
 		} else if (j == '(') {		/* \s+(dd, \s-(dd */
 			j = cbits(getch()) - '0';
 			j = 10 * j + cbits(getch()) - '0';
+		} else if ((j == '[' || j == '\'') && xflag) {	/* \s+[dd], */
+			k = j == '[' ? ']' : j;			/* \s-'dd' */
+			noscale++;
+			j = atoi();
+			noscale--;
+			if (nonumb)
+				return;
+			if (cbits(getch()) != k)
+				nodelim(k);
 		}
 		if (i == '-')
 			j = -j;
 		j = pts2u(j);
 		j += apts;
-	} else if (i == '\'' && xflag) {
+	} else if ((i == '[' || i == '\'') && xflag) {	/* \s'+dd', \s[dd] */
+		if (i == '[')
+			i = ']';
 		dfact = INCH;
 		dfactd = 72;
 		res = VERT;
@@ -1561,8 +1585,9 @@ casess(int flg)
 	int _spacesz, _sps;
 
 	noscale++;
-	skip(1);
-	if (i = atoi()) {
+	if (skip(flg == 0))
+		minsps = minspsz = 0;
+	else if (i = atoi()) {
 		_spacesz = spacesz;
 		spacesz = i & 0177;
 		zapwcache(0);
@@ -1592,6 +1617,51 @@ void
 caseminss(void)
 {
 	casess(1);
+}
+
+void
+caseletadj(void)
+{
+	int	s, n, x, l, h;
+
+	dfact = LAFACT / 100;
+	if (skip(0) || (n = atoi()) == 0) {
+		letspsz = 0;
+		letsps = 0;
+		goto ret;
+	}
+	if (skip(1))
+		goto ret;
+	dfact = LAFACT / 100;
+	l = atoi();
+	if (skip(1))
+		goto ret;
+	noscale++;
+	s = atoi();
+	noscale--;
+	if (skip(1))
+		goto ret;
+	dfact = LAFACT / 100;
+	x = atoi();
+	if (skip(1))
+		goto ret;
+	dfact = LAFACT / 100;
+	h = atoi();
+	letspsz = s;
+	lspmin = LAFACT - n;
+	lspmax = x - LAFACT;
+	lshmin = LAFACT - l;
+	lshmax = h - LAFACT;
+	s = spacesz;
+	spacesz = letspsz;
+	zapwcache(1);
+	letsps = width(' ' | chbits);
+	spacesz = s;
+	zapwcache(1);
+	sps = width(' ' | chbits);
+	zapwcache(1);
+ret:
+	dfact = 1;
 }
 
 void
@@ -1972,6 +2042,12 @@ casefzoom(void)
 			ptps();
 	}
 	free(buf);
+}
+
+double
+getfzoom(void)
+{
+	return zoomtab[font];
 }
 
 void
@@ -2568,15 +2644,6 @@ getref(void)
 		np[i] = 0;
 	}
 	return np;
-}
-
-static tchar
-mkxfunc(int f, int s)
-{
-	tchar	t = XFUNC;
-	setfbits(t, f);
-	setsbits(t, s);
-	return t;
 }
 
 tchar

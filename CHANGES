@@ -1,3 +1,54 @@
+Release 060716
+* troff: The ".letadj" request has been added to enable dynamic letter
+  spacing and letter reshaping when justifying lines.
+* troff: Font and size attributes of space (and newline) characters in
+  input are now honored for computing widths and kerning pairs. Previously,
+  font and size of space characters were always that of the next printable
+  character; this is retained with the -x0 option. This means that e.g. in
+  "\f(CWabc \fRdef", the size of the space is now computed from the
+  constant width font instead of the roman font.
+* [nt]roff, dpost, daps: The character name "\(rs" for backslash has been
+  introduced.
+* nroff: "\[xx]" and "\C'xx'" result in the same character as "\(xx" now.
+* [nt]roff: The ".nx" request now works again, it previously caused
+  a segmentation fault because of a null pointer dereference (bug
+  reported by Michael Hobgood).
+* [nt]roff: With the ".hylang" request, words that consist of four
+  characters are now subject to hyphenation (with the traditional
+  hyphenation, five characters are the minimum length).
+* [nt]roff: The ".hy" request accepts the additional flags 16 and 32 that
+  allow the last or first character of a word, respectively, to be split
+  off.
+* troff: Giving no arguments to ".minss" now deactivates this mechanism.
+* troff: ".minss" now has no effect unless in ".ad b" mode as documented.
+* [nt]roff: The ".ss", ".sss", ".minss", ".lspmin", ".letss", ".lspmax",
+  ".lshmin", ".lshmax", ".lc_ctype", ".hylang", and ".fzoom" number
+  registers have been added to retrieve the current values set with the
+  respective requests.
+* [nt]roff: The forms "\s+-'dd'", "\s+-[dd]", and "\s[+-dd]" of the size
+  change escape sequence are now understood.
+* [nt]roff: The ".nop text" request (use text as input) has been added.
+* [nt]roff: The escape sequence "\R'R +-N'" to set the value of a number
+  register has been added.
+* [nt]roff: String references now accept arguments with the \*[xx arg ...]
+  escape sequence.
+* [nt]roff: The ".blm xx" request has been added, it causes ".xx" to be
+  called whenever a blank line is encountered.
+* [nt]roff: The ".itc" request (input trap not counting "\c") has been
+  added.
+* [nt]roff: The ".hlm" request and the ".hln" and ".hlc" number registers
+  have been added to control the maximum number of consecutive hyphenated
+  lines.
+* [nt]roff: The "\#" escape sequence (comment including newline) has been
+  added.
+* [nt]roff: With xflag 3 and warning "mac" deactivated, if ".xx" was a
+  defined request and ".xxx" was not, ".xx" was executed for ".xxx".
+* [nt]roff: Several segmentation violations that occurred with arbitrary
+  binary data as input have been fixed.
+* troff, dpost, otfdump: The operator 12 in CFF Top DICT entries was not
+  handled correctly, resulting in misleading error messages with some
+  OpenType fonts. This has been fixed (bug reported by D. Jeff Dionne).
+
 Release 060619
 * troff: The ".minss" request has been added. It allows troff to decrease
   the size of the word space below the value set by ".ss" when adjusting

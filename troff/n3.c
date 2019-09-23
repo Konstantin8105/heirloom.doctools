@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n3.c	1.92 (gritter) 6/16/06
+ * Sccsid @(#)n3.c	1.102 (gritter) 7/11/06
  */
 
 /*
@@ -59,7 +59,7 @@
 #ifdef NROFF
 #include "tw.h"
 #endif
-#include "proto.h"
+#include "pt.h"
 #include "ext.h"
 #include <unistd.h>
 
@@ -74,10 +74,11 @@ int	strflg;
 tchar *wbuf;
 tchar *corebuf;
 
+static void	_collect(int);
 static void	caseshift(void);
 static void	casesubstring(void);
 static void	caselength(void);
-static int	getls(int);
+static int	getls(int, int *);
 static void	addcon(int, char *, void(*)(int));
 
 static const struct {
@@ -85,6 +86,8 @@ static const struct {
 	void	(*f)(int);
 } longrequests[] = {
 	{ "bleedat",		(void(*)(int))casebleedat },
+	{ "blm",		(void(*)(int))caseblm },
+	{ "brp",		(void(*)(int))casebrp },
 	{ "chop",		(void(*)(int))casechop },
 	{ "close",		(void(*)(int))caseclose },
 	{ "cropat",		(void(*)(int))casecropat },
@@ -99,16 +102,20 @@ static const struct {
 	{ "ftr",		(void(*)(int))caseftr },
 	{ "fzoom",		(void(*)(int))casefzoom },
 	{ "hidechar",		(void(*)(int))casehidechar },
+	{ "hlm",		(void(*)(int))casehlm },
 	{ "hylang",		(void(*)(int))casehylang },
+	{ "itc",		(void(*)(int))caseitc },
 	{ "kern",		(void(*)(int))casekern },
 	{ "kernafter",		(void(*)(int))casekernafter },
 	{ "kernbefore",		(void(*)(int))casekernbefore },
 	{ "kernpair",		(void(*)(int))casekernpair },
 	{ "lc_ctype",		(void(*)(int))caselc_ctype },
 	{ "length",		(void(*)(int))caselength },
+	{ "letadj",		(void(*)(int))caseletadj },
 	{ "lhang",		(void(*)(int))caselhang },
 	{ "mediasize",		(void(*)(int))casemediasize },
 	{ "minss",		(void(*)(int))caseminss },
+	{ "nop",		(void(*)(int))casenop },
 	{ "open",		(void(*)(int))caseopen },
 	{ "opena",		(void(*)(int))caseopena },
 	{ "output",		(void(*)(int))caseoutput },
@@ -758,8 +765,8 @@ setbrk(int x)
 }
 
 
-int 
-getsn(void)
+static int
+_getsn(int *strp)
 {
 	register int i;
 
@@ -768,9 +775,15 @@ getsn(void)
 	if (i == '(')
 		return(getrq2());
 	else if (i == '[' && xflag != 0)
-		return(getls(']'));
+		return(getls(']', strp));
 	else 
 		return(i);
+}
+
+int
+getsn(void)
+{
+	return _getsn(0);
 }
 
 
@@ -778,14 +791,21 @@ int
 setstr(void)
 {
 	register int i, j;
+	int	space = 0;
 
 	lgf++;
-	if ((i = getsn()) == 0 || (j = findmn(i)) == -1 || !contab[j].mx) {
+	if ((i = _getsn(&space)) == 0 || (j = findmn(i)) == -1 ||
+			!contab[j].mx) {
+		if (space)
+			nodelim(']');
 		nosuch(i);
 		lgf--;
 		return(0);
 	} else {
-		nxf->nargs = 0;
+		if (space)
+			_collect(']');
+		else
+			nxf->nargs = 0;
 		strflg++;
 		lgf--;
 		return pushi((filep)contab[j].mx, i);
@@ -795,7 +815,13 @@ setstr(void)
 void
 collect(void)
 {
-	register tchar i;
+	return _collect(0);
+}
+
+static void
+_collect(int termc)
+{
+	register tchar i = 0;
 	int	at = 0, asp = 0;
 	int	nt = 0, nsp = 0;
 	int	quote;
@@ -823,6 +849,8 @@ collect(void)
 			ch = i;
 		while (1) {
 			i = getch();
+			if (termc && i == termc)
+				goto rtn;
 			if (nlflg || (!quote && cbits(i) == ' '))
 				break;
 			if (   quote
@@ -842,6 +870,8 @@ collect(void)
 		savnxf->argsp[nsp++] = 0;
 	}
 rtn:
+	if (termc && i != termc)
+		nodelim(termc);
 	free(nxf);
 	nxf = savnxf;
 	nxf->nargs = nt;
@@ -1329,9 +1359,10 @@ maybemore(int sofar, int flags)
 			if (flags & 2) {
 				if (i > 3 && xflag >= 3)
 					sofar = -2;
-			} else if (warn & WARN_MAC && i > 3 && xflag >= 3) {
+			} else if (i > 3 && xflag >= 3) {
 				buf[i-1] = 0;
-				errprint("%s: no such request", buf);
+				if (warn & WARN_MAC)
+					errprint("%s: no such request", buf);
 				sofar = 0;
 			} else if (warn & WARN_SPACE && i > 3 &&
 					findmn(sofar) >= 0) {
@@ -1355,7 +1386,7 @@ maybemore(int sofar, int flags)
 }
 
 static int
-getls(int termc)
+getls(int termc, int *strp)
 {
 	char	c, buf[NC+1];
 	int	i = 0, j = -1, n = -1;
@@ -1366,10 +1397,16 @@ getls(int termc)
 			return -1;
 		buf[i++] = c;
 	} while (c && c != termc);
-	if (c != termc)
-		nodelim(termc);
+	if (strp)
+		*strp = 0;
+	if (c != termc) {
+		if (strp && !nlflg)
+			*strp = 1;
+		else
+			nodelim(termc);
+	}
 	buf[--i] = 0;
-	if (i == 0 || c != termc)
+	if (i == 0 || c != termc && (!strp || nlflg))
 		j = 0;
 	else if (i <= 2) {
 		j = PAIR(buf[0], buf[1]);

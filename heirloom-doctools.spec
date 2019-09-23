@@ -3,7 +3,7 @@
 #
 Summary: The Heirloom Documentation Tools.
 Name: heirloom-doctools
-Version: 060619
+Version: 060716
 Release: 1
 License: Other
 Source: %{name}-%{version}.tar.bz2

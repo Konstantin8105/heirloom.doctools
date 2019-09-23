@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n6.c	1.34 (gritter) 5/6/06
+ * Sccsid @(#)n6.c	1.38 (gritter) 7/9/06
  */
 
 /*
@@ -54,7 +54,7 @@
 #include <ctype.h>
 #include "tdef.h"
 #include "tw.h"
-#include "proto.h"
+#include "pt.h"
 #include "ext.h"
 
 /*
@@ -121,18 +121,6 @@ width(register tchar j)
 	return(k);
 }
 
-int
-getascender(void)
-{
-	return 0;
-}
-
-int
-getdescender(void)
-{
-	return 0;
-}
-
 
 tchar 
 setch(int delim)
@@ -148,24 +136,36 @@ setch(int delim)
 			if (s < &temp[sizeof temp - 1])
 				*s++ = j;
 		} while (j != 0 && (s == &temp[1] || j != temp[0]));
-		*s = 0;
-		if (j != temp[0])
-			nodelim(temp[0]);
-		else if (warn & WARN_CHAR) {
-			errprint("missing glyph \\C%s", temp);
+		if (s - temp == 3)
+			return temp[1];
+		else if (s - temp == 4) {
+			temp[0] = temp[1];
+			temp[1] = temp[2];
+			s = &temp[2];
+		} else {
+			*s = 0;
+			if (j != temp[0])
+				nodelim(temp[0]);
+			else if (warn & WARN_CHAR) {
+				errprint("missing glyph \\C%s", temp);
+			}
+			return 0;
 		}
-		return 0;
 	} else if (delim == '[' && (j = getach()) != ']') {
 		*s++ = j;
 		while ((j = getach()) != ']' && j != 0)
 			if (s < &temp[sizeof temp - 1])
 				*s++ = j;
-		*s = '\0';
-		if (j != ']')
-			nodelim(']');
-		else if (warn & WARN_CHAR)
-			errprint("missing glyph [%s]", temp);
-		return 0;
+		if (s - temp == 1)
+			return temp[0];
+		else if (s - temp != 2) {
+			*s = '\0';
+			if (j != ']')
+				nodelim(']');
+			else if (warn & WARN_CHAR)
+				errprint("missing glyph [%s]", temp);
+			return 0;
+		}
 	} else {
 		if ((*s++ = getach()) == 0 || (*s++ = getach()) == 0)
 			return(0);
@@ -229,7 +229,7 @@ mchbits(void)
 void
 setps(void)
 {
-	register int i, j;
+	register int i, j, k;
 
 	i = cbits(getch());
 	if (ischar(i) && isdigit(i)) {		/* \sd or \sdd */
@@ -250,8 +250,17 @@ setps(void)
 		} else if (j == '(') {		/* \s+(dd, \s-(dd */
 			getch();
 			getch();
+		} else if ((j == '[' || j == '\'') && xflag) {	/* \s+[dd], */
+			k = j == '[' ? ']' : j;			/* \s-'dd' */
+			atoi();
+			if (nonumb)
+				return;
+			if (cbits(getch()) != k)
+				nodelim(k);
 		}
-	} else if (i == '\'' && xflag) {
+	} else if ((i == '[' || i == '\'') && xflag) {  /* \s'+dd', \s[dd] */
+		if (i == '[')
+			i = ']';
 		j = inumb(&apts);
 		if (nonumb)
 			return;

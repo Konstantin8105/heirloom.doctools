@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n8.c	1.23 (gritter) 4/19/06
+ * Sccsid @(#)n8.c	1.28 (gritter) 7/4/06
  */
 
 /*
@@ -55,7 +55,7 @@
 #include	<string.h>
 #include	"tdef.h"
 #include "ext.h"
-#include "proto.h"
+#include "pt.h"
 #include "libhnj/hyphen.h"
 #define	HY_BIT	0200	/* generic stuff in here only works for ascii */
 #define	HY_BIT2	0x80000000
@@ -110,7 +110,7 @@ hyphen(tchar *wp)
 		;
 	if (*--i)
 		return;
-	if ((wdend - wdstart - 4) < 0)
+	if (!(hyf & 060) && (wdend - wdstart - (dicthnj ? 3 : 4)) < 0)
 		return;
 	hyp = hyptr;
 	*hyp = 0;
@@ -132,7 +132,8 @@ hyphen(tchar *wp)
 						break;
 				}
 				hyend = --wdend;
-				if (wdstart + 4 <= wdend && !exword())
+				if ((hyf & 060 || wdstart + 3 <= wdend) &&
+						!exword())
 					hyphenhnj();
 				wdstart = &i[1];
 				if (i < _wdend) {
@@ -176,8 +177,7 @@ int
 alph(tchar j)
 {
 	int i = cbits(j);
-#ifndef	NROFF
-#ifdef	EUC
+#if !defined (NROFF) && defined (EUC)
 	int f = fbits(j);
 	if (!ismot(j) && i & ~0177) {
 		int	u;
@@ -189,8 +189,7 @@ alph(tchar j)
 			u = 's';
 		return hyext ? iswalnum(u) : iswalpha(u);
 	} else
-#endif	/* EUC */
-#endif	/* !NROFF */
+#endif	/* !NROFF && EUC */
 	if (!ismot(j) && i >= 'a' && i <= 'z' || i >= 'A' && i <= 'Z' ||
 			hyext && i >= '0' && i <= '9')
 		return(1);
@@ -354,8 +353,7 @@ mark:
 int 
 maplow(register int i, int f)
 {
-#ifndef	NROFF
-#ifdef	EUC
+#if !defined (NROFF) && defined (EUC)
 	if (!ismot(i) && i & ~0177) {
 		i = tr2un(i, f);
 		if (i == 0x017F)	/* longs */
@@ -363,8 +361,7 @@ maplow(register int i, int f)
 		if (iswupper(i))
 			i = towlower(i);
 	} else
-#endif	/* EUC */
-#endif	/* !NROFF */
+#endif	/* !NROFF && EUC */
 	if (ischar(i) && isupper(i)) 
 		i = tolower(i);
 	return(i);
@@ -457,35 +454,38 @@ void
 casehylang(void)
 {
 	int	c, i = 0, sz = 0;
-	char	*file = NULL, *path = NULL;
+	char	*path = NULL;
 
 	dicthnj = NULL;
+	free(hylang);
+	hylang = NULL;
 	hyext = 0;
 	skip(0);
 	do {
 		c = getach();
 		if (i >= sz)
-			file = realloc(file, (sz += 8) * sizeof *file);
-		file[i++] = c;
+			hylang = realloc(hylang, (sz += 8) * sizeof *hylang);
+		hylang[i++] = c;
 	} while (c);
 	if (i == 1) {
-		free(file);
+		free(hylang);
+		hylang = NULL;
 		return;
 	}
-	if (strchr(file, '/') == NULL) {
-		path = malloc(strlen(file) + strlen(HYPDIR) + 12);
-		sprintf(path, "%s/hyph_%s.dic", HYPDIR, file);
+	if (strchr(hylang, '/') == NULL) {
+		path = malloc(strlen(hylang) + strlen(HYPDIR) + 12);
+		sprintf(path, "%s/hyph_%s.dic", HYPDIR, hylang);
 	} else {
-		path = malloc(strlen(file) + 1);
-		strcpy(path, file);
+		path = malloc(strlen(hylang) + 1);
+		strcpy(path, hylang);
 	}
 	if ((dicthnj = hnj_hyphen_load(path)) == NULL) {
 		errprint("Can't load %s", path);
-		free(file);
+		free(hylang);
+		hylang = NULL;
 		free(path);
 		return;
 	}
-	free(file);
 	free(path);
 	hyext = 1;
 }

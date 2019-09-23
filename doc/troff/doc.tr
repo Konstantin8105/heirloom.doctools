@@ -43,7 +43,7 @@
 .\"
 .\"
 .\" Changes by Gunnar Ritter, Freiburg i. Br., Germany, February 2006.
-.\" Sccsid @(#)doc.tr	1.58 (gritter) 6/13/06
+.\" Sccsid @(#)doc.tr	1.77 (gritter) 7/11/06
 .\"
 .\" from file m.mac
 .do xflag 3
@@ -88,7 +88,7 @@
 .fallback BI BIE
 .flig BI 31
 ..
-.ds Sccsdate 6/13/06
+.ds Sccsdate 7/11/06
 .ds Str \*[Sccsdate]
 .substring Str 0 0
 .if '\*[Str]'%' \{\
@@ -911,7 +911,7 @@ to the input \fIfiles\fR.
 	\fB\-q\fR	\
 Invoke the simultaneous input-output mode of the \T'rd'\fBrd\fR\T request.
 .bt
-	\fB\-x\fIN\fR	Sets the extension level to \fIN\fR \T'c_extension'(cf. \(sc1.1).\T
+	\fB\-x\fIN\fR	Set the extension level to \fIN\fR \T'c_extension'(cf. \(sc1.1).\T
 .bt
 	\fB\-z\fR	Check syntax only; do not generate any output except for error messages.
 .sp
@@ -1022,7 +1022,7 @@ The following options are currently supported with \fIdpost:\fR
 .ll -.3i
 .bt
 	\fB\-e\ \fIencoding\fR	\
-Sets the \*(PS encoding scheme.
+Set the \*(PS encoding scheme.
 Interesting values of \fIencoding\fR are:
 \fB0\fR using the \*(PS \fBashow\fR operator,
 with the same position representation as previous
@@ -1110,19 +1110,19 @@ T	\*(TR only; no effect in \*[NR.]
 .mht s_general
 General Explanation
 .bt
-\T'do'\fB&do\fI|name\fR		ignored	\(en	Executes \fIname\fR in extension level 3.\T
+\T'do'\fB&do\fI|name\fR		ignored	\(en	Execute \fIname\fR in extension level 3.\T
 .b1
 .lg 0
-\T'xflag'\fB&xflag\fI|N\fR	1	ignored	\(en	Sets the extension level permanently to \fIN\fP.\T
+\T'xflag'\fB&xflag\fI|N\fR	1	ignored	\(en	Set the extension level permanently to \fIN\fP.\T
 .lg
 .mht s_font
 Font and Character Size Control
 .bt
-\T'lc_ctype'\fB&lc_ctype\fI|name\fR	ignored	\(en	Sets the \s-1LC_CTYPE\s+1 locale.\T
+\T'lc_ctype'\fB&lc_ctype\fI|name\fR	ignored	\(en	Set the \s-1LC_CTYPE\s+1 locale.\T
 .b1
 \T'ps'\fB&ps\fI\|\(+-N\fR	10\|point	previous	E,T	Point size; also\T \T'e_s'\fB\es\fI\(+-N\fR.\T
 .b1
-\T'fzoom'\fB&fzoom\fI|F|Z\fR	1	ignored	P,T	Zooms font \fIF\fR by factor \fIZ\fR.\T
+\T'fzoom'\fB&fzoom\fI|F|Z\fR	1	ignored	P,T	Zoom font \fIF\fR by factor \fIZ\fR.\T
 .b1
 \T'ss'\fB&ss\fI|N\fR|[\fIM\fR]	12/36\|m	ignored	E,T	Space-character size\T
 set to \fIN\fR/36\|em.
@@ -1141,30 +1141,30 @@ mode (font \fIF\^\fR\^).
 .b1
 \T'fp'\fB&fp|\fIN|F|\fR[\fIfile|\fR[\fIsupply\fR]]	ignored	\(en	Font position; mounts the font \fIfile\fR.\T
 .b1
-\T'fps'\fB&fps\fI|map|...\fR		ignored	T	Mounts a font with a special character map.\T
+\T'fps'\fB&fps\fI|map|...\fR		ignored	T	Mount a font with a special character map.\T
 .b1
-\T'feature'\fB&feature\fI|F|\(+-name|...\fR	ignored	P,T	Controls OpenType features.\T
+\T'feature'\fB&feature\fI|F|\(+-name|...\fR	ignored	P,T	Control OpenType features.\T
 .b1
-\T'fallback'\fB&fallback\fI|F|A|B|...\fR	ignored	P,T	Selects the fallback sequence for font \fIF\fR.\T
+\T'fallback'\fB&fallback\fI|F|A|B|...\fR	ignored	P,T	Select the fallback sequence for font \fIF\fR.\T
 .b1 0
-\T'hidechar'\fB&hidechar\fI|F|c|d|...\fR	ignored	P,T	Hides the characters \fIc\fR, \fId\fR, etc. from font F.\T
+\T'hidechar'\fB&hidechar\fI|F|c|d|...\fR	ignored	P,T	Hide the characters \fIc\fR, \fId\fR, etc. from font F.\T
 .b1 0
-\T'fspacewidth'\fB&fspacewidth\fI|F|\fR[\fIN\fR]	ignored	T	Sets the width
+\T'fspacewidth'\fB&fspacewidth\fI|F|\fR[\fIN\fR]	ignored	T	Set the width
 of the space character in font \fIF\fR to \fIN\fR.\T
 .mht s_page
 Page Control
 .bt
 \T'pl'\fB&pl\fI\|\(+-N\fR	11\|i	11\|i	\fBv\fR	Page length.\T
 .b1
-\T'papersize'\fB&papersize\fI|media\fR	ignored	T	Sets the paper size.\T
+\T'papersize'\fB&papersize\fI|media\fR	ignored	T	Set the paper size.\T
 .b1
-\T'mediasize'\fB&mediasize\fI|media\fR	ignored	T	Sets the device media size.\T
+\T'mediasize'\fB&mediasize\fI|media\fR	ignored	T	Set the device media size.\T
 .b1
-\T'cropat'\fB&cropat\fI|L|T|W|H\fR	ignored	T	Sets the ``CropBox'' page parameter for \*[PDF] generation.\T
+\T'cropat'\fB&cropat\fI|L|T|W|H\fR	ignored	T	Set the ``CropBox'' page parameter for \*[PDF] generation.\T
 .b1
-\T'trimat'\fB&trimat\fI|L|T|W|H\fR	ignored	T	Sets the ``TrimBox'' page parameter for \*[PDF] generation.\T
+\T'trimat'\fB&trimat\fI|L|T|W|H\fR	ignored	T	Set the ``TrimBox'' page parameter for \*[PDF] generation.\T
 .b1
-\T'bleedat'\fB&bleedat\fI|L|T|W|H\fR	ignored	T	Sets the ``BleedBox'' page parameter for \*[PDF] generation.\T
+\T'bleedat'\fB&bleedat\fI|L|T|W|H\fR	ignored	T	Set the ``BleedBox'' page parameter for \*[PDF] generation.\T
 .b1
 \T'bp'\fB&bp|\fI\(+-N\fR	\fIN\(eq\fR1	\(en	B,\fBv\fR	\
 Eject current page; next page number \fIN\fR.\T
@@ -1183,6 +1183,8 @@ Text Filling, Adjusting, and Centering
 .bt
 \T'br'\fB&br\fR	\(en	\(en	B	Break.\T
 .b1
+\T'brp'\fB&brp\fR	\(en	\(en	B	Break and spread.\T
+.b1
 .lg 0
 \T'fi'\fB&fi\fR	\(fill	\(en	B,E	Fill output lines.\T
 .lg
@@ -1195,19 +1197,21 @@ Text Filling, Adjusting, and Centering
 .b1
 \T'ce'\fB&ce\fI|N\fR	off	\fIN\(eq\fR1	B,E	Center following \fIN\fR input text lines.\T
 .b1
-\T'minss'\fB&minss\fI|N\fR	off	ignored	E,T	Minimum word space when adjusting lines.\T
+\T'minss'\fB&minss\fI|N\fR	off	off	E,T	Minimum word space when adjusting lines.\T
 .b1
-\T'track'\fB&track\fI|F|S|N|T|M\fR	ignored	P,T	Specifies letter space tracking.\T
+\T'letadj'\fB&letadj\fI|X|U|S|Y|V\fR	off	E,T	Dynamic letter spacing and reshaping when adjusting lines.\T
 .b1
-\T'kern'\fB&kern\fI|N\fR	1	1	P,T	Controls pairwise kerning.\T
+\T'track'\fB&track\fI|F|S|N|T|M\fR	ignored	P,T	Static letter space tracking.\T
 .b1
-\T'fkern'\fB&fkern\fI|F|N\fR	1	1	P,T	Controls the use of kerning tables from font \fIF\fR.\T
+\T'kern'\fB&kern\fI|N\fR	1	1	P,T	Control pairwise kerning.\T
 .b1
-\T'kernpair'\fB&kernpair\fI|F|c...|G|d...|N\fR	ignored	P,T	Defines a kerning pair.\T
+\T'fkern'\fB&fkern\fI|F|N\fR	1	1	P,T	Control the use of kerning tables from font \fIF\fR.\T
 .b1
-\T'kernafter'\fB&kernafter\fI|F|c...|N|d...|M|...\fR	P,T	Adds a constant amount of space after a character.\T
+\T'kernpair'\fB&kernpair\fI|F|c...|G|d...|N\fR	ignored	P,T	Define a kerning pair.\T
 .b1
-\T'kernbefore'\fB&kernbefore\fI|F|c...|N|d...|M|...\fR	P,T	Adds a constant amount of space before a character.\T
+\T'kernafter'\fB&kernafter\fI|F|c...|N|d...|M|...\fR	P,T	Add a constant amount of space after a character.\T
+.b1
+\T'kernbefore'\fB&kernbefore\fI|F|c...|N|d...|M|...\fR	P,T	Add a constant amount of space before a character.\T
 .b1 0
 \T'lhang'\fB&lhang\fI|F|c...|N|d...|M|...\fR	ignored	T	Hanging characters at left margin.\T
 .b1 0
@@ -1268,17 +1272,21 @@ Macros, Strings, Diversion, and Position Traps
 .b1
 \T'dt'\fB&dt\fI|N|xx\fR	\(en	off	D,\fBv\fR	Set a diversion trap.\T
 .b1
-\T'vpt'\fB&vpt\fI|N\fR	1	ignored	\(en	Enables or disables vertical position traps.\T
+\T'vpt'\fB&vpt\fI|N\fR	1	ignored	\(en	Enable or disable vertical position traps.\T
 .b1
 \T'it'\fB&it\fI|N|xx\fR	\(en	off	E	Set an input-line count trap.\T
 .b1
-\T'return'\fB&return\fR	\(en	\(en	\(en	Returns from the current macro.\T
-.b1 0
-\T'shift'\fB&shift\fI|N\fR	\(en	1	\(en	Shifts the arguments to the current macro.\T
+\T'itc'\fB&itc\fI|N|xx\fR	\(en	off	E	Input-line count trap ignoring \fB\ec\fR.\T
+.b1
+\T'return'\fB&return\fR	\(en	\(en	\(en	Return from the current macro.\T
+.b1
+\T'shift'\fB&shift\fI|N\fR	\(en	1	\(en	Shift the arguments to the current macro.\T
+.b1
+\T'blm'\fB&blm\fI|xx\fR	none	none	\(en	Blank line macro is \fIxx\fR.\T
 .b1 0
 \T'em'\fB&em\fI|xx\fR	none	none	\(en	End macro is \fIxx\fI.\T
 .b1 0
-\T'recursionlimit'\fB&recursionlimit\fI|N|M\fR	\(en	\(en	Sets the maximum stack depth.\T
+\T'recursionlimit'\fB&recursionlimit\fI|N|M\fR	\(en	\(en	Set the maximum stack depth.\T
 .mht s_reg
 Number Registers
 .bt
@@ -1308,10 +1316,10 @@ Input and Output Conventions and Character Translations
 on if \fIN\fR>0.
 .b1
 .lg 0
-\T'flig'\fB&flig\fI|F|string|c|...\fR	ignored	T	De\(fines the ligatures in font \fIF\fR.\T
+\T'flig'\fB&flig\fI|F|string|c|...\fR	ignored	T	De\(fine the ligatures in font \fIF\fR.\T
 .lg
 .b1
-\T'fdeferlig'\fB&fdeferlig\fI|F|string|...\fR	ignored	T	Defers ligature building for the first character of \fIstring\fR.\T
+\T'fdeferlig'\fB&fdeferlig\fI|F|string|...\fR	ignored	T	Defer ligature building for the first character of \fIstring\fR.\T
 .b1
 \T'ul'\fB&ul\fI|N\fR	off	\fIN\(eq\fR1	E	Underline (italicize in \*(TR) \fIN\fR input lines.\T
 .b1
@@ -1339,7 +1347,9 @@ Hyphenation.
 .b1
 \T'hy'\fB&hy\fI|N\fR	hyphenate	hyphenate	E	Hyphenate; \fIN =\fR mode.\T
 .b1
-\T'hylang'\fB&hylang\fI|name\fR	off	off	E	Sets the hyphenation language.\T
+\T'hylang'\fB&hylang\fI|name\fR	off	off	E	Set the hyphenation language.\T
+.b1
+\T'hlm'\fB&hlm\fI|N\fR	off	off	E	Maximum number of consecutive hyphenated lines.\T
 .b1 0
 \T'hc'\fB&hc\fI|c\fR	\fB\e%	\e%\fR	E	Hyphenation indicator character \fIc\fR.\T
 .b1 0
@@ -1385,7 +1395,7 @@ Environment Switching.
 .bt
 \T'ev'\fB&ev\fI|name\fR	\fIname\(eq\fR0	previous	\(en	Environment switched (\fIpush down\fR).\T
 .b1 0
-\T'evc'\fB&evc\fI|name\fR		\(en	\(en	Copies environment \fIname\fR to the current environment.\T
+\T'evc'\fB&evc\fI|name\fR		\(en	\(en	Copy environment \fIname\fR to the current environment.\T
 .mht s_stdin
 Insertions from the Standard Input
 .bt
@@ -1398,7 +1408,7 @@ Input/Output File Switching
 .bt
 \T'so'\fB&so\fI|filename\fR		\(en	\(en	Switch source file \fI(push down)\fR.\T
 .b1
-\T'pso'\fB&pso\fI|string\fR		\(en	\(en	Executes \fIstring\fR and reads its output.\T
+\T'pso'\fB&pso\fI|string\fR		\(en	\(en	Execute \fIstring\fR and read its output.\T
 .b1
 \T'nx'\fB&nx\fI|filename\fR		end-of-file	\(en	Next file.\T
 .br
@@ -1408,15 +1418,15 @@ Input/Output File Switching
 .b1
 \T'cf'\fB&cf\fI|filename\fR		\(en	\(en	Copy file contents to \*(TR output.\T
 .b1
-\T'open'\fB&open\fI|stream|filename\fR	ignored	\(en	Opens \fIfilename\fR as \fIstream\fR, truncating.\T
+\T'open'\fB&open\fI|stream|filename\fR	ignored	\(en	Open \fIfilename\fR as \fIstream\fR, truncating.\T
 .b1
-\T'opena'\fB&opena\fI|stream|filename\fR	ignored	\(en	Opens \fIfilename\fR as \fIstream\fR, appending.\T
+\T'opena'\fB&opena\fI|stream|filename\fR	ignored	\(en	Open \fIfilename\fR as \fIstream\fR, appending.\T
 .b1
-\T'write'\fB&write\fI|stream|text\fR	ignored	\(en	Writes \fItext\fR to file \fIstream\fR.\T
+\T'write'\fB&write\fI|stream|text\fR	ignored	\(en	Write \fItext\fR to file \fIstream\fR.\T
 .b1 0
-\T'writec'\fB&writec\fI|stream|text\fR	ignored	\(en	Writes \fItext\fR without terminating newline.\T
+\T'writec'\fB&writec\fI|stream|text\fR	ignored	\(en	Write \fItext\fR without terminating newline.\T
 .b1 0
-\T'close'\fB&close\fI|stream\fR		\(en	\(en	Closes the file \fIstream\fR.\T
+\T'close'\fB&close\fI|stream\fR		\(en	\(en	Close the file \fIstream\fR.\T
 .mht s_misc
 Miscellaneous
 .bt
@@ -1425,6 +1435,8 @@ Miscellaneous
 \T'tm'\fB&tm\fI|string\fR	\(en	newline	\(en	Print \fIstring\fR on terminal (standard error).\T
 .b1
 \T'tmc'\fB&tmc\fI|string\fR	\(en	newline	\(en	Print \fIstring\fR without newline on terminal.\T
+.b1
+\T'nop'\fB&nop\fI|remainder of line\fR	\(en	\(en	Use \fIremainder of line\fR as input.\T
 .b1
 \T'ab'\fB&ab\fI|string\fR	\(en	newline	\(en	Print \fIstring\fR on standard error, exit program.\T
 .b1
@@ -1442,7 +1454,7 @@ Miscellaneous
 .mht s_err
 Output and Error Messages
 .bt
-\T'warn'\fB&warn\fI|\(+-bits\(or\^name\fR	\fIw\fR	\(en	Controls warning messages.\T
+\T'warn'\fB&warn\fI|\(+-bits\(or\^name\fR	\fIw\fR	\(en	Control warning messages.\T
 .b1 0
 \T'spreadwarn'\fB&spreadwarn\fI|N\fR	toggle	\(en	Spread limit warning.\T
 .mht s_color
@@ -1450,7 +1462,10 @@ Color Support
 .mht s_pics
 Picture Inclusion
 .bt
-\T'psbb'\fB&psbb\fI|filename\fR	\(en	\(en	Reads the \*(PS bounding box from \fIfilename\fR.\T
+\T'psbb'\fB&psbb\fI|filename\fR	\(en	\(en	Read the \*(PS bounding box from \fIfilename\fR.\T
+.br
+.rm mx
+.ne 8
 .mht s_pdf
 Special Features for \*[PDF] Documents
 .mht s_output
@@ -1459,7 +1474,6 @@ Output Language
 Device and Font Description Files
 .xx
 .nf
-.rm mx
 .ft R
 .nr zz 3
 .de cl
@@ -1482,8 +1496,10 @@ Device and Font Description Files
 \T'as'as	7\T
 \T'bd'bd	2\T
 \T'bleedat'bleedat	3\T
+\T'blm'blm	7\T
 \T'bp'bp	3\T
 \T'br'br	4\T
+\T'brp'brp	4\T
 \T'c2'c2	10\T
 \T'cc'cc	10\T
 \T'ce'ce	4\T
@@ -1522,6 +1538,7 @@ Device and Font Description Files
 \T'fzoom'fzoom	2\T
 \T'hc'hc	13\T
 \T'hidechar'hidechar	2\T
+\T'hlm'hlm	13\T
 \T'hw'hw	13\T
 \T'hy'hy	13\T
 \T'hylang'hylang	13\T
@@ -1530,6 +1547,7 @@ Device and Font Description Files
 \T'ig'ig	20\T
 \T'in'in	6\T
 \T'it'it	7\T
+\T'itc'itc	7\T
 \T'kern'kern	4\T
 \T'kernafter'kernafter	4\T
 \T'kernbefore'kernbefore	4\T
@@ -1537,6 +1555,7 @@ Device and Font Description Files
 \T'lc'lc	9\T
 \T'lc_ctype'lc_ctype	2\T
 \T'length'length	7\T
+\T'letadj'letadj	4\T
 \T'lf'lf	20\T
 \T'lg'lg	10\T
 \T'lhang'lhang	4\T
@@ -1554,6 +1573,7 @@ Device and Font Description Files
 \T'nh'nh	13\T
 \T'nm'nm	15\T
 \T'nn'nn	15\T
+\T'nop'nop	20\T
 \T'nr'nr	8\T
 \T'ns'ns	5\T
 \T'nx'nx	19\T
@@ -1659,6 +1679,7 @@ Reference	Sequence	Meaning
 .tr &.
 \T'e_!'10.6\T	\T'e_!'\fB\e!\fR\T	\T'e_!'Transparent line indicator\T
 \T'e_"'10.8\T	\T'e_"'\fB\e"\fR\T	\T'e_"'Beginning of comment\T
+\T'e_#'10.8\T	\T'e_#'\fB\e#\fR\T	\T'e_#'Comment including newline\T
 \T'e_$'7.3\T	\T'e_$'\fB\e$\fIn\fR,\fB\e$(\fInn\fR,\fB\e$[\fInnn\fB]\fR\T	\T'e_$'Interpolate argument \fIn\fR, \fInn\fR, or \fInnn\fR\T
 \T'e_$*'7.3\T	\T'e_$*'\fB\e$\(**\fR\T	\T'e_$*'Interpolate all arguments separated by spaces\T
 \T'e_$@'7.3\T	\T'e_$@'\fB\e$@\fR\T	\T'e_$@'Interpolate all arguments in double quotes\T
@@ -1666,6 +1687,7 @@ Reference	Sequence	Meaning
 \T'e_('2.1\T	\T'e_('\fB\e(\fIxx\fR\T	\T'e_('Character named \fIxx\fR\T
 \T'e_['2.1\T	\T'e_['\fB\e[\fIxxx\fR]\T	\T'e_['Character named \fIxxx\fP\T
 \T'e_*'7.1\T	\T'e_*'\fB\e\(**\fIx\fR,\fB\e\(**(\fIxx\fR,\fB\e\(**[\fIxxx\fB]\fR\T	\T'e_*'Interpolate string \fIx\fR, \fIxx\fR, or \fIxxx\fR\T
+\T'e_*'7.1\T	\T'e_*'\fB\e\(**[\fIxxx\ arg\ \fR...\fB]\fR\T	\T'e_*'Interpolate string \fIxxx\fR with arguments \fIarg\ \fR...\T
 \T'e_:'13\T	\T'e_:'\fB\e:\fR\T	\T'e_:'Optional line-break character\T
 \T'e_;'10.2\T	\T'e_;'\fB\e;\fR\T	\T'e_;'Ligature suppressor\T
 \T'e_a'9.1\T	\T'e_a'\fB\ea\fR\T	\T'e_a'Non-interpreted leader character\T
@@ -1678,10 +1700,10 @@ Reference	Sequence	Meaning
 \T'e_e'10.1\T	\T'e_e'\fB\ee\fR\T	\T'e_e'Printable version of the \fIcurrent\fR escape character.\T
 \T'e_E'10.1\T	\T'e_E'\fB\eE\fR\T	\T'e_E'Printable escape character, not interpreted in \fIcopy mode\fR.\T
 \T'e_f'2.2\T	\T'e_f'\fB\ef\fIx\fR,\fB\ef(\fIxx\fR,\fB\ef[\fIxxx\fB]\fR,\fB\ef\fIN\fR\T	\T'e_f'Change to font named \fIx\fR, \fIxx\fR, or \fIxxx\fR, or position \fIN\fR\T
-\T'e_g'8.\T	\T'e_g'\fB\eg\fIx\fR,\fB\eg(\fIxx\fR,\fB\eg[\fIxxx\fB]\fR\T	\T'e_g'Format of number register \fIx\fP, \fIxx\fR, or \fIxxx\fR\T
+\T'e_g'8\T	\T'e_g'\fB\eg\fIx\fR,\fB\eg(\fIxx\fR,\fB\eg[\fIxxx\fB]\fR\T	\T'e_g'Format of number register \fIx\fP, \fIxx\fR, or \fIxxx\fR\T
 \T'e_h'11.1\T	\T'e_h'\fB\eh\fI\'N\'\fR\T	\T'e_h'Local horizontal motion; move right \fIN\fR \fI(negative left)\fR\T
 \T'e_H'2.3\T	\T'e_H'\fB\eH\fI\'N\'\fR\T	\T'e_H'Height of current font is \fIN\fR\T
-\T'e_k'11.3\T	\T'e_k'\fB\ek\fIx\fR\T	\T'e_k'Mark horizontal \fIinput\fR place in register \fIx\fR\T
+\T'e_k'11.3\T	\T'e_k'\fB\ek\fIx\fR,\fB\ek(\fIxx\fR,\fB\ek[\fIxxx\fB]\fR\T	\T'e_k'Mark horizontal \fIinput\fR place in register \fIx,\fR \fIxx\fR, or \fIxxx\fR\T
 \T'e_l'12.4\T	\T'e_l'\fB\el\fI\^\'Nc\'\fR\T	\T'e_l'Horizontal line drawing function (optionally with \fIc\fR\|)\T
 \T'e_L'12.4\T	\T'e_L'\fB\eL\fI\'Nc\'\fR\T	\T'e_L'Vertical line drawing function (optionally with \fIc\fR\|)\T
 \T'e_n'8\T	\T'e_n'\fB\en\fIx\fR,\fB\en(\fIxx\fR,\fB\en[\fIxxx\fB]\fR\T	\T'e_n'Interpolate number register \fIx\fR, \fIxx\fR, or \fIxxx\fR\T
@@ -1689,7 +1711,13 @@ Reference	Sequence	Meaning
 \T'e_o'12.1\T	\T'e_o'\fB\eo\fI\'abc...\'\fR\T	\T'e_o'Overstrike characters \fIa, b, c, ...\fR\T
 \T'e_p'4.1\T	\T'e_p'\fB\ep\fR\T	\T'e_p'Break and spread output line\T
 \T'e_r'11.1\T	\T'e_r'\fB\er\fR\T	\T'e_r'Reverse 1\|em vertical motion (reverse line in \*(NR)\T
-\T'e_s'2.3\T	\T'e_s'\fB\es\fIN\fR,\fB\es\fI\(+-N\fR,\fB\es\'\fI\(+-N\fB\'\fR\T	\T'e_s'Point-size change function\T
+\T'e_R'8\T	\T'e_R'\fB\eR\fI\'R\ \(+-N\'\fR\T	\T'e_R'Set number register \fIR\fR to \fI\(+-N\fR\T
+.ne 3
+\T'e_s'2.3\T	T{
+\T'e_s'\fB\es\fIN\fR,\fB\es\fI\(+-N\fR,
+\fB\es\'\fI\(+-N\fB\'\fR,\fB\es\fI\(+-\fB\'\fIN\fB\'\fR,
+\fB\es[\fI\(+-N\fB]\fR,\fB\es\fI\(+-\fB[\fIN\fB]\fR\T
+T}	\T'e_s'Point-size change function\T
 \T'e_S'2.2\T	\T'e_S'\fB\eS\fI\'N\'\fR\T	\T'e_S'Slant output \fIN\fP degrees\T
 \T'e_t'9.1\T	\T'e_t'\fB\et\fR\T	\T'e_t'Non-interpreted horizontal tab\T
 \T'e_T'24.6\T	\T'e_T'\fB\eT\fI\'string\'\fR\T	\T'e_T'Link definition\T
@@ -1712,6 +1740,7 @@ The escape sequences
 \fB\T'e_esc'\e\e\T\fR,
 \fB\T'e_.'\e\^.\T\fR,
 \fB\T'e_"'\e"\T\fR,
+\fB\T'e_#'\e#\T\fR,
 \fB\T'e_$'\e$\T\fR,
 \fB\T'e_*'\e\(**\T\fR,
 \fB\T'e_a'\ea\T\fR,
@@ -1785,18 +1814,31 @@ using \fB\ex\fI\'N\'\fR.\T
 \T'n_.descender'5.4\T	\T'n_.descender'\fB&descender\fR\T	\T'n_.descender'Descender of current font and point size.\T
 \T'n_.f'2.2\T	\T'n_.f'\fB&f\fR\T	\T'n_.f'Current font as physical quadrant (1-255).\T
 \T'n_.fp'2.2\T	\T'n_.fp'\fB&fp\fR\T	\T'n_.fp'Next unused physical font quadrant.\T
+\T'n_.fzoom'2.3\T	\T'n_.fzoom'\fB&fzoom\fR\T	\T'n_.fzoom'Current font zoom factor (may be a decimal fraction).\T
 \T'n_.F'20.\T	\T'n_.F'\fB&F\fR\T	\T'n_.F'Current input file name [sic].\T
 \T'n_.h'4\T	\T'n_.h'\fB&h\fR\T	\T'n_.h'Text base-line high-water mark on current page or diversion.\T
+\T'n_.hlc'13\T	\T'n_.hlc'\fB&hlc\fR\T	\T'n_.hlc'Current number of consecutive hyphenated lines.\T
+\T'n_.hlm'13\T	\T'n_.hlm'\fB&hlm\fR\T	\T'n_.hlm'Maximum number of consecutive hyphenated lines.\T
+\T'n_.hylang'13\T	\T'n_.hylang'\fB&hylang\fR\T	\T'n_.hylang'Current hyphenation language [sic].\T
 \T'n_.H'11.1\T	\T'n_.H'\fB&H\fR\T	\T'n_.H'Available horizontal resolution in basic units.\T
 \T'n_.i'6\T	\T'n_.i'\fB&i\fR\T	\T'n_.i'Current indent.\T
 \T'n_.j'4.2\T	\T'n_.j'\fB&j\fR\T	\T'n_.j'Current \fBad\fP mode.\T
 \T'n_.k'4.1\T	\T'n_.k'\fB&k\fR\T	\T'n_.k'Current output horizontal position.\T
 \T'n_.l'6\T	\T'n_.l'\fB&l\fR\T	\T'n_.l'Current line length.\T
+\T'n_.lc_ctype'2.1\T	\T'n_.lc_ctype'\fB&lc_ctype\fR\T	\T'n_.lc_ctype'Current \s-1LC_CTYPE\s0 locale [sic].\T
+\T'n_.letss'4\T	\T'n_.letss'\fB&letss\fR\T	\T'n_.letss'Current dynamic letter space threshold.\T
+\T'n_.lshmin'4\T	\T'n_.lshmin'\fB&lshmin\fR\T	\T'n_.lshmin'Current minimum dynamic letter shape (may be a decimal fraction).\T
+\T'n_.lshmax'4\T	\T'n_.lshmax'\fB&lshmax\fR\T	\T'n_.lshmax'Current maximum dynamic letter shape (may be a decimal fraction).\T
+\T'n_.lspmin'4\T	\T'n_.lspmin'\fB&lspmin\fR\T	\T'n_.lspmin'Current minimum dynamic letter space (may be a decimal fraction).\T
+\T'n_.lspmax'4\T	\T'n_.lspmax'\fB&lspmax\fR\T	\T'n_.lspmax'Current maximum dynamic letter space (may be a decimal fraction).\T
 \T'n_.L'5.1\T	\T'n_.L'\fB&L\fR\T	\T'n_.L'Current \fBls\fP value.\T
+\T'n_.minss'4\T	\T'n_.minss'\fB&minss\fR\T	\T'n_.minss'Current minimum space size.\T
 \T'n_.n'4\T	\T'n_.n'\fB&n\fR\T	\T'n_.n'Length of text portion on previous output line.\T
 \T'n_.o'3\T	\T'n_.o'\fB&o\fR\T	\T'n_.o'Current page offset.\T
 \T'n_.p'3\T	\T'n_.p'\fB&p\fR\T	\T'n_.p'Current page length.\T
 \T'n_.s'2.3\T	\T'n_.s'\fB&s\fR\T	\T'n_.s'Current point size (may be a decimal fraction).\T
+\T'n_.ss'2\T	\T'n_.ss'\fB&ss\fR\T	\T'n_.ss'Current space size.\T
+\T'n_.sss'2\T	\T'n_.sss'\fB&sss\fR\T	\T'n_.sss'Current sentence space size.\T
 \T'n_.t'7.5\T	\T'n_.t'\fB&t\fR\T	\T'n_.t'Distance to the next trap.\T
 \(en	\fB&T\fR	Set to 1 in \*[NR,] if \fB\-T\fR option used; always 0 in \*[TR.]
 \T'n_.u'4.1\T	\T'n_.u'\fB&u\fR\T	\T'n_.u'Equal to 1 in fill mode and 0 in nofill mode.\T
@@ -2116,12 +2158,12 @@ Character string arguments are indicated by multi-character mnemonics.
 .h1
 .bta do
 \fB&do\fI|name\fR		ignored	\(en	\
-Executes the request or macro \fIname\fR in extension level 3
+Execute the request or macro \fIname\fR in extension level 3
 and restore the previous level afterwards.
 .bta xflag
 .lg 0
 \fB&xflag\fI|N\fR	1	ignored	\(en	\
-Sets the extension level permanently to \fIN\fP.
+Set the extension level permanently to \fIN\fP.
 .lg
 .mha s_font
 Font and Character Size Control
@@ -2326,7 +2368,8 @@ is parsed as size 4 followed by
 \fB0\fR.
 The forms
 \fB\es(\fInn\fR, \fB\es\(+-(\fInn\fR,
-and \fB\es\'\(+-\fInn\fB\'\fR
+\fB\es\'\fI\(+-nn\fB\'\fR, \fB\es\fI\(+-\fB\'\fInn\fB\'\fR,
+\fB\es[\fI\(+-nn\fB]\fR, and \fB\es\fI\(+-\fB[\fInn\fB]\fR
 permit specification of sizes that would otherwise be ambiguous.
 .pg
 The current size is available in the \A'n_.s'\fB.s\fR register.
@@ -2345,13 +2388,15 @@ In each case, the width is unchanged.
 Not all devices support independent height and width for characters.
 .h1
 .bta lc_ctype
-\fB&lc_ctype\fI|name\fR	ignored	\(en	Sets the \s-1LC_CTYPE\s+1 locale
+\fB&lc_ctype\fI|name\fR	ignored	\(en	Set the \s-1LC_CTYPE\s+1 locale
 to \fIname\fR.
 The default is the value
 of the \s-1LC_CTYPE\s+1 environment variable.
 This request is
 useful to specify an input character set regardless of environment
 influences.
+The current value is available in the \A'n_.lc_ctype'\fB&lc_ctype\fR
+number register.
 .bta ps
 \fB&ps\fI|\(+-N\fR	10\|point	previous	E	Point size
 set to \(+-\fIN\fR.
@@ -2365,12 +2410,14 @@ A paired sequence
 will work because the previous requested value is also remembered.
 Ignored in \*[NR.]
 .bta fzoom
-\fB&fzoom\fI|F|Z\fR	1	ignored	P,T	Zooms font \fIF\fR by factor \fIZ\fR,
+\fB&fzoom\fI|F|Z\fR	1	ignored	P,T	Zoom font \fIF\fR by factor \fIZ\fR,
 which is a positive floating point number.
 This request is useful for adjusting fonts with different
 visual sizes but identical nominal points; the zoom is thus not
 applied to characters from another font that have been found by
 the \T'fallback'\fBfallback\fR\T sequence or by the special font mechanism.
+The current value of the current font is available
+in the \A'n_.fzoom'\fB&fzoom\fR number register.
 .bta ss
 \fB&ss\fI|N\fR|[\fIM\fR]	12/36\|m	ignored	E,T	Space-character size
 is set to \fIN\fR/36\|ems.
@@ -2380,6 +2427,8 @@ space is added between sentences. If \fIM\fR is zero, no additional
 white space is added.
 Otherwise, a space of size \fIN\fR is added as usual.
 Ignored in \*[NR.]
+The number registers \A'n_.ss'\fB&ss\fR and \A'n_.sss'\fB&sss\fR
+contain the current values of \fIN\fR and \fIM\fR, respectively.
 .bta cs
 \fB&cs\|\fIF\|N\|M\fR	off	\(en	P	Constant character space
 (width) mode is
@@ -2481,7 +2530,7 @@ in TROFFONTS, only the \fB%\fR and \fB:\fR characters have to be masked
 using this mechanism.
 .bta fps
 \fB&fps\fI|map|...\fR		ignored	T	\
-Mounts a font with a special character map.
+Mount a font with a special character map.
 By default, special characters like \fB\e(\(**a\fR
 are not assigned when a font is mounted
 even if a matching named \*(PS character (like \fB\e[alpha]\fR)
@@ -2502,27 +2551,27 @@ for the \fBps\fR and \fBpsmed\fR devices.
 The remaining arguments are handled as described for \T'fp'\fBfp\fR.\T
 .bta feature
 \fB&feature\fI|F|\(+-name|...\fR	ignored	P,T	\
-Enables (+) or disables (\-) the OpenType feature \fIname\fR in font \fIF\fR.
+Enable (+) or disable (\-) the OpenType feature \fIname\fR in font \fIF\fR.
 Only OpenType features that result in context-insensitive
 single-character substitutions are supported. Typical features
 are \fBonum\fR to enable old-style numerals, or \fBsmcp\fR to enable
 small capitals.
 .bta fallback
 \fB&fallback\fI|F|A|B|...\fR	ignored	P,T	\
-Selects the fallback sequence for font \fIF\fR.
+Select the fallback sequence for font \fIF\fR.
 If the current font is \fIF\fR and a character is not found,
 font \fIA\fR is searched first, then font \fIB\fR, etc.
 If the character still has not been found,
 it is searched for in the Special Font,
 then in the fonts mounted at positions 0, 1, and so forth.
 .bta hidechar
-\fB&hidechar\fI|F|c|d|...\fR	ignored	P,T	Hides the characters \fIc\fR, \fId\fR, etc. from font F.
+\fB&hidechar\fI|F|c|d|...\fR	ignored	P,T	Hide the characters \fIc\fR, \fId\fR, etc. from font F.
 If the characters appear in input afterwards,
 they are searched in other fonts using the fallback sequence.
 This is useful e.g. for combining characters from a regular
 and a Type\ 1 expert font.
 .bta fspacewidth
-\fB&fspacewidth\fI|F|\fR[\fIN\fR]	ignored	T	Sets the width
+\fB&fspacewidth\fI|F|\fR[\fIN\fR]	ignored	T	Set the width
 of the space character in font \fIF\fR to \fIN\fR,
 which is given in units of 1/72000 of an inch multiplied by the
 current point size or 1/1000 of an em (as in \s-1AFM\s+1 kerning pair
@@ -2562,7 +2611,7 @@ are device dependent.
 \fB&pl\fI|\(+-N\fR	11\|in	11\|in	\fBv\fR	Page length set to \fI\(+-N\fR.
 The current page length is available in the \A'n_.p'\fB.p\fR register.
 .bta papersize
-\fB&papersize\fI|media\fR	ignored	T	Sets the paper size.
+\fB&papersize\fI|media\fR	ignored	T	Set the paper size.
 \fImedia\fR can be one of
 \fBexecutive\fR,
 \fBletter\fR,
@@ -2583,7 +2632,7 @@ pages of the document. The default are \fBletter\fR measurements. This
 request should be used early in a document; if it is given multiple
 times, the last one will setup the device.
 .bta mediasize
-\fB&mediasize\fI|media\fR	ignored	T	Sets the device media size.
+\fB&mediasize\fI|media\fR	ignored	T	Set the device media size.
 \fImedia\fR can be one of
 \fBexecutive\fR,
 \fBletter\fR,
@@ -2610,7 +2659,7 @@ However, when generating \*(PS as
 intermediate format with the intent of \*[PDF] creation, use of this
 request is recommended.
 .bta cropat
-\fB&cropat\fI|L|T|W|H\fR	ignored	T	Sets the ``CropBox'' page parameter for \*[PDF] generation.
+\fB&cropat\fI|L|T|W|H\fR	ignored	T	Set the ``CropBox'' page parameter for \*[PDF] generation.
 The four arguments give the offset from the left (\fIL\fR)
 and top (\fIT\fR) margins of the document
 (as set by \T'mediasize'\fBmediasize\fR\T),
@@ -2621,7 +2670,7 @@ area of the page that is shown by a \*[PDF] viewer program. It is
 useful to hide cut marks and other printing instructions when
 the same \*[PDF] document is intended to be displayed on screen.
 .bta trimat
-\fB&trimat\fI|L|T|W|H\fR	ignored	T	Sets the ``TrimBox'' page parameter for \*[PDF] generation
+\fB&trimat\fI|L|T|W|H\fR	ignored	T	Set the ``TrimBox'' page parameter for \*[PDF] generation
 and enables printing of marks when combined with \fIdpost\ \-M\fR.
 The four arguments give the offset from the left (\fIL\fR)
 and top (\fIT\fR) margins of the document
@@ -2633,7 +2682,7 @@ the page is to be cut after it has been printed; it is sort of
 an electronic equivalent for cut marks (which should continue to
 be printed in addition).
 .bta bleedat
-\fB&bleedat\fI|L|T|W|H\fR	ignored	T	Sets the ``BleedBox'' page parameter for \*[PDF] generation.
+\fB&bleedat\fI|L|T|W|H\fR	ignored	T	Set the ``BleedBox'' page parameter for \*[PDF] generation.
 The four arguments give the offset from the left (\fIL\fR)
 and top (\fIT\fR) margins of the document
 (as set by \T'mediasize'\fBmediasize\fR\T),
@@ -2721,7 +2770,7 @@ can be tied together by separating them with the
 The adjusted word spacings are uniform in \*(TR
 and the minimum interword spacing can be controlled
 with the \T'ss'\fBss\fR request\T \T's_font'(\(sc2).\T
-In \*[NR,] they are normally nonuniform because of
+In \*[NR,] word spacings are normally nonuniform because of
 quantization to character-size spaces;
 however,
 the command line option \fB\-e\fR causes uniform
@@ -2736,6 +2785,34 @@ The text base-line high-water mark (lowest place) on the current page is in
 the \A'n_.h'\fB.h\fR register.
 The current horizontal output position
 is in the \A'n_.k'\fB.k\fR register.
+.pg
+\*(TR can optionally decrease word spacings,
+change the letter spacing,
+and reshape letters
+when adjusting lines to fit on both margins.
+The interword spacing controlled with the \T'ss'\fBss\fR request\T
+is then understood as the optimum setting.
+Words are collected from input until the first word
+that would require to condense spacing or letter shapings is encountered.
+Between the end of the previous word and the end of this word,
+hyphenation points are additionally examined
+until the two possibilities to end the line
+surrounding the optimum are found.
+The point closest to the optimum is then chosen.
+If the word spacing so determined would fall below
+the minimum allowed, letter spacings and shapings are condensed.
+If it would exceed the threshold for expanded letter spacing and letter shaping,
+it is attempted to compensate until the threshold is reached,
+up to the maximum allowed letter spacing
+and letter shaping.
+Remaining space is distributed among the word spacings.
+Distribution among letter spacings and shaping is equal
+until one of the respective limits is reached.
+Lines that terminate with a \fIbreak\fR
+are normally set using the optimum word and line spacings
+unless the last word collected is the first word
+that falls below the optimum spacing,
+which may result in condensed spacing and shaping.
 .pg
 .tr &&
 An input text line ending with \fB.\fR\^, \fB?\fR, or \fB!\fR,
@@ -2833,6 +2910,9 @@ being collected is stopped and
 the line is output without adjustment.
 Text lines beginning with space characters
 and empty text lines (blank lines) also cause a break.
+.bta brp
+\fB&brp\fR	\(en	\(en	B	Break and spread;
+same effect as the \T'e_p'\fB\ep\fR\T escape sequence.
 .bta fi
 .lg 0
 \fB&fi\fR	\(fill|on	\(en	B,E	Fill subsequent output lines.
@@ -2880,13 +2960,41 @@ A break occurs after each of the \fIN\fR input lines.
 If the input line is too long,
 it will be left adjusted.
 .bta minss
-\fB&minss\fI|N\fR	off	ignored	E,T	Minimum word space.
+\fB&minss\fI|N\fR	off	off	E,T	Minimum word space.
 When adjusting both margins,
 \*(TR may decrease the size of the word space
-up to this limit (rather than to the value set by \T'ss'\fBss\fR\T).
+down to \fIN\fR/36\|ems
+(rather than to the value set by \T'ss'\fBss\fR\T).
+The current value is available in the \A'n_.minss'\fB&minss\fR register.
+.bta letadj
+\fB&letadj\fI|X|U|S|Y|V\fR	off	E,T	Dynamic letter spacing and reshaping when adjusting lines.
+The space between letters can be automatically expanded or condensed
+(in addition to the space between words),
+and the width of letters can be automatically changed
+in \fBad\ b\fR mode.
+The \fIX\fR argument gives the minimum percentage
+of an en of the current point size by which
+adjacent characters may be tightened;
+the \fIU\fR argument gives the minimum percentage
+of the letter width by which letters may be condensed.
+When the computed size of the word space
+would have to be larger than \fIS\fR,
+additional space will be inserted between letters up to a limit
+of \fIY\fR percent of an en of the current point size,
+and letters will be expanded by up to \fIV\fR percent of their width
+until the word space does not extend beyond \fIS\fR anymore.
+\fIS\fR is given in units of 1/36\|ems as with \fBss\fR.
+The number registers
+\A'n_.lspmin'\fB&lspmin\fR,
+\A'n_.lshmin'\fB&lshmin\fR,
+\A'n_.letss'\fB&letss\fR,
+\A'n_.lspmax'\fB&lspmax\fR,
+and \A'n_.lshmax'\fB&lshmax\fR
+contain the current values of
+\fIX\fR, \fIU\fR, \fIS\fR, \fIY\fR, and \fIV\fR,
+respectively.
 .bta track
-\fB&track\fI|F|S|N|T|M\fR	ignored	P,T	Specifies letter space tracking
-for font \fIF\fR.
+\fB&track\fI|F|S|N|T|M\fR	ignored	P,T	Static letter space tracking.
 If the current font is \fIF\fR
 and the point size is below or equal to \fIS\fR,
 white space of width \fIN\fR is added to each character.
@@ -2904,15 +3012,15 @@ Tracking also applies to characters
 from another font that have been selected
 by the \T'fallback'\fBfallback\fP\T sequence.
 .bta kern
-\fB&kern\fI|N\fR	1	1	P,T	Controls pairwise kerning;
+\fB&kern\fI|N\fR	1	1	P,T	Control pairwise kerning;
 disabled if \fIN\fR=0, otherwise enabled.
 .bta fkern
-\fB&fkern\fI|F|N\fR	1	1	P,T	Controls the use of kerning tables from font \fIF\fR;
+\fB&fkern\fI|F|N\fR	1	1	P,T	Control the use of kerning tables from font \fIF\fR;
 disabled if \fIN\fR=0, otherwise enabled.
 \*(TR kerning adjustments as defined by the following requests
 are not affected.
 .bta kernpair
-\fB&kernpair\fI|F|c...|G|d...|N\fR	ignored	P,T	Adds a kerning pair
+\fB&kernpair\fI|F|c...|G|d...|N\fR	ignored	P,T	Add a kerning pair
 to the kerning table for character \fIc\fR
 from font \fIF\fR and character \fId\fR from font \fIG\fR.
 \fIc\fR and \fId\fR may consist of multiple characters;
@@ -2923,7 +3031,7 @@ size or 1/1000 of an em (as in \s-1AFM\s+1 kerning pair definitions);
 it may be negative.
 To add a kerning pair that includes the space character, use \T'e_ '``\e\ ''.\T
 .bta kernafter
-\fB&kernafter\fI|F|c...|N|d...|M|...\fR	P,T	Adds a constant amount of space after a character
+\fB&kernafter\fI|F|c...|N|d...|M|...\fR	P,T	Add a constant amount of space after a character
 if the current font is \fIF\fR and \fIc\fR
 is the first character of a pair of characters subject to kerning.
 \fIc\fR may consist of multiple characters;
@@ -2935,7 +3043,7 @@ of an em (as in \s-1AFM\s+1 kerning pair definitions);
 it may be negative.
 Same for \fId/M\fR etc.
 .bta kernbefore
-\fB&kernbefore\fI|F|c...|N|d...|M|...\fR	P,T	Adds a constant amount of space before a character
+\fB&kernbefore\fI|F|c...|N|d...|M|...\fR	P,T	Add a constant amount of space before a character
 if the current font is \fIF\fR and \fIc\fR
 is the second character of a pair of characters subject to kerning.
 \fIc\fR may consist of multiple characters;
@@ -3076,7 +3184,9 @@ output occurs, or with \fBrs\fR.
 The no-space mode is turned off.
 .bta blank
 Blank|text|line.	\(en	B	Causes a break and
-output of a blank line exactly like \fBsp|1\fR.
+output of a blank line exactly like \fBsp|1\fR
+unless a different action has been specified
+with the \T'blm'\fBblm\fR request.\T
 .\" from file m2
 .tr |
 .rm mx
@@ -3138,11 +3248,13 @@ to be stored in a macro.
 Strings are created by \T'ds'\fBds\fR\T and appended to by \T'as'\fBas\fR.\T
 A macro is invoked in the same way as a request;
 a control line beginning \fB.\fIxx\fR will interpolate the contents of macro \fIxx\fR.
-The remainder of the line may contain up to nine \fIarguments\fR.
+The remainder of the line may contain arbitrarily many \fIarguments\fR.
 The strings \fIx\fR, \fIxx\fR, and \fIxxx\fR
 are interpolated at any desired point with
 \A'e_*'\fB\e\(**\fIx\fR, \fB\e\(**(\fIxx\fR,
-and \fB\e\(**[\fIxxx\fB]\fR respectively.
+and \fB\e\(**[\fIxxx\fB]\fR respectively;
+the form \fB\e\(**[\fIxxx\ arg\ \fR...\fB]\fR
+allows to specify arguments to a string.
 String references and macro invocations may be nested.
 .sc
 \A'copy mode'Copy mode input interpretation.
@@ -3160,7 +3272,7 @@ The input is copied without interpretation
 \*+ Environment variables indicated by \T'e_V'\fB\eV\fR\T are interpolated.
 \*+ Device control functions indicated by \T'e_X'\fB\eX\fR\T are executed.
 \*+ Concealed newlines indicated by \T'e_newline'\fB\e\fR\T(newline) are eliminated.
-\*+ Comments indicated by \T'e_"'\fB\e"\fR\T are eliminated.
+\*+ Comments indicated by \T'e_"'\fB\e"\fR\T or \T'e_#'\fB\e#\fR\T are eliminated.
 \*+ \T'e_t'\fB\et\fR\T and \T'e_a'\fB\ea\fR\T are interpreted as \s-1ASCII\s+1 horizontal tab and \s-1SOH\s+1 respectively \T's_tabs'(\(sc9).\T
 \*+ \T'e_e'\fB\e\e\fR\T is interpreted as \fB\e\fR.
 \*+ \T'e_.'\fB\e.\fR\T is interpreted as "\fB.\fR".
@@ -3184,6 +3296,12 @@ The argument \fB"\^"\fR is explicitly null.
 If the desired arguments won't fit on a line,
 a concealed newline may be used to continue on the next line.
 A trailing double quote may be omitted.
+.pg
+Similarly, arguments may be passed to strings
+with the \fB\e\(**[\fR syntax,
+separated by spaces,
+until the argument list ends with the \fB]\fR character.
+String arguments are otherwise handled exactly like macro arguments.
 .pg
 When a macro is invoked the \fIinput level\fR is \fIpushed down\fR and
 any arguments available at the previous level become unavailable
@@ -3226,8 +3344,8 @@ each one surrounded by double quotes, separated by spaces.
 The number of currently available
 arguments is in the \A'n_.$'\fB.$\fR register.
 .pg
-No arguments are available at the top (non-macro) level,
-within a string, or within a trap-invoked macro.
+No arguments are available at the top (non-macro) level
+or within a trap-invoked macro.
 .pg
 Arguments are copied in \T'copy mode'\fIcopy mode\fR\T onto a stack
 where they are available for reference.
@@ -3406,7 +3524,7 @@ macro \fIxx\fR.
 Another \fBdt\fR will redefine the diversion trap.
 If no arguments are given, the diversion trap is removed.
 .bta vpt
-\fB&vpt\fI|N\fR	1	ignored	\(en	Enables (\fIN\fR\(!=0) or disables (\fIN\fR\(eq0)
+\fB&vpt\fI|N\fR	1	ignored	\(en	Enable (\fIN\fR\(!=0) or disable (\fIN\fR\(eq0)
 page ejections and vertical position traps,
 i.e. those set with \fBwh\fR or \fBdt\fR.
 At end of input, the page is forcefully ejected.
@@ -3419,11 +3537,19 @@ have been read
 (control or request lines don't count).
 The text may be in-line text or
 text interpolated by inline or trap-invoked macros.
+.bta itc
+\fB&itc\fI|N|xx\fR	\(en	off	E	Set an input-line-count trap
+like \fBit\fR, but ignore line interruptions with \T'e_c'\fB\ec\fR\T
+when counting lines.
 .bta return
-\fB&return\fR	\(en	\(en	\(en	Immediately returns from the current macro to the level above.
+\fB&return\fR	\(en	\(en	\(en	Immediately return from the current macro to the level above.
 .bta shift
-\fB&shift\fI|N\fR	\(en	1	\(en	Shifts the arguments to the current macro
+\fB&shift\fI|N\fR	\(en	1	\(en	Shift the arguments to the current macro
 by \fIN\fR.
+.bta blm
+\fB&blm\fI|xx\fR	none	none	\(en	Whenever a blank line is encountered,
+the macro \fIxx\fR is invoked
+instead of the \T'blank'default behavior to output a blank line.\T
 .bta em
 \fB&em\fI|xx\fR	none	none	\(en	The
 macro \fIxx\fR will be invoked
@@ -3432,7 +3558,7 @@ The effect is the same as if the contents of \fIxx\fR had been at the end
 of the last file processed,
 but all processing ceases at the next page eject.
 .bta recursionlimit
-\fB&recursionlimit\fI|N|M\fR	\(en	\(en	Sets
+\fB&recursionlimit\fI|N|M\fR	\(en	\(en	Set
 the maximum stack depth for generally recursive invocations
 of macros to \fIN\fR,
 and for invocations of tail-recursive macros to \fIM\fR.
@@ -3498,6 +3624,8 @@ according to the format specified by \T'af'\fBaf\fR\T.
 The number register \fIR\fR is assigned the value \fI\(+-N\fR
 with respect to the previous value, if any.
 The increment for auto-incrementing is set to \fIM\fR.
+An alternate syntax is available
+with the \A'e_R'\fB\eR\fI\'R\ \(+-N\'\fR escape sequence.
 .bta af
 \fB&af\fI|R|c\fR	arabic	\(en	\(en	Assign format \fIc\fR to register \fIR\fR.
 The available formats are:
@@ -3711,7 +3839,7 @@ and in \T'copy mode'\fIcopy mode\fR.\T
 No effect in \*[NR.]
 .bta flig
 .lg 0
-\fB&flig\fI|F|string|c|...\fR	ignored	T	De\(fines the set of
+\fB&flig\fI|F|string|c|...\fR	ignored	T	De\(fine the set of
 ligatures to be used with font \fIF\fR.
 .lg
 \fIstring\fR may consist of up to four characters;
@@ -3740,7 +3868,7 @@ and
 \fB&flig R \-Th\fR
 disables it.
 .bta fdeferlig
-\fB&fdeferlig\fI|F|string|...\fR	ignored	T	Defers ligature building for the first character of \fIstring\fR.
+\fB&fdeferlig\fI|F|string|...\fR	ignored	T	Defer ligature building for the first character of \fIstring\fR.
 Normally when a sequence of three characters appears
 for which both the first and the last two characters
 are defined as a ligature,
@@ -3866,10 +3994,14 @@ The sequence \A'e_newline'\fB\e\fR(newline) is \fIalways\fR ignored\(em\
 except in a comment.
 Comments may be imbedded at the \fIend\fR of any line by
 prefacing them with \A'e_"'\fB\e"\fR.
-The newline at the end of a comment cannot be concealed.
+This form does not conceal the newline at the end of the comment.
 A line beginning with \fB\e"\fR will appear as a blank line and
 behave like \fB.sp|1\fR;
 a comment can be on a line by itself by beginning the line with \fB.\e"\fR.
+The form \A'e_#'\fB\e#\fR includes the newline
+as part of the comment.
+It thus effectively acts like a concealed newline
+in concatenating the following line immediately to the current line.
 .mha s_mot
 Local Horizontal and Vertical Motions, and the Width Function
 .sc
@@ -3963,6 +4095,9 @@ As an example,
 the construction \fB\ekx\fIword\|\fB\eh\'\|~\|\enxu+3u\'\fIword\fB\fR
 will embolden \fIword\fR by backing up to almost its beginning and overprinting it,
 resulting in \kz\fIword\fR\h'|\nzu+2u'\fIword\fR.
+Likewise, \fB\ek(\fIxx\fR and \fB\ek[\fIxxx\fB]\fR
+will store the horizontal position in register \fIxx\fR or \fIxxx\fR,
+respectively.
 The \A'n_hp'\fBhp\fR number register also holds
 the current horizontal position in the input line.
 .mha s_draw
@@ -4188,17 +4323,21 @@ whether automatic hyphenation is on or off.
 \fB&nh\fR	hyphenate	\(en	E	\
 Automatic hyphenation is turned off.
 .bta hy
-\fB&hy\fIN\fR	on,\fIN=\fR1	on,\fIN=\fR1	E	\
+\fB&hy\fI|N\fR	on,\fIN=\fR1	on,\fIN=\fR1	E	\
 Automatic hyphenation is turned on
 for \fIN\fR\|\(>=1, or off for \fIN=\fR\|0.
 If \fIN=\fR\|2, \fIlast\fR lines (ones that will cause a trap)
 are not hyphenated.
 For \fIN=\fR\|4 and 8, the last and first two characters
 respectively of a word are not split off.
+For \fIN=\fR\|16 and 32, the last and first characters
+respectively of a word are allowed to be split off;
+this is only effective for explicit hyphenation points
+specified with \fB\e%\fR, \fB\e:\fR, or \fBhw\fR.
 These values are additive;
-i.|e. \fIN=\fR\|14 will invoke all three restrictions.
+i.|e. \fIN=\fR\|14 will invoke the three restrictions.
 .bta hylang
-\fB&hylang\fI|name\fR	off	off	E	Sets the hyphenation language
+\fB&hylang\fI|name\fR	off	off	E	Set the hyphenation language
 to \fIname\fR, which is one of
 \fBde_DE\fR,
 \fBde_DE@traditional\fR,
@@ -4212,10 +4351,26 @@ files to the directory
 \fB/usr/ucblib/doctools/hyphen\fR. If no \fIname\fR argument
 is present, the hyphenation is reset to the traditional \*(TR
 mechanism.
+The current value is available in the \A'n_.hylang'\fB&hylang\fR
+number register.
 .xx
 This request also makes parts of words composed by \fB-\fR or
 \fB\e(em\fR characters subject to hyphenation. Traditionally, the only
 hyphenation points in such words had been the hyphens/dashes.
+.bta hlm
+\fB&hlm\fI|N\fR	off	off	E	Maximum number of consecutive hyphenated lines.
+Each time a line is hyphenated automatically,
+the count of consecutive hyphenated lines
+(accessible in the \A'n_.hlc'\fB&hlc\fR number register)
+is incremented;
+whenever a line is not automatically hyphenated,
+it is reset to zero.
+This request allows to set a limit on the maximum number
+of consecutive hyphenated lines;
+when the count of consecutive lines has reached the maximum,
+the current line is not hyphenated.
+The default is no limit.
+The current value is accessible in the \A'n_.hlm'\fB&hlm\fR number register.
 .bta hc
 \fB&hc\fI|c\fR	\fB\e%	\e%\fR	E	Hyphenation indicator character is set
 to \fIc\fR or to the default \fB\e%\fR.
@@ -4433,7 +4588,7 @@ Note that what is pushed down and restored
 is the environment \fIname,\fR
 not its contents.
 .bta evc
-\fB&evc\fI|name\fR		\(en	\(en	Copies the environment \fIname\fR to the current environment.
+\fB&evc\fI|name\fR		\(en	\(en	Copy the environment \fIname\fR to the current environment.
 The temporary state of the current environment is reset, and
 incompletely filled lines are discarded.
 .mha s_stdin
@@ -4473,6 +4628,8 @@ to reinvoke itself using \T'nx'\fBnx\fR\T
 \T's_io'(\(sc19);\T
 the process would ultimately be ended
 by an \T'ex'\fBex\fR\T in the insertion file.
+.br
+.ne 6
 .mha s_io
 Input/Output File Switching
 .h1
@@ -4483,8 +4640,8 @@ When the new file ends,
 input is again taken from the original file.
 \fBso\fR's may be nested.
 .bta pso
-\fB&pso\fI|string\fR		\(en	\(en	Executes \fIstring\fR
-and reads its standard output as text input.
+\fB&pso\fI|string\fR		\(en	\(en	Execute \fIstring\fR
+and read its standard output as text input.
 .bta nx
 \fB&nx\fI|filename\fR		end-of-file	\(en	Next file is \fIfilename\fR.
 The current file is considered ended, and the input is immediately switched
@@ -4503,19 +4660,19 @@ typically it is the first line of input.
 \fB&cf\fI|filename\fR		\(en	\(en	Copy contents of file \fIfilename\fR to output, completely unprocessed.
 The file is assumed to contain something meaningful to subsequent processes.
 .bta open
-\fB&open\fI|stream|filename\fR	ignored	\(en	Opens \fIfilename\fR for writing while truncating existing contents
+\fB&open\fI|stream|filename\fR	ignored	\(en	Open \fIfilename\fR for writing while truncating existing contents
 and associates \fIstream\fR with it for latter use with \fBwrite\fR etc.
 .bta opena
-\fB&opena\fI|stream|filename\fR	ignored	\(en	Works like \fBopen\fR but appends to \fIfilename\fR instead of truncating
+\fB&opena\fI|stream|filename\fR	ignored	\(en	Like \fBopen\fR but appends to \fIfilename\fR instead of truncating
 an existing file.
 .bta write
-\fB&write\fI|stream|text\fR	ignored	\(en	Writes \fItext\fR to file \fIstream\fR,
+\fB&write\fI|stream|text\fR	ignored	\(en	Write \fItext\fR to file \fIstream\fR,
 which must have been obtained by a previous \fBopen\fR request.
 \fItext\fR is interpreted in \T'copy mode'\fIcopy mode.\fR\T
 .bta writec
 \fB&writec\fI|stream|text\fR	ignored	\(en	Like \fBwrite\fR but does not write a terminating newline.
 .bta close
-\fB&close\fI|stream\fR		\(en	\(en	Closes the file \fIstream\fR,
+\fB&close\fI|stream\fR		\(en	\(en	Close the file \fIstream\fR,
 which must have been obtained by a previous \fBopen\fR request.
 .mha s_misc
 Miscellaneous
@@ -4545,8 +4702,10 @@ The margin character used with this paragraph was a 12-point box-rule.
 After skipping initial blanks, \fIstring\fR (rest of the line) is read in \T'copy mode'\fIcopy mode\fR\T
 and written on the standard error.
 .bta tmc
-\fB&tmc\fI|string\fR	\(en	newline	\(en	Works like \fBtm\fR
+\fB&tmc\fI|string\fR	\(en	newline	\(en	Like \fBtm\fR
 but does not write a terminating newline.
+.bta nop
+\fB&nop\fI|remainder of line\fR	\(en	\(en	Use \fIremainder of line\fR as input.
 .bta ab
 \fB&ab\fI|string\fR	\(en	newline	\(en	\
 After skipping initial blanks, \fIstring\fR (rest of the line) is read in \T'copy mode'\fIcopy mode\fR\T
@@ -4684,7 +4843,7 @@ and the exceeding of certain internal limits that
 make future output unlikely to be useful.
 .h1
 .bta warn
-\fB&warn\fI|\(+-bits\(or\^name\fR	\fIw\fR	\(en	Controls warning messages,
+\fB&warn\fI|\(+-bits\(or\^name\fR	\fIw\fR	\(en	Control warning messages,
 which may be given either numerically
 as bits or symbolically as names.
 With a \fB+\fR sign, the respective bit or name is enabled in
@@ -4697,7 +4856,7 @@ The \A'n_.warn'\fB.warn\fR register represents
 the currently activated warning categories
 as bits.
 .bta spreadwarn
-\fB&spreadwarn\fI|N\fR	toggle	\(en	Sets or toggles a limit that causes a warning to be printed when
+\fB&spreadwarn\fI|N\fR	toggle	\(en	Set or toggle a limit that causes a warning to be printed when
 it is exceeded by the adjustment that is computed for the current
 output line in \fBad\ b\fR mode. The limit is initially 3\|m, but the
 warning message is disabled. Calling this request without an
@@ -4784,7 +4943,7 @@ and reverse video printing.
 It includes the following macro:
 .h1
 .bta CL
-\fB&CL\fI|color|text\fR	\s-1RGB\s+1|black		Prints \fItext\fR in \fIcolor\fR.
+\fB&CL\fI|color|text\fR	\s-1RGB\s+1|black		Print \fItext\fR in \fIcolor\fR.
 No arguments restores a default color
 (black in \s-1RGB\s+1 color space;
 note that this is different from the initial color).
@@ -4839,7 +4998,7 @@ picture description
 .h1
 .bta psbb
 \fB&psbb\fI|filename\fR	\(en	\(en	\
-Reads the \fB%%BoundingBox\fR \s-1DSC\s+1 comment
+Read the \fB%%BoundingBox\fR \s-1DSC\s+1 comment
 from the \*(PS document \fIfilename\fR
 and assigns
 the lower left \fIx\fR coordinate to the register \fBllx\fR,
@@ -5021,6 +5180,7 @@ Examples are:
 .xx
 .in +2m
 .ti -2m
+.ne 2
 .nr nosave 1
 \fB\eX\'PS: [ {Catalog} << /ViewerPreferences << /DisplayDocTitle true >> >> /PUT pdfmark\e'\fR
 .br
@@ -5031,6 +5191,7 @@ instead of the \*[PDF] file name.
 .xx
 .ti -2m
 .nr nosave 1
+.ne 2
 \fB\eX\'PS: [ /PageMode /UseOutlines /DOCVIEW pdfmark\'\fR
 .br
 .nr nosave 0
@@ -5043,6 +5204,7 @@ and \fB/FullScreen\fR (open the document in full-screen mode).
 .xx
 .ti -2m
 .nr nosave 1
+.ne 2
 \fB\eX\'PS: [ /PageMode /Page \fIN\fB /View [/XYZ null null null] /DOCVIEW pdfmark\'\fR
 .br
 .nr nosave 0
@@ -5051,6 +5213,7 @@ when the document is opened.
 .xx
 .ti -2m
 .nr nosave 1
+.ne 2
 \fB\eX\'PS: [ {Catalog} << /PageLayout /TwoPageRight >> /PUT pdfmark\'\fR
 .br
 .nr nosave 0
@@ -5295,6 +5458,7 @@ then a command, then other parameters.
 \fBx X \fIany\fP	\fRgenerated by the \T'e_X'\fB\eX\fR function\T
 \fBx X BleedAt \fIL T W H\fR	generated by the \T'bleedat'\fBbleedat\fR request\T
 \fBx X CropAt \fIL T W H\fR	generated by the \T'cropat'\fBcropat\fR request\T
+\fBx X HorScale \fIpercent\fR	scale letters horizontally by \fIpercent\fR (with the \T'letadj'\fBletadj\fR\T request)
 \fBx X LC_CTYPE \fIname\fR	sets the \s-1LC_CTYPE\s+1 locale to \fIname\fR
 \fBx X PaperSize \fIW H n\fR	generated by the \T'mediasize'\fBmediasize\fR\T and \T'papersize'\fBpapersize\fR\T requests
 		\fIn\fR is non-zero for \T'mediasize'\fBmediasize\fR\T

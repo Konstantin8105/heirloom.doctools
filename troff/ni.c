@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)ni.c	1.23 (gritter) 6/13/06
+ * Sccsid @(#)ni.c	1.30 (gritter) 7/11/06
  */
 
 /*
@@ -47,6 +47,7 @@
  */
 
 #include "tdef.h"
+#include "ext.h"
 
 /* You may want to change these names */
 
@@ -229,7 +230,7 @@ const struct contab initcontab[] = {
 };
 
 
-tchar oline[LNSIZE+1];
+tchar oline[3*LNSIZE+1];
 
 /*
  * troff environment block
@@ -238,10 +239,28 @@ tchar oline[LNSIZE+1];
 struct	env env = {
 /* int	ics	 */	0,
 /* int	sps	 */	0,
-/* int	minsps	 */	0,
 /* int	ses	 */	0,
 /* int	spacesz	 */	0,
+#ifndef	NROFF
+/* int	minsps	 */	0,
 /* int	minspsz  */	0,
+/* int	letspsz	 */	0,
+/* int	letsps	 */	0,
+/* int	lspmin	 */	0,
+/* int	lspmax	 */	0,
+/* int	lspnc	 */	0,
+/* int	lsplow	 */	0,
+/* int	lsphigh	 */	0,
+/* int	lspcur	 */	0,
+/* int	lsplast	 */	0,
+/* int	lshmin	 */	0,
+/* int	lshmax	 */	0,
+/* int	lshwid	 */	0,
+/* int	lshlow	 */	0,
+/* int	lshhigh	 */	0,
+/* int	lshcur	 */	0,
+#endif	/* !NROFF */
+/* int	fldcnt	 */	0,
 /* int	lss	 */	0,
 /* int	lss1	 */	0,
 /* int	ll	 */	0,
@@ -271,6 +290,8 @@ struct	env env = {
 /* int	tdelim	 */	IMP,
 /* int	hyf	 */	1,
 /* int	hyoff	 */	0,
+/* int	hlm	 */	-1,
+/* int	hlc	 */	0,
 /* int	un1	 */	-1,
 /* int	tabc	 */	0,
 /* int	dotc	 */	'.',
@@ -307,6 +328,7 @@ struct	env env = {
 /* int	pendnf	 */	0,
 /* int	spread	 */	0,
 /* int	it	 */	0,
+/* int	itc	 */	0,
 /* int	itmac	 */	0,
 /* int	lnsize	 */	LNSIZE,
 };
