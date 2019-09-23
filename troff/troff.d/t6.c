@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)t6.c	1.140 (gritter) 4/25/06
+ * Sccsid @(#)t6.c	1.147 (gritter) 6/15/06
  */
 
 /*
@@ -92,12 +92,17 @@ int	kern = 0;
 struct box	mediasize, bleedat, trimat, cropat;
 int	psmaxcode;
 struct ref	*anchors, *links;
+static int	_minflg;
+
+static void	kernsingle(int **);
 
 int
 width(register tchar j)
 {
 	register int i, k;
 
+	_minflg = minflg;
+	minflg = minspc = 0;
 	if (j & (ZBIT|MOT)) {
 		if (iszbit(j))
 			return(0);
@@ -129,10 +134,17 @@ width(register tchar j)
 		xpts = ppts;
 	} else 
 		xbits(j, 0);
-	if (widcache[i-32].fontpts == xfont + (xpts<<8) && !setwdf)
+	if (widcache[i-32].fontpts == xfont + (xpts<<8) && !setwdf && !_minflg)
 		k = widcache[i-32].width;
 	else {
+		if (_minflg && i == 32 && cbits(j) != 32)
+			_minflg = 0;
 		k = getcw(i-32);
+		if (i == 32 && _minflg && !cs) {
+			_minflg = 0;
+			minspc = getcw(0) - k;
+		}
+		_minflg = 0;
 		if (bd)
 			k += (bd - 1) * HOR;
 		if (cs)
@@ -179,7 +191,12 @@ getcw(register int i)
 		}
 	}
 	if (i == 0) {	/* a blank */
-		k = (fontab[xfont][0] * spacesz + 6) / 12;
+		if (_minflg) {
+			j = minspsz;
+			nocache = 1;
+		} else
+			j = spacesz;
+		k = (fontab[xfont][0] * j + 6) / 12;
 		/* this nonsense because .ss cmd uses 1/36 em as its units */
 		/* and default is 12 */
 		goto g1;
@@ -477,7 +494,8 @@ getkw(tchar c, tchar d)
 			k = kp->n;
 		else if ((n = (fontbase[f]->afmpos)-1) >= 0 &&
 				n == (fontbase[g]->afmpos)-1 &&
-				(a = afmtab[n])->nokern == 0) {
+				(fontbase[f]->flgfont & FNOKERN) == 0) {
+			a = afmtab[n];
 			I = i - 32;
 			J = j - 32;
 			if (I >= nchtab + 128)
@@ -666,8 +684,8 @@ findft(register int i, int required)
 	for (k = 0; fontlab[k] != i; k++)
 		if (k > nfonts) {
 			mn = macname(i);
-			if ((k = strtol(mn, &mp, 10)) >= 0 && k <= nfonts &&
-					fontbase[k])
+			if ((k = strtol(mn, &mp, 10)) >= 0 && *mp == 0 &&
+					mp > mn && k <= nfonts && fontbase[k])
 				break;
 			if (required && warn & WARN_FONT)
 				errprint("%s: no such font", mn);
@@ -749,6 +767,12 @@ mchbits(void)
 	chbits = 0;
 	setsbits(chbits, ++j);
 	setfbits(chbits, font);
+	if (minspsz) {
+		k = spacesz;
+		spacesz = minspsz;
+		minsps = width(' ' | chbits);
+		spacesz = k;
+	}
 	sps = width(' ' | chbits);
 	zapwcache(1);
 }
@@ -851,10 +875,9 @@ setfont(int a)
 {
 	register int i, j;
 
-	if (a) {
-		if ((i = getrq()) >= 256)
-			i = maybemore(i, 3);
-	} else 
+	if (a)
+		i = getrq(3);
+	else 
 		i = getsn();
 	if (!i || i == 'P') {
 		j = font1;
@@ -1289,8 +1312,7 @@ caseflig(int defer)
 	lgf++;
 	if (skip(1))
 		return;
-	if ((i = getrq()) >= 256)
-		i = maybemore(i, 2);
+	i = getrq(2);
 	if ((j = findft(i, 1)) < 0)
 		return;
 	i = 0;
@@ -1313,11 +1335,9 @@ casefp(int spec)
 	skip(0);
 	if ((i = xflag ? atoi() : cbits(getch()) - '0') < 0 || i > 255)
 	bad:	errprint("fp: bad font position %d", i);
-	else if (skip(0) || !(j = getrq()))
+	else if (skip(0) || !(j = getrq(3)))
 		errprint("fp: no font name");
 	else {
-		if (j >= 256)
-			j = maybemore(j, 3);
 		if (skip(0) || !getname()) {
 			if (i == 0 || i > nfonts)
 				goto bad;
@@ -1469,10 +1489,8 @@ casecs(void)
 	noscale++;
 	if (skip(1))
 		goto rtn;
-	if (!(i = getrq()))
+	if (!(i = getrq(2)))
 		goto rtn;
-	if (i >= 256)
-		i = maybemore(i, 2);
 	if ((i = findft(i, 1)) < 0)
 		goto rtn;
 	skip(1);
@@ -1496,9 +1514,7 @@ casebd(void)
 	zapwcache(0);
 	k = 0;
 bd0:
-	if (skip(1) || !(i = getrq()) ||
-			(i = i >= 256 ? maybemore(i, 2) : i,
-			(j = findft(i, 1)) == -1)) {
+	if (skip(1) || !(i = getrq(2)) || (j = findft(i, 1)) == -1) {
 		if (k)
 			goto bd1;
 		else 
@@ -1539,24 +1555,43 @@ casevs(void)
 }
 
 void
-casess(void)
+casess(int flg)
 {
 	register int i, j;
+	int _spacesz, _sps;
 
 	noscale++;
 	skip(1);
 	if (i = atoi()) {
+		_spacesz = spacesz;
 		spacesz = i & 0177;
 		zapwcache(0);
-		sps = width(' ' | chbits);
-		if (xflag) {
+		_sps = width(' ' | chbits);
+		if (xflag && flg == 0) {
 			skip(0);
 			j = atoi();
 			if (!nonumb)
 				ses = j;
 		}
+		if (flg) {
+			minsps = _sps;
+			minspsz = spacesz;
+			spacesz = _spacesz;
+			zapwcache(0);
+			sps = width(' ' | chbits);
+		} else {
+			sps = _sps;
+			if (minspsz > spacesz)
+				minsps = minspsz = 0;
+		}
 	}
 	noscale = 0;
+}
+
+void
+caseminss(void)
+{
+	casess(1);
 }
 
 void
@@ -1569,8 +1604,7 @@ casefspacewidth(void)
 	lgf++;
 	if (skip(1))
 		return;
-	if ((i = getrq()) >= 256)
-		i = maybemore(i, 2);
+	i = getrq(2);
 	if ((f = findft(i, 1)) < 0)
 		return;
 	if (skip(0)) {
@@ -1781,7 +1815,7 @@ done:	afmtab = realloc(afmtab, (nafm+1) * sizeof *afmtab);
 	fontab[nf] = malloc(a->nchars * sizeof *fontab[nf]);
 	kerntab[nf] = malloc(a->nchars * sizeof *kerntab[nf]);
 	codetab[nf] = malloc(a->nchars * sizeof *codetab[nf]);
-	fitab[nf] = malloc((128-32+nchtab+psmaxcode+1) * sizeof *fitab[nf]);
+	fitab[nf] = calloc(NCHARS, sizeof *fitab[nf]);
 	memcpy(fontab[nf], a->fontab, a->nchars * sizeof *fontab[nf]);
 	memcpy(kerntab[nf], a->kerntab, a->nchars * sizeof *kerntab[nf]);
 	memcpy(codetab[nf], a->codetab, a->nchars * sizeof *codetab[nf]);
@@ -1839,8 +1873,7 @@ casetrack(void)
 
 	if (skip(1))
 		return;
-	if ((i = getrq()) >= 256)
-		i = maybemore(i, 2);
+	i = getrq(2);
 	if ((j = findft(i, 1)) < 0)
 		return;
 	s1 = tracknum();
@@ -1870,14 +1903,12 @@ casefallback(void)
 
 	if (skip(1))
 		return;
-	if ((i = getrq()) >= 256)
-		i = maybemore(i, 2);
+	i = getrq(2);
 	if ((j = findft(i, 1)) < 0)
 		return;
 	do {
 		skip(0);
-		if ((i = getrq()) >= 256)
-			i = maybemore(i, 2);
+		i = getrq(2);
 		fb = realloc(fb, (n+2) * sizeof *fb);
 		fb[n++] = i;
 	} while (i);
@@ -1893,8 +1924,7 @@ casehidechar(void)
 
 	if (skip(1))
 		return;
-	if ((i = getrq()) >= 256)
-		i = maybemore(i, 2);
+	i = getrq(2);
 	if ((j = findft(i, 1)) < 0)
 		return;
 	font = font1 = j;
@@ -1924,8 +1954,7 @@ casefzoom(void)
 
 	if (skip(1))
 		return;
-	if ((i = getrq()) >= 256)
-		i = maybemore(i, 2);
+	i = getrq(2);
 	if ((j = findft(i, 1)) < 0)
 		return;
 	skip(1);
@@ -1954,18 +1983,18 @@ casekern(void)
 void
 casefkern(void)
 {
-	struct afmtab	*a;
 	int	f, i;
 
 	lgf++;
 	if (skip(1))
 		return;
-	if ((i = getrq()) >= 256)
-		i = maybemore(i, 2);
-	if ((f = findft(i, 1)) < 0 || (i = fontbase[f]->afmpos - 1) < 0)
+	i = getrq(2);
+	if ((f = findft(i, 1)) < 0)
 		return;
-	a = afmtab[i];
-	a->nokern = skip(0) || atoi() ? 0 : 1;
+	if (skip(0) || atoi())
+		fontbase[f]->flgfont &= ~FNOKERN;
+	else
+		fontbase[f]->flgfont |= FNOKERN;
 }
 
 static void
@@ -2115,100 +2144,89 @@ casecropat(void)
 	cutat(&cropat);
 }
 
-static void
-hang(int **tp)
-{
-	int	i, j, n;
-	int	savfont = font, savfont1 = font1;
-	tchar	k;
-
-	lgf++;
-	if (skip(1))
-		return;
-	if ((i = getrq()) >= 256)
-		i = maybemore(i, 2);
-	if ((j = findft(i, 1)) < 0)
-		return;
-	font = font1 = j;
-	mchbits();
-	while (!skip(0) && (i = cbits(k = getch())) != '\n' && !skip(1)) {
-		noscale++;
-		n = atoi();
-		noscale--;
-		if (fbits(k) == j && !ismot(k)) {
-			unitsPerEm = 1000;
-			n = _unitconv(n);
-			if (tp[j] == NULL)
-				tp[j] = calloc(NCHARS, sizeof *tp);
-			tp[j][i] = n;
-		}
-	}
-	font = savfont;
-	font1 = savfont1;
-	mchbits();
-}
-
 void
 caselhang(void)
 {
-	hang(lhangtab);
+	kernsingle(lhangtab);
 }
 
 void
 caserhang(void)
 {
-	hang(rhangtab);
+	kernsingle(rhangtab);
 }
 
 void
 casekernpair(void)
 {
 	int	savfont = font, savfont1 = font1;
-	int	f, g, i, n;
-	tchar	c, d;
+	int	f, g, i, j, n;
+	tchar	c, d, *cp = NULL, *dp = NULL;
+	int	a = 0, b = 0;
 
 	lgf++;
 	if (skip(1))
 		return;
-	if ((i = getrq()) >= 256)
-		i = maybemore(i, 2);
+	i = getrq(2);
 	if ((f = findft(i, 1)) < 0)
 		return;
 	font = font1 = f;
 	mchbits();
 	if (skip(1))
 		goto done;
-	c = getch();
-	if (fbits(c) != f || skip(1))
+	while ((j = cbits(c = getch())) > ' ' || j == UNPAD) {
+		if (fbits(c) != f) {
+			if (warn & WARN_CHAR)
+				errprint("glyph %C not in font %s",
+					c, macname(i));
+			continue;
+		}
+		cp = realloc(cp, ++a * sizeof *cp);
+		cp[a-1] = c;
+	}
+	if (a == 0 || skip(1))
 		goto done;
-	if ((i = getrq()) >= 256)
-		i = maybemore(i, 2);
+	i = getrq(2);
 	if ((g = findft(i, 1)) < 0)
 		goto done;
 	font = font1 = g;
 	mchbits();
 	if (skip(1))
 		goto done;
-	d = getch();
-	if (fbits(d) != g || skip(1))
+	while ((j = cbits(c = getch())) > ' ' || j == UNPAD) {
+		if (fbits(c) != g) {
+			if (warn & WARN_CHAR)
+				errprint("glyph %C not in font %s",
+					c, macname(i));
+			continue;
+		}
+		dp = realloc(dp, ++b * sizeof *dp);
+		dp[b-1] = c;
+	}
+	if (b == 0 || skip(1))
 		goto done;
 	noscale++;
 	n = atoi();
 	noscale--;
-	if ((c = cbits(c)) == 0)
-		goto done;
-	if (c == UNPAD)
-		c = ' ';
-	setfbits(c, f);
-	if ((d = cbits(d)) == 0)
-		goto done;
-	if (d == UNPAD)
-		d = ' ';
-	setfbits(d, g);
 	unitsPerEm = 1000;
 	n = _unitconv(n);
-	kadd(c, d, n);
+	for (i = 0; i < a; i++)
+		for (j = 0; j < b; j++) {
+			if ((c = cbits(cp[i])) == 0)
+				continue;
+			if (c == UNPAD)
+				c = ' ';
+			setfbits(c, f);
+			if ((d = cbits(dp[j])) == 0)
+				continue;
+			if (d == UNPAD)
+				d = ' ';
+			setfbits(d, g);
+			kadd(c, d, n);
+		}
 done:
+	free(cp);
+	free(dp);
 	font = savfont;
 	font1 = savfont1;
 	mchbits();
@@ -2218,32 +2236,44 @@ static void
 kernsingle(int **tp)
 {
 	int     savfont = font, savfont1 = font1;
-	int	f, i, n;
-	tchar	c;
+	int	f, i, j, n;
+	int	twice = 0;
+	tchar	c, *cp = NULL;
+	int	a;
 
 	lgf++;
 	if (skip(1))
 		return;
-	if ((i = getrq()) >= 256)
-		i = maybemore(i, 2);
+	i = getrq(2);
 	if ((f = findft(i, 1)) < 0)
 		return;
 	font = font1 = f;
 	mchbits();
-	while (!skip(0)) {
-		c = getch();
+	while (!skip(twice++ == 0)) {
+		a = 0;
+		while ((j = cbits(c = getch())) > ' ') {
+			if (fbits(c) != f) {
+				if (warn & WARN_CHAR)
+					errprint("glyph %C not in font %s",
+						c, macname(i));
+				continue;
+			}
+			cp = realloc(cp, ++a * sizeof *cp);
+			cp[a-1] = c;
+		}
 		if (skip(1))
 			break;
 		noscale++;
 		n = atoi();
 		noscale--;
-		if (fbits(c) != f || (c = cbits(c)) <= 32)
-			continue;
 		if (tp[f] == NULL)
 			tp[f] = calloc(NCHARS, sizeof *tp);
 		unitsPerEm = 1000;
-		tp[f][c] = _unitconv(n);
+		n = _unitconv(n);
+		for (j = 0; j < a; j++)
+			tp[f][cbits(cp[j])] = n;
 	}
+	free(cp);
 	font = savfont;
 	font1 = savfont1;
 	mchbits();
@@ -2271,8 +2301,7 @@ caseftr(void)
 	lgf++;
 	if (skip(1))
 		return;
-	if ((i = getrq()) >= 256)
-		i = maybemore(i, 2);
+	i = getrq(2);
 	if ((f = findft(i, 1)) < 0)
 		return;
 	font = font1 = f;
@@ -2352,8 +2381,7 @@ casefeature(void)
 	lgf++;
 	if (skip(1))
 		return;
-	if ((i = getrq()) >= 256)
-		i = maybemore(i, 2);
+	i = getrq(2);
 	if ((f = findft(i, 1)) < 0)
 		return;
 	if ((j = (fontbase[f]->afmpos) - 1) < 0 ||

@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n7.c	1.46 (gritter) 4/26/06
+ * Sccsid @(#)n7.c	1.53 (gritter) 6/15/06
  */
 
 /*
@@ -104,6 +104,7 @@ tbreak(void)
 	register int pad, k;
 	register tchar	*i, j, c;
 	register int resol = 0;
+	int _minflg;
 
 	trap = 0;
 	if (nb)
@@ -122,7 +123,13 @@ tbreak(void)
 	} else if (pendw && !brflg) {
 		getword(1);
 		movword();
+	} else if (!brflg && adflg & 1) {
+		adflg |= 2;
+		text();
+		return;
 	}
+	if (minspsz && !brflg && ad && !admod)
+		ne += adspc;
 	*linep = dip->nls = 0;
 #ifdef NROFF
 	if (dip == d)
@@ -134,7 +141,7 @@ tbreak(void)
 	if (brflg != 1) {
 		totout = 0;
 	} else if (ad) {
-		if ((lastl = ll - un) < ne)
+		if ((lastl = ll - un + rhang) < ne)
 			lastl = ne;
 	}
 	if (admod && ad && (brflg != 2)) {
@@ -145,6 +152,7 @@ tbreak(void)
 		else if (admod == 2)
 			un += nel;
 	}
+	_minflg = minspsz && admod == 0 && ad && brflg == 1 && adflg & 4;
 	totout++;
 	brflg = 0;
 	if (lastl + un > dip->maxl)
@@ -175,6 +183,7 @@ tbreak(void)
 			if (i > line)
 				pad += kernadjust(i[-2], ' '| i[-2]&SFMASK);
 			do {
+				minflg = _minflg;
 				pad += width(j);
 				nc--;
 #ifndef EUC
@@ -270,6 +279,11 @@ text(void)
 	int	k = 0;
 	static int	spcnt;
 
+	if (adflg & 2) {
+		adflg &= ~3;
+		goto adj;
+	}
+	adflg = 0;
 	nflush++;
 	numtab[HP].val = 0;
 	if ((dip == d) && (numtab[NL].val == -1)) {
@@ -336,21 +350,25 @@ t4:
 t5:
 	if (nlflg)
 		pendt = 0;
+adj:
 	adsp = adrem = 0;
 	if (ad) {
 #ifndef	NROFF
 		if (nc > 0) {
+			int	j;
 			c = line[nc-1];
 			width(c);
-			nel += lasttrack;
-			nel += kernadjust(c, ' ' | c&SFMASK);
+			j = lasttrack;
+			j += kernadjust(c, ' ' | c&SFMASK);
 			if (admod != 1 && rhangtab != NULL && !ismot(c) &&
 					rhangtab[xfont] != NULL &&
 					(k = rhangtab[xfont][cbits(c)]) != 0) {
-				k = (k * u2pts(xpts) + (Unitwidth / 2))
+				rhang = (k * u2pts(xpts) + (Unitwidth / 2))
 					/ Unitwidth;
-				nel += k;
+				j += rhang;
 			}
+			ne -= j;
+			nel += j;
 		}
 #endif	/* !NROFF */
 		if (nwd == 1)
@@ -491,8 +509,10 @@ storeline(register tchar c, int w)
 		return;
 	}
 s1:
-	if (w == -1)
+	if (w == -1) {
+		minflg = minspsz;
 		w = width(c);
+	}
 	ne += w;
 	nel -= w;
 	*linep++ = c;
@@ -714,11 +734,17 @@ movword(void)
 {
 	register int w;
 	register tchar i, *wp, c, *lp, *lastlp, lasti = 0, *tp;
-	int	savwch, hys, stretches = 0;
+	int	savwch, hys, stretches = 0, wholewd = 0;
 #ifndef	NROFF
-	tchar	lgs, lge;
-	int	*ip, s, lgw;
-#endif
+	tchar	lgs = 0, lge = 0, optlgs = 0, optlge = 0;
+	int	*ip, s, lgw = 0, optlgw = 0;
+	tchar	*optlinep = NULL, *optwp = NULL;
+	int	optnc = 0, optnel = 0, optne = 0, optadspc = 0, optwne = 0,
+		optwch = 0, optwholewd = 0;
+#else	/* NROFF */
+#define	lgw	0
+#define	optlinep	0
+#endif	/* NROFF */
 
 	over = 0;
 	wp = wordp;
@@ -735,7 +761,7 @@ movword(void)
 			if (iszbit(i))
 				break;
 			wch--;
-			wne -= sps;
+			wne -= minsps ? minsps : sps;
 		}
 		wp--;
 		if (wp > wordp)
@@ -752,7 +778,8 @@ movword(void)
 		}
 #endif	/* !NROFF */
 	}
-	if (wne > nel && !hyoff && hyf && (!nwd || nel > 3 * sps) &&
+	if (wne > nel - adspc && !hyoff && hyf &&
+	   (!nwd || nel - adspc > 3 * (minsps ? minsps : sps)) &&
 	   (!(hyf & 02) || (findt1() > lss)))
 		hyphen(wp);
 	savwch = wch;
@@ -774,7 +801,9 @@ movword(void)
 			hyp++;
 		}
 		i = *wp++;
+		minflg = minspsz;
 		w = width(i);
+		adspc += minspc;
 		w += kernadjust(i, *wp ? *wp : ' ' | i&SFMASK);
 		wne -= w;
 		wch--;
@@ -786,19 +815,31 @@ movword(void)
 	*linep = *wp;
 	lastlp = linep;
 	if (nel >= 0) {
+		if (minspsz && nwd && nel - adspc < 0 && nel / nwd < sps) {
+			wholewd = 1;
+			goto m0;
+		}
 		nwd += stretches + 1;
+		if (nel - adspc < 0 && nwd > 1)
+			adflg |= 5;
 		return(0);	/* line didn't fill up */
 	}
+m0:
 #ifndef NROFF
 	xbits((tchar)HYPHEN, 1);
 #endif
 	hys = width((tchar)HYPHEN);
+	if (wholewd)
+		goto m1a;
 m1:
 	if (!nhyp) {
 		if (!nwd)
 			goto m3;
-		if (wch == savwch)
+		if (wch == savwch) {
+			if (optlinep)
+				goto m2;
 			goto m4;
+		}
 	}
 	if (cbits(*--linep) != IMP)
 		goto m5;
@@ -815,7 +856,6 @@ m1:
 			lgw += kernadjust(i, *(linep - 1));
 			lgw -= kernadjust(*(linep + 1), *(linep - 1));
 		}
-		hys += lgw;
 	} else {
 		lgs = 0;
 		lge = 0;
@@ -825,11 +865,32 @@ m1:
 	if (!(--nhyp))
 		if (!nwd)
 			goto m2;
-	if (nel < hys) {
+	if (nel < hys + lgw) {
 		nc--;
 		goto m1;
 	}
+	wholewd = 0;
+m1a:
+#ifndef	NROFF
+	if (minspsz && wch < savwch && nwd && nel / nwd < sps) {
+		optlgs = lgs, optlge = lge, optlgw = lgw;
+		optlinep = linep, optwp = wp, optnc = nc, optnel = nel,
+		optne = ne, optadspc = adspc, optwne = wne, optwch = wch;
+		optwholewd = wholewd;
+		nc -= !wholewd;
+		goto m1;
+	}
+#endif
 m2:
+#ifndef	NROFF
+	if (optlinep) {
+		lgs = optlgs, lge = optlge, lgw = optlgw;
+		linep = optlinep, wp = optwp, nc = optnc, nel = optnel,
+		ne = optne, adspc = optadspc, wne = optwne, wch = optwch;
+		if (wholewd = optwholewd)
+			goto m3;
+	}
+#endif
 #ifndef	NROFF
 	if (lgs != 0) {
 		*wp = lge;
@@ -850,12 +911,16 @@ m2:
 m3:
 	nwd++;
 m4:
+	adflg &= ~1;
+	adflg |= 4;
 	wordp = wp;
 	return(1);	/* line filled up */
 m5:
 	nc--;
-	for (lp = &linep[1]; lp < lastlp && cbits(*lp) == IMP; lp++);
+	minflg = minspsz;
 	w = width(*linep);
+	adspc -= minspc;
+	for (lp = &linep[1]; lp < lastlp && cbits(*lp) == IMP; lp++);
 	w += kernadjust(*linep, *lp ? *lp : ' ' | *linep&SFMASK);
 	ne -= w;
 	nel += w;
@@ -885,7 +950,7 @@ setnel(void)
 			un1 = -1;
 		}
 		nel = ll - un;
-		ne = adsp = adrem = 0;
+		rhang = ne = adsp = adrem = adspc = 0;
 	}
 }
 

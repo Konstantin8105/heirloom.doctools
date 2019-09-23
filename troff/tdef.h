@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)tdef.h	1.78 (gritter) 4/27/06
+ * Sccsid @(#)tdef.h	1.83 (gritter) 6/13/06
  */
 
 /*
@@ -559,8 +559,10 @@ extern const struct numtab initnumtab[];
 
 #define	ics	env._ics
 #define	sps	env._sps
+#define	minsps	env._minsps
 #define	ses	env._ses
 #define	spacesz	env._spacesz
+#define	minspsz	env._minspsz
 #define	lss	env._lss
 #define	lss1	env._lss1
 #define	ll	env._ll
@@ -598,6 +600,8 @@ extern const struct numtab initnumtab[];
 #define	lastl	env._lastl
 #define	nel	env._nel
 #define	admod	env._admod
+#define	adflg	env._adflg
+#define	adspc	env._adspc
 #define	wordp	env._wordp
 #define	spflg	env._spflg
 #define	linep	env._linep
@@ -618,6 +622,7 @@ extern const struct numtab initnumtab[];
 #define	in1	env._in1
 #define	un	env._un
 #define	wch	env._wch
+#define	rhang	env._rhang
 #define	pendt	env._pendt
 #define	pendw	env._pendw
 #define	pendnf	env._pendnf
@@ -638,8 +643,10 @@ extern const struct numtab initnumtab[];
 extern struct env {
 	int	_ics;
 	int	_sps;
+	int	_minsps;
 	int	_ses;
 	int	_spacesz;
+	int	_minspsz;
 	int	_lss;
 	int	_lss1;
 	int	_ll;
@@ -677,6 +684,8 @@ extern struct env {
 	int	_lastl;
 	int	_nel;
 	int	_admod;
+	int	_adflg;
+	int	_adspc;
 	tchar	*_wordp;
 	int	_spflg;
 	tchar	*_linep;
@@ -697,6 +706,7 @@ extern struct env {
 	int	_in1;
 	int	_un;
 	int	_wch;
+	int	_rhang;
 	int	_pendt;
 	tchar	*_pendw;
 	int	_pendnf;
@@ -730,7 +740,8 @@ void errprint(const char *, ...);
 void fdprintf(int, char *, ...);
 char *roff_sprintf(char *, char *, ...);
 int control(register int, register int);
-int getrq(void);
+int getrq2(void);
+int getrq(int);
 tchar getch(void);
 void setxon(void);
 tchar getch0(void);

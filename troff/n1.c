@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n1.c	1.75 (gritter) 4/26/06
+ * Sccsid @(#)n1.c	1.77 (gritter) 5/6/06
  */
 
 /*
@@ -340,13 +340,11 @@ loop:
 			;
 		ch = i;
 		copyf--;
-		if ((j = getrq()) >= 256)
-			j = maybemore(j, 0);
+		j = getrq(0);
 		if (xflag != 0 && j == PAIR('d', 'o')) {
 			xflag = 3;
 			skip(1);
-			if ((j = getrq()) >= 256)
-				j = maybemore(j, 0);
+			j = getrq(0);
 		}
 		control(j, 1);
 		flushi();
@@ -624,8 +622,26 @@ loop:
 			} else
 				putchar(i);
 		}
+	} else if (c == 'C') {
+		extern int	nchtab;
+		tchar	t = va_arg(ap, tchar);
+		if ((i = cbits(t)) < 0177) {
+			putchar(i);
+		} else if (i < 128 + nchtab) {
+			putchar('\\');
+			putchar('(');
+			putchar(chname[chtab[i-128]]);
+			putchar(chname[chtab[i-128]+1]);
+		}
+#ifndef	NROFF
+		else if ((i = tr2un(i, fbits(t))) != -1)
+			goto U;
+#endif	/* !NROFF */
 	} else if (c == 'U') {
 		i = va_arg(ap, int);
+#ifndef	NROFF
+	U:
+#endif	/* !NROFF */
 		putchar('U');
 		putchar('+');
 		if (i < 0x1000)
@@ -879,7 +895,7 @@ control(register int a, register int b)
 
 
 int
-getrq(void)
+getrq2(void)
 {
 	register int i, j;
 
@@ -887,6 +903,16 @@ getrq(void)
 		goto rtn;
 	i = PAIR(i, j);
 rtn:
+	return(i);
+}
+
+int
+getrq(int flags)
+{
+	int	i;
+
+	if ((i = getrq2()) >= 256)
+		i = maybemore(i, flags);
 	return(i);
 }
 
