@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n1.c	1.46 (gritter) 11/16/05
+ * Sccsid @(#)n1.c	1.54 (gritter) 12/9/05
  */
 
 /*
@@ -59,6 +59,7 @@ char *xxxvers = "@(#)roff:n1.c	2.13";
 #include <signal.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <setjmp.h>
 #include <time.h>
 #include <stdarg.h>
@@ -90,8 +91,9 @@ filep	ipl[NSO];
 long	offl[NSO];
 long	ioff;
 char	*ttyp;
-char	cfname[NSO+1][NS];	/*file name stack*/
+char	*cfname[NSO+1];		/*file name stack*/
 int	cfline[NSO];		/*input line count stack*/
+static int	cfpid[NSO+1];	/* .pso process IDs */
 char	*progname;	/* program name (troff) */
 #ifdef	EUC
 char	mbbuf1[MB_LEN_MAX + 1];
@@ -122,12 +124,15 @@ main(int argc, char **argv)
 	setlocale(LC_CTYPE, "");
 	mb_cur_max = MB_CUR_MAX;
 	progname = argv[0];
+	nextf = calloc(1, NS = 1);
 	d = calloc(NDI = 5, sizeof *d);
 	growblist();
 	growcontab();
 	grownumtab();
 	growpbbuf();
 	morechars(1);
+	for (j = 0; j <= NSO; j++)
+		cfpid[j] = -1;
 	if (signal(SIGHUP, SIG_IGN) != SIG_IGN)
 		signal(SIGHUP, catch);
 	if (signal(SIGINT, catch) == SIG_IGN) {
@@ -138,6 +143,7 @@ main(int argc, char **argv)
 	signal(SIGPIPE, catch);
 	signal(SIGTERM, kcatch);
 	oargv = argv;
+	cfname[0] = malloc(17);
 	strcpy(cfname[0], "<standard input>");
 	mrehash();
 	nrehash();
@@ -152,13 +158,13 @@ main(int argc, char **argv)
 
 		case 'F':	/* switch font tables from default */
 			if (argv[0][2] != '\0') {
-				strcpy(termtab, &argv[0][2]);
-				strcpy(fontfile, &argv[0][2]);
+				termtab = &argv[0][2];
+				fontfile = &argv[0][2];
 			} else {
 				argv++; argc--;
 				if (argv[0] != '\0') {
-					strcpy(termtab, argv[0]);
-					strcpy(fontfile, argv[0]);
+					termtab = argv[0];
+					fontfile = argv[0];
 				} else
 					errprint("missing the font directory");
 			}
@@ -230,7 +236,10 @@ main(int argc, char **argv)
 			dotT++;
 			continue;
 		case 'x':
-			xflag = 2;
+			if (argv[0][2])
+				xflag = strtol(&argv[0][2], NULL, 10);
+			else
+				xflag = 2;
 			continue;
 		case 'X':
 			xflag = 0;
@@ -412,6 +421,8 @@ init2(void)
 	mchbits();
 	cvtime();
 	numtab[PID].val = getpid();
+	spreadlimit = 3*EM;
+	setnr(".warn", warn, 0);
 	olinep = oline;
 	ioff = 0;
 	numtab[HP].val = init = 0;
@@ -453,6 +464,10 @@ cvtime(void)
 	numtab[DW].val = tm->tm_wday + 1;
 	numtab[YR].val = tm->tm_year;
 	numtab[MO].val = tm->tm_mon + 1;
+	setnr("hours", tm->tm_hour, 0);
+	setnr("minutes", tm->tm_min, 0);
+	setnr("seconds", tm->tm_sec, 0);
+	setnr("year", tm->tm_year + 1900, 0);
 
 }
 
@@ -494,7 +509,7 @@ verrprint(const char *s, va_list ap)
 	vfdprintf(stderr, s, ap);
 	if (numtab[CD].val > 0)
 		fdprintf(stderr, "; line %d, file %s", numtab[CD].val,
-			 cfname[ifi]);
+			 cfname[ifi] ? cfname[ifi] : "");
 	fdprintf(stderr, "\n");
 	stackdump();
 #ifdef	DEBUG
@@ -690,8 +705,10 @@ control(register int a, register int b)
 {
 	register int	j;
 
-	if (a == 0 || (j = findmn(a)) == -1)
+	if (a == 0 || (j = findmn(a)) == -1) {
+		nosuch(a);
 		return(0);
+	}
 
 	/*
 	 * Attempt to find endless recursion at runtime. Arbitrary
@@ -1032,6 +1049,8 @@ gx:
 	case 'd':	/* half em down */
 		return(sethl(k));
 	default:
+		if (warn & WARN_ESCAPE)
+			errprint("undefined escape sequence \\%c", k);
 	dfl:	return(j);
 	}
 	/* NOTREACHED */
@@ -1131,6 +1150,7 @@ g2:
 			if ((n = mbrtowc(&twc, mbbuf1, mbbuf1p-mbbuf1, &state))
 					==(size_t)-1 ||
 					twc & ~(wchar_t)0x1FFFFF) {
+				illseq(-1, mbbuf1, mbbuf1p-mbbuf1);
 				mbbuf1p = mbbuf1;
 				*mbbuf1p = 0;
 				i &= 0177;
@@ -1164,6 +1184,7 @@ g2:
 			mbbuf1p = mbbuf1;
 		} else if ((n = mbtowc(&twc, mbbuf1, mb_cur_max)) <= 0) {
 			if (mbbuf1p >= mbbuf1 + mb_cur_max) {
+				illseq(-1, mbbuf1, mb_cur_max);
 				i &= ~(MBMASK | CSMASK);
 				twc = 0;
 				mbbuf1p = mbbuf1;
@@ -1191,8 +1212,12 @@ g2:
 #endif	/* NROFF */
 #endif	/* EUC */
 			goto g4;
-		if (i != 0177) 
+		if (i != 0177) {
+			if (i != ifilt[i])
+				illseq(i, NULL, 0);
 			i = ifilt[i];
+		} else
+			illseq(i, NULL, 0);
 	}
 	if (cbits(i) == IMP && !raw)
 		goto again;
@@ -1295,6 +1320,8 @@ n0:
 			done(0);
 		nfo++;
 		numtab[CD].val = ifile = stdi = mflg = 0;
+		free(cfname[ifi]);
+		cfname[ifi] = malloc(17);
 		strcpy(cfname[ifi], "<standard input>");
 		ioff = 0;
 		return(0);
@@ -1304,13 +1331,18 @@ n1:
 	numtab[CD].val = 0;
 	if (p[0] == '-' && p[1] == 0) {
 		ifile = 0;
+		free(cfname[ifi]);
+		cfname[ifi] = malloc(17);
 		strcpy(cfname[ifi], "<standard input>");
 	} else if ((ifile = open(p, O_RDONLY)) < 0) {
 		errprint("cannot open file %s", p);
 		nfo -= mflg;
 		done(02);
-	} else
+	} else {
+		free(cfname[ifi]);
+		cfname[ifi] = malloc(strlen(p) + 1);
 		strcpy(cfname[ifi],p);
+	}
 	nfo++;
 	ioff = 0;
 	return(0);
@@ -1323,6 +1355,10 @@ popf(void)
 	register int i;
 	register char	*p, *q;
 
+	if (cfpid[ifi] != -1) {
+		while (waitpid(cfpid[ifi], NULL, 0) != cfpid[ifi]);
+		cfpid[ifi] = -1;
+	}
 	ioff = offl[--ifi];
 	numtab[CD].val = cfline[ifi];		/*restore line counter*/
 	ip = ipl[ifi];
@@ -1335,7 +1371,7 @@ popf(void)
 			*q++ = *p++;
 		return(0);
 	}
-	if (lseek(ifile, ioff & ~(IBUFSZ-1), 0) == -1
+	if (lseek(ifile, ioff & ~(IBUFSZ-1), SEEK_SET) == -1
 	   || (i = read(ifile, ibuf, IBUFSZ)) < 0)
 		return(1);
 	eibuf = ibuf + i;
@@ -1399,6 +1435,8 @@ casenx(void)
 	nx++;
 	if (nmfi > 0)
 		nmfi--;
+	free(mfiles[nmfi]);
+	mfiles[nmfi] = malloc(NS);
 	strcpy(mfiles[nmfi], nextf);
 	nextfile();
 	nlflg++;
@@ -1416,7 +1454,7 @@ getname(void)
 	tchar i;
 
 	lgf++;
-	for (k = 0; k < (NS - 1); k++) {
+	for (k = 0; ; k++) {
 #ifndef EUC
 		if (((j = cbits(i = getch())) <= ' ') || (j > 0176))
 #else
@@ -1427,6 +1465,8 @@ getname(void)
 #endif /* NROFF */
 #endif /* EUC */
 			break;
+		if (k + 1 >= NS)
+			nextf = realloc(nextf, NS += 14);
 		nextf[k] = j & BYTEMASK;
 	}
 	nextf[k] = 0;
@@ -1458,23 +1498,18 @@ setuc(void)
 }
 
 
-void
-caseso(void)
+static void
+sopso(int i, pid_t pid)
 {
-	register int i = 0;
 	register char	*p, *q;
 
-	lgf++;
-	nextf[0] = 0;
-	if (skip() || !getname() || ((i = open(nextf, O_RDONLY)) < 0) ||
-			(ifi >= NSO)) {
-		errprint("can't open file %s", nextf);
-		done(02);
-	}
+	free(cfname[ifi+1]);
+	cfname[ifi+1] = malloc(NS);
 	strcpy(cfname[ifi+1], nextf);
 	cfline[ifi] = numtab[CD].val;		/*hold line counter*/
 	numtab[CD].val = 0;
 	flushi();
+	cfpid[ifi+1] = pid;
 	ifl[ifi] = ifile;
 	ifile = i;
 	offl[ifi] = ioff;
@@ -1494,6 +1529,60 @@ caseso(void)
 }
 
 void
+caseso(void)
+{
+	register int i = 0;
+
+	lgf++;
+	nextf[0] = 0;
+	if (skip() || !getname() || ((i = open(nextf, O_RDONLY)) < 0) ||
+			(ifi >= NSO)) {
+		errprint("can't open file %s", nextf);
+		done(02);
+	}
+	sopso(i, -1);
+}
+
+void
+casepso(void)
+{
+	int	pd[2];
+	int	c, i, k;
+	pid_t	pid;
+
+	lgf++;
+	nextf[0] = 0;
+	if (skip() || ifi >= NSO || pipe(pd) < 0) {
+		errprint("can't .pso");
+		done(02);
+	}
+	for (k = 0; ; k++) {
+		if ((c = cbits(i = getch())) == '\n' || c == 0)
+			break;
+		if (k + 1 >= NS)
+			nextf = realloc(nextf, NS += 14);
+		nextf[k] = c & BYTEMASK;
+	}
+	nextf[k] = 0;
+	switch (pid = fork()) {
+	case 0:
+		close(pd[0]);
+		close(1);
+		dup(pd[1]);
+		close(pd[1]);
+		execl(SHELL, "sh", "-c", nextf, NULL);
+		_exit(0177);
+		/*NOTREACHED*/
+	case -1:
+		errprint("can't fork");
+		done(02);
+		/*NOTREACHED*/
+	}
+	close(pd[1]);
+	sopso(pd[0], pid);
+}
+
+void
 caself(void)	/* set line number and file */
 {
 	int n;
@@ -1504,8 +1593,11 @@ caself(void)	/* set line number and file */
 	cfline[ifi] = numtab[CD].val = n - 2;
 	if (skip())
 		return;
-	if (getname())
+	if (getname()) {
+		free(cfname[ifi]);
+		cfname[ifi] = malloc(NS);
 		strcpy(cfname[ifi], nextf);
+	}
 }
 
 

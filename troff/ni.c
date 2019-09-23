@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)ni.c	1.15 (gritter) 9/6/05
+ * Sccsid @(#)ni.c	1.18 (gritter) 12/6/05
  */
 
 /*
@@ -52,14 +52,14 @@
 
 #ifdef NROFF
 
-char	termtab[NS] = TABDIR "/tab.";  /* term type added in ptinit() */
-char	fontfile[NS] = "";	/* not used */
+char	*termtab = TABDIR "/tab.";  /* term type added in ptinit() */
+char	*fontfile = "";		/* not used */
 char	devname[20] = "37";
 
 #else
 
-char	termtab[NS] = FNTDIR;           /* rest added in ptinit() */
-char	fontfile[NS] = FNTDIR;          /* rest added in casefp() */
+char	*termtab = FNTDIR;              /* rest added in ptinit() */
+char	*fontfile = FNTDIR;             /* rest added in casefp() */
 char	devname[20]	 = "ps";	/* default typesetter */
 
 #endif
@@ -91,7 +91,8 @@ const struct numtab initnumtab[] = {
 int	pto = 10000;
 int	pfrom = 1;
 int	print = 1;
-char	nextf[NS] = MACDIR "/";
+char	*nextf;
+int	NS;
 char	**mfiles;
 int	nmfi = 0;
 int	NMF;
@@ -129,6 +130,8 @@ int	ldrch = LEADER;
 
 extern void	caseft(void), caseps(void), casevs(void), casefp(void),
        		casess(void), casecs(void), casebd(void), caselg(void);
+
+enum warn	warn = WARN_FONT;
 
 int	NM;
 struct contab *contab;

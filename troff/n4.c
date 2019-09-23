@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n4.c	1.13 (gritter) 11/29/05
+ * Sccsid @(#)n4.c	1.19 (gritter) 12/9/05
  */
 
 /*
@@ -67,6 +67,8 @@ int	falsef	= 0;	/* on if inside false branch of if */
 #define	NHASH(i)	((i>>6)^i)&0177
 struct	numtab	*nhash[128];	/* 128 == the 0177 on line above */
 
+static int	_findr(register int i, int);
+
 void *
 grownumtab(void)
 {
@@ -95,6 +97,7 @@ grownumtab(void)
 void
 setn(void)
 {
+	extern const char	revision[];
 	register int i, j;
 	register tchar ii;
 	int	f;
@@ -212,15 +215,27 @@ setn(void)
 			i = bdtab[font];
 			break;
 		case 'F':
-			cpushback(cfname[ifi]);
+			cpushback(cfname[ifi] ? cfname[ifi] : "");
 			return;
+		case 'X':
+			if (xflag) {
+				i = xflag;
+				break;
+			}
+			/*FALLTHRU*/
+		case 'Y':
+			if (xflag) {
+				cpushback((char *)revision);
+				return;
+			}
+			/*FALLTHRU*/
 
 		default:
 			goto s0;
 		}
 	else {
 s0:
-		if ((j = findr(i)) == -1)
+		if ((j = _findr(i, 1)) == -1)
 			i = 0;
 		else {
 			i = numtab[j].val = (numtab[j].val+numtab[j].inc*f);
@@ -297,8 +312,14 @@ nunhash(register struct numtab *rp)
 	}
 }
 
-int 
-findr(register int i)
+int
+findr(int i)
+{
+	return _findr(i, 0);
+}
+
+static int 
+_findr(register int i, int rd)
 {
 	register struct numtab *p;
 	register int h = NHASH(i);
@@ -308,6 +329,8 @@ findr(register int i)
 	for (p = nhash[h]; p; p = p->link)
 		if (i == p->r)
 			return(p - numtab);
+	if (rd && warn & WARN_REG)
+		errprint("no such register %s", macname(i));
 	do {
 		for (p = numtab; p < &numtab[NN]; p++) {
 			if (p->r == 0) {
@@ -443,12 +466,32 @@ abc0(int i, int (*f)(tchar))
 	return(k + (*f)((i % 26 + nform) | nrbits));
 }
 
-long 
+static int	illscale;
+
+int
+atoi()
+{
+	int	n, c;
+
+	illscale = 0;
+	n = atoi0();
+	if (nonumb && ch && ch != ' ' && ch != '\n' && warn & WARN_NUMBER &&
+			illscale == 0) {
+		c = cbits(ch);
+		if ((c & ~0177) == 0 && isprint(c))
+			errprint("illegal number, char %c", c);
+		else
+			errprint("illegal number");
+	}
+	return n;
+}
+
+long long
 atoi0(void)
 {
 	register int c, k, cnt;
 	register tchar ii;
-	long	i, acc;
+	long long	i, acc;
 
 	i = 0; 
 	acc = 0;
@@ -571,11 +614,11 @@ a0:
 }
 
 
-long 
+long long
 ckph(void)
 {
 	register tchar i;
-	register long	j;
+	register long long	j;
 
 	if (cbits(i = getch()) == '(')
 		j = atoi0();
@@ -586,7 +629,7 @@ ckph(void)
 }
 
 
-long 
+long long
 atoi1(register tchar ii)
 {
 	register int i, j, digits;
@@ -673,6 +716,11 @@ a1:
 		i = 6;
 		break;
 	default:
+		if ((i >= 'a' && i <= 'z' || i >= 'A' && i <= 'Z') &&
+				warn & WARN_SCALE) {
+			errprint("undefined scale indicator %c", i);
+			illscale = 1;
+		}
 		j = dfact;
 		ch = ii;
 		i = dfactd;
@@ -726,10 +774,13 @@ caserr(void)
 	lgf++;
 	while (!skip() && (i = getrq()) ) {
 		if (i >= 256)
-			i = maybemore(i, 0);
+			i = maybemore(i, 2);
 		j = usedr(i);
-		if (j < 0)
+		if (j < 0) {
+			if (warn & WARN_REG)
+				errprint("no such register %s", macname(i));
 			continue;
+		}
 		p = &numtab[j];
 		nunhash(p);
 		p->r = p->val = p->inc = p->fmt = 0;
@@ -746,7 +797,7 @@ casenr(void)
 	lgf++;
 	skip();
 	if ((j = getrq()) >= 256)
-		j = maybemore(j, 1);
+		j = maybemore(j, 3);
 	if ((i = findr(j)) == -1)
 		goto rtn;
 	skip();
@@ -754,6 +805,16 @@ casenr(void)
 	if (nonumb)
 		goto rtn;
 	numtab[i].val = j;
+	/*
+	 * It is common use in pre-processors and macro packages
+	 * to append a unit definition to a user-supplied number
+	 * in order to achieve a default scale. Catch this case
+	 * now to avoid a warning because of an illegal number.
+	 */
+	j = cbits(ch);
+	if ((j >= 'a' && j <= 'z' || j >= 'A' && j <= 'Z') &&
+			warn & WARN_SCALE)
+		goto rtn;
 	skip();
 	j = atoi();
 	if (nonumb)
@@ -774,7 +835,7 @@ caseaf(void)
 	if (skip() || !(i = getrq()) || skip())
 		return;
 	if (i >= 256)
-		i = maybemore(i, 1);
+		i = maybemore(i, 3);
 	k = 0;
 	j = getch();
 	if (!ischar(jj = cbits(j)) || !isalpha(jj)) {

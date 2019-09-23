@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n3.c	1.55 (gritter) 11/29/05
+ * Sccsid @(#)n3.c	1.62 (gritter) 12/10/05
  */
 
 /*
@@ -109,6 +109,7 @@ growcontab(void)
 		addcon(i++, "hylang", (void(*)(int))casehylang);
 		addcon(i++, "flig", (void(*)(int))caseflig);
 		addcon(i++, "papersize", (void(*)(int))casepapersize);
+		addcon(i++, "mediasize", (void(*)(int))casemediasize);
 		addcon(i++, "shift", (void(*)(int))caseshift);
 		addcon(i++, "xflag", (void(*)(int))casexflag);
 		addcon(i++, "lhang", (void(*)(int))caselhang);
@@ -120,6 +121,15 @@ growcontab(void)
 		addcon(i++, "feature", (void(*)(int))casefeature);
 		addcon(i++, "recursionlimit", (void(*)(int))caserecursionlimit);
 		addcon(i++, "psbb", (void(*)(int))casepsbb);
+		addcon(i++, "pso", (void(*)(int))casepso);
+		addcon(i++, "tmc", (void(*)(int))casetmc);
+		addcon(i++, "open", (void(*)(int))caseopen);
+		addcon(i++, "opena", (void(*)(int))caseopena);
+		addcon(i++, "write", (void(*)(int))casewrite);
+		addcon(i++, "writec", (void(*)(int))casewritec);
+		addcon(i++, "close", (void(*)(int))caseclose);
+		addcon(i++, "spreadwarn", (void(*)(int))casespreadwarn);
+		addcon(i++, "warn", (void(*)(int))casewarn);
 	} else {
 		for (i = 0; i < sizeof mhash / sizeof *mhash; i++)
 			if (mhash[i])
@@ -187,8 +197,10 @@ casern(void)
 		return;
 	if (i >= 256)
 		i = maybemore(i, 0);
-	if ((oldmn = findmn(i)) < 0)
+	if ((oldmn = findmn(i)) < 0) {
+		nosuch(i);
 		return;
+	}
 	skip();
 	j = getrq();
 	if (j >= 256)
@@ -612,7 +624,7 @@ wbfl (void)			/*flush current blist[] block*/
 	if (woff == 0)
 		return;
 #ifndef INCORE
-	lseek(ibf, woff * sizeof(tchar), 0);
+	lseek(ibf, woff * sizeof(tchar), SEEK_SET);
 	write(ibf, (char *)wbuf, wbfi * sizeof(tchar));
 #endif
 	if ((woff & (~(BLK - 1))) == (roff & (~(BLK - 1))))
@@ -638,7 +650,7 @@ rbf (void)		/*return next char from blist[] block*/
 	j = ip & ~(BLK - 1);
 	if (j != roff) {
 		roff = j;
-		lseek(ibf, j * sizeof(tchar), 0);
+		lseek(ibf, j * sizeof(tchar), SEEK_SET);
 		if (read(ibf, (char *)rbuf, BLK * sizeof(tchar)) <= 0)
 			i = 0;
 		else
@@ -683,7 +695,7 @@ rbf0(register filep p)
 
 	if ((i = p & ~(BLK - 1)) != roff) {
 		roff = i;
-		lseek(ibf, roff * sizeof(tchar), 0);
+		lseek(ibf, roff * sizeof(tchar), SEEK_SET);
 		if (read(ibf, (char *)rbuf, BLK * sizeof(tchar)) == 0)
 			return(0);
 	}
@@ -810,6 +822,7 @@ setstr(void)
 
 	lgf++;
 	if ((i = getsn()) == 0 || (j = findmn(i)) == -1 || !contab[j].mx) {
+		nosuch(i);
 		lgf--;
 		return(0);
 	} else {
@@ -1002,7 +1015,8 @@ casedi(void)
 			numtab[DL].val = dip->maxl;
 			dip = &d[--dilev];
 			offset = dip->op;
-		}
+		} else if (warn & WARN_DI)
+			errprint(".di outside active diversion");
 		goto rtn;
 	}
 	if (++dilev == NDI) {
@@ -1145,8 +1159,10 @@ casechop(void)
 		return;
 	if (i >= 256)
 		i = maybemore(i, 0);
-	if ((j = findmn(i)) < 0)
+	if ((j = findmn(i)) < 0) {
+		nosuch(i);
 		return;
+	}
 	savip = ip;
 	ip = (filep)contab[j].mx;
 	app = 1;
@@ -1234,12 +1250,12 @@ macname(int rq)
 /*
  * To handle requests with more than two characters, an additional
  * table is maintained. On places where more than two characters are
- * allowed, the characters collected are passed in "sofar", and "create"
+ * allowed, the characters collected are passed in "sofar", and "flags"
  * specifies whether the request is a new one. The routine returns an
  * integer which is above the regular PAIR() values.
  */
 int
-maybemore(int sofar, int create)
+maybemore(int sofar, int flags)
 {
 	char	c, buf[NC+1], pb[] = { '\n', 0 };
 	int	i = 2, n, r = raw;
@@ -1265,10 +1281,21 @@ maybemore(int sofar, int create)
 		if (strcmp(had[n], buf) == 0)
 			break;
 	if (n == hadn) {
-		if (create == 0) {
+		if ((flags & 1) == 0) {
 		retn:	buf[i-1] = c;
 			cpushback(&buf[2]);
 			raw = r;
+			if (flags & 2)
+				/*EMPTY*/;
+			else if (warn & WARN_SPACE && i > 3 &&
+					findmn(sofar) >= 0) {
+				buf[i-1] = 0;
+				errprint("missing space at request %s", buf);
+			/*} else if (warn & WARN_MAC && i > 3 &&
+					findmn(sofar) < 0) {
+				buf[i-1] = 0;
+				errprint("no such request %s", buf);*/
+			}
 			return sofar;
 		}
 		if (n >= alcd)

@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)tdef.h	1.55 (gritter) 11/29/05
+ * Sccsid @(#)tdef.h	1.64 (gritter) 12/6/05
  */
 
 /*
@@ -163,8 +163,8 @@
 extern	int	NN;	/* number registers */
 #define	NNAMES	15	 /* predefined reg names */
 extern	int	NIF;	/* if-else nesting */
-#define	NS	128	/* name buffer */
-#define	NTM	256	/* tm buffer */
+extern	int	NS;	/* name buffer */
+#define	NTM	4096	/* tm buffer */
 #define	NEV	3	/* environments */
 #define	EVLSZ	10	/* size of ev stack */
 #define	DSIZE	512	/* disk sector size in chars */
@@ -192,8 +192,9 @@ extern	int	NCHARS;	/* maximum size of troff character set */
 
 /*
 	Internal character representation:
+ifndef NROFF
 	Internally, every character is carried around as
-	a 64 bit cookie, called a "tchar" (typedef long long).
+	a 64 bit cookie, called a "tchar" (typedef int64_t).
 	Bits are numbered 63..0 from left to right.
 	If bit 21 is 1, the character is motion, with
 		if bit 22 it's vertical motion
@@ -202,13 +203,27 @@ extern	int	NCHARS;	/* maximum size of troff character set */
 		if bit 63	zero motion
 		bits 62..40	size
 		bits 39..32	font
-if defined (EUC) && defined (NROFF)
+else NROFF
+	Internally, every character is carried around as
+	a 32 bit cookie, called a "tchar" (typedef int32_t).
+	Bits are numbered 31..0 from left to right.
+	If bit 15 is 1, the character is motion, with
+		if bit 16 it's vertical motion
+		if bit 17 it's negative motion
+	If bit 15 is 0, the character is a real character.
+		if bit 31	zero motion
+		bits 28..24	size
+		bits 23..16	font
+ifdef EUC
 		bits 14,13	identifier for the colunm of print of character.
 		bits 12,11	multibyte position identifier
-	Currently, this applies only to nroff.
-endif EUC && NROFF
+	This applies only to nroff; troff stores wide characters
+	as PostScript characters.
+endif EUC
+endif NROFF
 */
 
+#ifndef	NROFF
 /* in the following, "LL" should really be a tchar, but ... */
 
 #define	MOT	(01LL<<21)	/* motion character indicator */
@@ -244,6 +259,43 @@ endif EUC && NROFF
 #define	setfbits(n,f)	n = (n & ~FMASK) | (tchar)(f) << 32
 #define	setsfbits(n,sf)	n = (n & ~SFMASK) | (tchar)(sf) << 32
 #define	setcbits(n,c)	n = (n & ~0x001FFFFFLL | (c))	/* set character bits */
+
+#else	/* NROFF */
+/* in the following, "L" should really be a tchar, but ... */
+
+#define	MOT	(01L<<15)	/* motion character indicator */
+#define	MOTV	(07L<<15)	/* clear for motion part */
+#define	VMOT	(01L<<16)	/* vert motion bit */
+#define	NMOT	(01L<<17)	/* negative motion indicator*/
+#define	MAXMOT	32767	/* bad way to write this!!! */
+#define	ismot(n)	((n) & MOT)
+#define	isvmot(n)	((n) & VMOT)	/* must have tested MOT previously */
+#define	isnmot(n)	((n) & NMOT)	/* ditto */
+#define	absmot(n)	(unsigned)(0177777 & (n) & ~MOT)	/* (short) is cheap mask */
+#define	sabsmot(n)	((n)&0177777)
+
+#define	ZBIT	0x80000000 	/*  (01L << 31) */	/* zero width char */
+#define	iszbit(n)	((n) & ZBIT)
+#define	BLBIT	0x40000000	/* optional break-line char */
+#define	isblbit(n)	((n) & BLBIT)
+#define	COPYBIT	0x20000000	 /* wide character in copy mode */
+#define	iscopy(n)	((n) & COPYBIT)
+#define	ABSCHAR		0400	/* absolute char number in this font */
+
+#define	SMASK		(0037L << 24)
+#define	FMASK		(0377L << 16)
+#define	SFMASK		(SMASK|FMASK)	/* size and font in a tchar */
+#define	sbits(n)	(unsigned)(((n) >> 24) & 0037)
+#define	fbits(n)	(((n) >> 16) & 0377)
+#define	sfbits(n)	(unsigned)(0177777 & (((n) & SFMASK) >> 16))
+#define	cbits(n)	(unsigned)(0177777 & (n))	/* isolate bottom 16 bits  */
+#define	absbits(n)	(cbits(n) & ~ABSCHAR)
+
+#define	setsbits(n,s)	n = (n & ~SMASK) | (tchar)(s) << 24
+#define	setfbits(n,f)	n = (n & ~FMASK) | (tchar)(f) << 16
+#define	setsfbits(n,sf)	n = (n & ~SFMASK) | (tchar)(sf) << 16
+#define	setcbits(n,c)	n = (n & ~077777L | (c))	/* set character bits */
+#endif	/* NROFF */
 
 #define	BYTEMASK	0377
 #define	BYTE	8
@@ -345,9 +397,12 @@ typedef unsigned int filep;	/* this is good for 32 bit machines */
 #define	ENV_BLK		((NEV * sizeof(env) / sizeof(tchar) + BLK-1) / BLK)
 				/* rounded up to even BLK */
 
-typedef	long long	tchar;
-
-#define	atoi()		((int) atoi0())
+#include <inttypes.h>
+#ifndef	NROFF
+typedef	int64_t		tchar;
+#else	/* NROFF */
+typedef	int32_t		tchar;
+#endif	/* NROFF */
 
 extern	int	Inch, Hor, Vert, Unitwidth;
 
@@ -393,6 +448,24 @@ extern	int	debug;	/*debug flag*/
 #define	DB_GETC	04	/*print out message from getch()*/
 #define	DB_LOOP	010	/*print out message before "Eileen's loop" fix*/
 #endif	/* DEBUG */
+
+extern enum warn {
+	WARN_NONE	= 0,
+	WARN_CHAR	= 1,
+	WARN_NUMBER	= 2,
+	WARN_BREAK	= 4,
+	WARN_EL		= 16,
+	WARN_SCALE	= 32,
+	WARN_DI		= 256,
+	WARN_MAC	= 512,
+	WARN_REG	= 1024,
+	WARN_INPUT	= 16384,
+	WARN_ESCAPE	= 32768,
+	WARN_SPACE	= 65536,
+	WARN_FONT	= 131072,
+	WARN_ALL	= 2147481855,	/* all except di, mac, reg */
+	WARN_W		= 2147483647
+} warn;
 
 struct	d {	/* diversion */
 	filep	op;
@@ -634,6 +707,7 @@ int getach(void);
 void casenx(void);
 int getname(void);
 void caseso(void);
+void casepso(void);
 void caself(void);
 void casecf(void);
 void casesy(void);
@@ -715,9 +789,11 @@ int roman(int, int (*)(tchar));
 int roman0(int, int (*)(tchar), char *, char *);
 int abc(int, int (*)(tchar));
 int abc0(int, int (*)(tchar));
-long atoi0(void);
-long ckph(void);
-long atoi1(register tchar);
+#define	atoi()	xxatoi()
+int atoi();
+long long atoi0(void);
+long long ckph(void);
+long long atoi1(register tchar);
 void setnr(const char *, int, int);
 void caserr(void);
 void casenr(void);
@@ -735,6 +811,7 @@ void casefi(void);
 void casenf(void);
 void casers(void);
 void casens(void);
+void casespreadwarn(void);
 int chget(int);
 void casecc(void);
 void casec2(void);
@@ -759,6 +836,12 @@ int findn(int);
 void casepn(void);
 void casebp(void);
 void casetm(int);
+void casetmc(void);
+void caseopen(void);
+void caseopena(void);
+void casewrite(void);
+void casewritec(void);
+void caseclose(void);
 void casesp(int);
 void casert(void);
 void caseem(void);
@@ -841,4 +924,7 @@ tchar setfield(int);
 void localize(void);
 void caselc_ctype(void);
 void casepsbb(void);
+void casewarn(void);
+void nosuch(int);
+void illseq(int, const char *, int);
 void morechars(int);

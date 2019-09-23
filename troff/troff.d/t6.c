@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)t6.c	1.100 (gritter) 11/30/05
+ * Sccsid @(#)t6.c	1.103 (gritter) 12/10/05
  */
 
 /*
@@ -564,6 +564,9 @@ tchar setch(int delim)
 				c = j + 128 | chbits;
 				break;
 			}
+	if (c == 0 && warn & WARN_CHAR)
+		errprint("missing glyph \\%c%s%s", delim, temp,
+				delim == '[' ? "]" : "");
 	return c;
 }
 
@@ -771,7 +774,7 @@ setfont(int a)
 
 	if (a) {
 		if ((i = getrq()) >= 256)
-			i = maybemore(i, 1);
+			i = maybemore(i, 3);
 	} else 
 		i = getsn();
 	if (!i || i == 'P') {
@@ -960,7 +963,7 @@ caseflig(void)
 
 	skip();
 	if ((i = getrq()) >= 256)
-		i = maybemore(i, 0);
+		i = maybemore(i, 2);
 	if ((j = findft(i)) < 0 || skip())
 		return;
 	fontbase[j]->ligfont = atoi() & 037;
@@ -994,7 +997,7 @@ casefp(void)
 		errprint("fp: no font name");
 	else {
 		if (j >= 256)
-			j = maybemore(j, 1);
+			j = maybemore(j, 3);
 		if (skip() || !getname()) {
 			if (i == 0)
 				goto bad;
@@ -1008,9 +1011,11 @@ casefp(void)
 			} else
 				supply = NULL;
 			if (loadafm(i?i:-1, j, file, supply, 0) == 0) {
-				if (i == 0)
-					errprint("fp: cannot mount %s", file);
-				else
+				if (i == 0) {
+					if (warn & WARN_FONT)
+						errprint("fp: cannot mount %s",
+								file);
+				} else
 					setfp(i, j, file);
 			}
 			free(file);
@@ -1033,7 +1038,7 @@ setfp(int pos, int f, char *truename)	/* mount font f at position pos[0...nfonts
 		shortname = macname(f);
 	snprintf(longname, sizeof longname, "%s/dev%s/%s",
 			fontfile, devname, shortname);
-	if ((fpout = readfont(longname, &dev)) == NULL)
+	if ((fpout = readfont(longname, &dev, warn & WARN_FONT)) == NULL)
 		return(-1);
 	fontbase[pos] = (struct Font *)fpout;
 	if ((ap = strstr(fontbase[pos]->namefont, ".afm")) != NULL) {
@@ -1091,7 +1096,7 @@ casecs(void)
 	if (!(i = getrq()))
 		goto rtn;
 	if (i >= 256)
-		i = maybemore(i, 0);
+		i = maybemore(i, 2);
 	if ((i = findft(i)) < 0)
 		goto rtn;
 	skip();
@@ -1116,7 +1121,7 @@ casebd(void)
 	k = 0;
 bd0:
 	if (skip() || !(i = getrq()) ||
-			(i = i >= 256 ? maybemore(i, 0) : i,
+			(i = i >= 256 ? maybemore(i, 2) : i,
 			(j = findft(i)) == -1)) {
 		if (k)
 			goto bd1;
@@ -1391,7 +1396,7 @@ casetrack(void)
 
 	skip();
 	if ((i = getrq()) >= 256)
-		i = maybemore(i, 0);
+		i = maybemore(i, 2);
 	if ((j = findft(i)) < 0)
 		return;
 	s1 = tracknum();
@@ -1421,13 +1426,13 @@ casefallback(void)
 
 	skip();
 	if ((i = getrq()) >= 256)
-		i = maybemore(i, 0);
+		i = maybemore(i, 2);
 	if ((j = findft(i)) < 0)
 		return;
 	do {
 		skip();
 		if ((i = getrq()) >= 256)
-			i = maybemore(i, 0);
+			i = maybemore(i, 2);
 		fb = realloc(fb, (n+2) * sizeof *fb);
 		fb[n++] = i;
 	} while (i);
@@ -1443,7 +1448,7 @@ casehidechar(void)
 
 	skip();
 	if ((i = getrq()) >= 256)
-		i = maybemore(i, 0);
+		i = maybemore(i, 2);
 	if ((j = findft(i)) < 0)
 		return;
 	font = font1 = j;
@@ -1473,7 +1478,7 @@ casefzoom(void)
 
 	skip();
 	if ((i = getrq()) >= 256)
-		i = maybemore(i, 0);
+		i = maybemore(i, 2);
 	if ((j = findft(i)) < 0)
 		return;
 	skip();
@@ -1499,8 +1504,8 @@ casekern(void)
 	kern = skip() || atoi() ? 1 : 0;
 }
 
-void
-casepapersize(void)
+static void
+setpapersize(int setmedia)
 {
 	const struct {
 		char	*name;
@@ -1586,7 +1591,19 @@ casepapersize(void)
 	po = x > 6 * PO ? PO : x / 8;
 	ll = ll1 = lt = lt1 = x - 2 * po;
 	setnel();
-	ptpapersize(x, y);
+	ptpapersize(x, y, setmedia);
+}
+
+void
+casepapersize(void)
+{
+	return setpapersize(0);
+}
+
+void
+casemediasize(void)
+{
+	return setpapersize(1);
 }
 
 static void
@@ -1599,7 +1616,7 @@ hang(int **tp)
 	lgf++;
 	skip();
 	if ((i = getrq()) >= 256)
-		i = maybemore(i, 0);
+		i = maybemore(i, 2);
 	if ((j = findft(i)) < 0)
 		return;
 	font = font1 = j;
@@ -1642,7 +1659,7 @@ casekernpair(void)
 	lgf++;
 	skip();
 	if ((i = getrq()) >= 256)
-		i = maybemore(i, 0);
+		i = maybemore(i, 2);
 	if ((f = findft(i)) < 0)
 		return;
 	font = font1 = f;
@@ -1653,7 +1670,7 @@ casekernpair(void)
 	if (fbits(c) != f || skip())
 		goto done;
 	if ((i = getrq()) >= 256)
-		i = maybemore(i, 0);
+		i = maybemore(i, 2);
 	if ((g = findft(i)) < 0)
 		goto done;
 	font = font1 = g;
@@ -1694,7 +1711,7 @@ kernsingle(int **tp)
 	lgf++;
 	skip();
 	if ((i = getrq()) >= 256)
-		i = maybemore(i, 0);
+		i = maybemore(i, 2);
 	if ((f = findft(i)) < 0)
 		return;
 	font = font1 = f;
@@ -1739,7 +1756,7 @@ caseftr(void)
 	lgf++;
 	skip();
 	if ((i = getrq()) >= 256)
-		i = maybemore(i, 0);
+		i = maybemore(i, 2);
 	if ((f = findft(i)) < 0)
 		return;
 	font = font1 = f;
@@ -1818,7 +1835,7 @@ casefeature(void)
 	lgf++;
 	skip();
 	if ((i = getrq()) >= 256)
-		i = maybemore(i, 0);
+		i = maybemore(i, 2);
 	if ((f = findft(i)) < 0)
 		return;
 	if ((j = (fontbase[f]->afmpos) - 1) < 0 ||
@@ -1880,6 +1897,7 @@ un2tr(int c, int *fp)
 			if (unimap[i].code == c)
 				if ((j = postchar(unimap[i].psc, fp)) != 0)
 					return j;
+		illseq(c, NULL, 0);
 		return 0;
 	}
 }

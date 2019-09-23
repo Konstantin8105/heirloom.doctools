@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n5.c	1.22 (gritter) 11/8/05
+ * Sccsid @(#)n5.c	1.27 (gritter) 12/6/05
  */
 
 /*
@@ -46,6 +46,9 @@
  * contributors.
  */
 
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include <stdlib.h>
 #include <ctype.h>
 #ifdef 	EUC
@@ -62,6 +65,10 @@
 #include <unistd.h>
 #include "tdef.h"
 #include "ext.h"
+#ifdef	NROFF
+#include "tw.h"
+#endif
+#include "proto.h"
 
 extern void mchbits(void);
 
@@ -159,6 +166,19 @@ void
 casens(void)
 {
 	dip->nls++;
+}
+
+
+void
+casespreadwarn(void)
+{
+	if (skip())
+		spreadwarn = !spreadwarn;
+	else {
+		dfact = EM;
+		spreadlimit = inumb(&spreadlimit);
+		spreadwarn = 1;
+	}
 }
 
 
@@ -487,8 +507,8 @@ casebp(void)
 }
 
 
-void
-casetm(int ab)
+static void
+tmtmcwr(int ab, int tmc, int wr)
 {
 	register int i;
 	char	tmbuf[NTM];
@@ -502,13 +522,118 @@ casetm(int ab)
 			break;
 	if (i == NTM - 2)
 		tmbuf[i++] = '\n';
+	if (tmc)
+		i--;
 	tmbuf[i] = 0;
 	if (ab)	/* truncate output */
 		obufp = obuf;	/* should be a function in n2.c */
-	flusho();
-	fdprintf(stderr, "%s", tmbuf);
+	if (wr < 0) {
+		flusho();
+		fdprintf(stderr, "%s", tmbuf);
+	} else if (i)
+		write(wr, tmbuf, i);
 	copyf--;
 	lgf--;
+}
+
+void
+casetm(int ab)
+{
+	tmtmcwr(ab, 0, -1);
+}
+
+void
+casetmc(void)
+{
+	tmtmcwr(0, 1, -1);
+}
+
+static struct stream {
+	char	*name;
+	int	fd;
+} *streams;
+static int	nstreams;
+
+static void
+open1(int flags)
+{
+	int	ns = nstreams;
+
+	lgf++;
+	if (skip() || !getname() || skip())
+		return;
+	streams = realloc(streams, sizeof *streams * ++nstreams);
+	streams[ns].name = malloc(NS);
+	strcpy(streams[ns].name, nextf);
+	getname();
+	if ((streams[ns].fd = open(nextf, flags, 0666)) < 0) {
+		errprint("can't open file %s", nextf);
+		done(02);
+	}
+}
+
+void
+caseopen(void)
+{
+	open1(O_WRONLY|O_CREAT|O_TRUNC);
+}
+
+void
+caseopena(void)
+{
+	open1(O_WRONLY|O_CREAT|O_APPEND);
+}
+
+static int
+getstream(const char *name)
+{
+	int	i;
+
+	for (i = 0; i < nstreams; i++)
+		if (strcmp(streams[i].name, name) == 0)
+			return i;
+	errprint("no such stream %s", name);
+	return -1;
+}
+
+static void
+write1(int writec)
+{
+	int	i;
+
+	lgf++;
+	if (skip() || !getname())
+		return;
+	if ((i = getstream(nextf)) < 0)
+		return;
+	tmtmcwr(0, writec, streams[i].fd);
+}
+
+void
+casewrite(void)
+{
+	write1(0);
+}
+
+void
+casewritec(void)
+{
+	write1(1);
+}
+
+void
+caseclose(void)
+{
+	int	i;
+
+	lgf++;
+	if (skip() || !getname())
+		return;
+	if ((i = getstream(nextf)) < 0)
+		return;
+	free(streams[i].name);
+	memmove(&streams[i], &streams[i+1], sizeof *streams);
+	nstreams--;
 }
 
 
@@ -713,12 +838,12 @@ e1:
 	env = *np;
 #else
 	if (ev >= 0 && ev < NEV) {
-		lseek(ibf, ev * sizeof(env), 0);
+		lseek(ibf, ev * sizeof(env), SEEK_SET);
 		write(ibf, (char *) & env, sizeof(env));
 	} else
 		*op = env;
 	if (nxev >= 0 && nxev < NEV) {
-		lseek(ibf, nxev * sizeof(env), 0);
+		lseek(ibf, nxev * sizeof(env), SEEK_SET);
 		read(ibf, (char *) & env, sizeof(env));
 	} else
 		env = *np;
@@ -738,7 +863,7 @@ caseevc(void)
 	tmpenv = env;
 #ifndef	INCORE
 	if (nxev >= 0 && nxev < NEV) {
-		lseek(ibuf, nxev * sizeof(env), 0);
+		lseek(ibuf, nxev * sizeof(env), SEEK_SET);
 		read(ibf, (char *) & env, sizeof(env));
 	} else
 #endif
@@ -773,6 +898,8 @@ caseel(void)
 		if (NIF == 0)
 			growiflist();
 		iflist[0] = 0;
+		if (warn & WARN_EL)
+			errprint(".el without matching .ie");
 	}
 	caseif(2);
 }
@@ -808,7 +935,7 @@ caseif(int x)
 		notflag = 0;
 		ch = i;
 	}
-	i = atoi();
+	i = (int)atoi0();
 	if (!nonumb) {
 		if (i > 0)
 			true++;

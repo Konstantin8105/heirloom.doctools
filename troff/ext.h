@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)ext.h	1.28 (gritter) 11/16/05
+ * Sccsid @(#)ext.h	1.32 (gritter) 12/6/05
  */
 
 /*
@@ -46,6 +46,8 @@
  * contributors.
  */
 
+#include <sys/types.h>
+
 extern	char	**argp;
 extern	char	*chname;
 extern	char	*eibuf;
@@ -55,14 +57,13 @@ extern	char	*obufp;
 extern	char	*unlkp;
 extern	char	*xbufp;
 extern	char	*xeibuf;
-extern	char	cfname[NSO+1][NS];
+extern	char	*cfname[NSO+1];
 extern	char	devname[];
-extern	char	fontfile[];
 extern	char	ibuf[IBUFSZ];
 extern	char	**mfiles;
-extern	char	nextf[];
+extern	char	*nextf;
 extern	char	obuf[],	*obufp;
-extern	char	termtab[],	fontfile[];
+extern	char	*termtab,	*fontfile;
 extern	char	tmp_name[];
 extern	char	xbuf[IBUFSZ];
 extern	filep	apptr;
@@ -142,7 +143,7 @@ extern	int	over;
 extern	int	padc;
 extern	int	pfont;
 extern	int	pfrom;
-extern	int	pipeflg;
+extern	pid_t	pipeflg;
 extern	int	pl;
 extern	int	pnlist[];
 extern	int	po1;
@@ -211,3 +212,5 @@ extern	int	**rhangtab;
 extern	int	**kernafter;
 extern	int	**kernbefore;
 extern	int	**ftrtab;
+extern	int	spreadwarn;
+extern	int	spreadlimit;

@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)dpost.c	1.109 (gritter) 11/30/05
+ * Sccsid @(#)dpost.c	1.112 (gritter) 12/10/05
  */
 
 /*
@@ -1775,7 +1775,7 @@ have:   fontbase[n] = &a->Font;
     if ( access(temp, R_OK) < 0 ) 
             snprintf(temp, sizeof temp, "%s/dev%s/%s",
 			    fontdir, devname, mapfont(s));
-    if ((fpout = readfont(temp, &dev)) == NULL)
+    if ((fpout = readfont(temp, &dev, 0)) == NULL)
     fail:   error(FATAL, "can't open font table %s", temp);
 
     if ( fontbase[n] != NULL )		/* something's already there */
@@ -2234,7 +2234,7 @@ supplypfb(char *font, char *path, FILE *fp)
         fprintf(sf, "%%%%DocumentSuppliedResources: font %s\n", font);
     else
         fprintf(sf, "%%%%+ font %s\n", font);
-    fprintf(rf, "%%%%BeginResource: Font %s\n", font);
+    fprintf(rf, "%%%%BeginResource: font %s\n", font);
     for (;;) {
     	switch (type) {
     	case 1:
@@ -2347,7 +2347,7 @@ supplyttf(char *font, char *path, FILE *fp)
         	fprintf(sf, "%%%%DocumentSuppliedResources: font %s\n", font);
         else
         	fprintf(sf, "%%%%+ font %s\n", font);
-	fprintf(rf, "%%%%BeginResource: Font %s\n", font);
+	fprintf(rf, "%%%%BeginResource: font %s\n", font);
 	otft42(font, path, contents, size, rf);
 	fprintf(rf, "%%%%EndResource\n");
 	free(contents);
@@ -2395,7 +2395,7 @@ supply1(char *font, char *file, char *type)
         fprintf(sf, "%%%%DocumentSuppliedResources: font %s\n", font);
     else
         fprintf(sf, "%%%%+ font %s\n", font);
-    fprintf(rf, "%%%%BeginResource: Font %s\n", font);
+    fprintf(rf, "%%%%BeginResource: font %s\n", font);
     while (fgets(line, sizeof line, fp) != NULL)
 	    fputs(line, rf);
     fclose(fp);
@@ -2418,14 +2418,18 @@ t_dosupply(char *font)
 static void
 t_papersize(char *buf)
 {
-	int	x, y;
+	int	x, y, setmedia = 0;
 
-	if (sscanf(buf, "%d %d", &x, &y) != 2)
+	if (sscanf(buf, "%d %d %d", &x, &y, &setmedia) < 2)
 		return;
 	x = x * 72 / res;
 	y = y * 72 / res;
 	fprintf(gf, "/pagebbox [0 0 %d %d] def\n", x, y);
 	fprintf(gf, "userdict /gotpagebbox true put\n");
+	if (setmedia)
+		fprintf(gf, "/setpagedevice where {pop "
+			"1 dict dup /PageSize [%d %d] put setpagedevice"
+			"} if\n", x, y);
 	pagelength = y;
 }
 

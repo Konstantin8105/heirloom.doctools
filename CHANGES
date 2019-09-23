@@ -1,3 +1,35 @@
+Release 051212
+* [nt]roff: The ".pso" request has been added; it reads the output of
+  a command as input to troff.
+* [nt]roff: The ".tmc" request has been added; it works like ".tm" but
+  does not terminate the message with a newline.
+* [nt]roff: The ".open", ".opena", ".write", ".writec", and ".close"
+  requests have been added. They work like ".tm" but write to a named
+  file.
+* [nt]roff: The ".warn" request has been added; it enables additional
+  warning messages. The "\n[.warn]" register prints bits representing
+  the warning categories that are currently enabled.
+* [nt]roff: The ".spreadlimit" request has been added; it can be used
+  to print a warning when the adjustment computed for an output line
+  exceeds a certain value.
+* [nt]roff: The ".mediasize" request has been added; it causes dpost to
+  specify the page size using the PostScript "setpagedevice" operator.
+  This is mainly useful for creating PDF documents.
+* [nt]roff: The "\n[hours]", "\n[minutes]", "\n[seconds]", and "\n[year]"
+  registers have been added to print more parts of the current time.
+* [nr]roff: Availability of extensions is now controlled using an "-xN"
+  option, where "N" is the extension level. The previous "-x" and "-X"
+  options are still accepted.
+* [nt]roff: A "-msafe" macro package has been added; it disables those
+  requests that allow to execute commands or to write to files. It is
+  mainly useful for viewing manual pages.
+* pic: An "-S" option has been added to disable the "sh" element.
+* grap: An "-S" option has been added to disable the "sh" command.
+* nroff: Recognize the "\s'n'" escape sequence and discard it for
+  compatibility with troff.
+* dpost: When writing Type 42 fonts, write the sfnts array in a different
+  order to avoid an error with Acrobat Distiller.
+
 Release 051202
 * [nt]roff: When text is written to a diversion in nofill mode, spacing
   characters are preserved. This allows the text in the diversion to be
