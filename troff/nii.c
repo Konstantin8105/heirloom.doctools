@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)nii.c	1.42 (gritter) 8/12/06
+ * Sccsid @(#)nii.c	1.45 (gritter) 9/11/06
  */
 
 /*
@@ -95,6 +95,8 @@ int	iflg;
 int	rargc;
 char	**argp;
 int	*trtab;
+int	*trintab;
+int	*trnttab;
 int	lgf;
 int	copyf;
 filep	ip;
@@ -125,8 +127,6 @@ int	ralss;
 filep	nextb;
 tchar	nrbits;
 int	nform;
-int	oldmn;
-int	newmn;
 int	macerr;
 filep	apptr;
 int	diflg;
@@ -135,8 +135,6 @@ int	wbfi;
 int	vflag;
 int	noscale;
 int	po1;
-int	nlist[NTRAP];
-int	mlist[NTRAP];
 int	ev;
 int	tty;
 int	sfont	= FT;	/* appears to be "standard" font; used by .ul */
@@ -184,3 +182,4 @@ int	charoutsz;
 int	charf;
 int	fmtchar;
 int	Tflg;
+int	dl;

@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)dev.h	1.13 (gritter) 9/1/06
+ * Sccsid @(#)dev.h	1.15 (gritter) 9/24/06
  */
 
 /*
@@ -73,13 +73,14 @@ struct dev {
 	int	biggestfont;	/* #chars in largest ever font */
 	int	spare2;		/* in case of expansion */
 	int	lc_ctype;	/* understands x X LC_CTYPE */
+	int	encoding;	/* default output encoding */
 };
 
 struct Font {		/* characteristics of a font */
 	char	nwfont;		/* number of width entries for this font */
 	char	specfont;	/* 1 == special font */
 	char	ligfont;	/* 1 == ligatures exist on this font */
-	char	flgfont;	/* font flags */
+	char	kernfont;	/* minimum kerning, 0 == no limit, -1 == off */
 	char	namefont[10];	/* name of this font (e.g., "R" */
 	char	intname[10];	/* internal name (=number) on device, in ascii */
 	int	afmpos;		/* afmpos-1 = position in afmtab */
@@ -94,10 +95,6 @@ struct Font {		/* characteristics of a font */
 #define	LFL	04
 #define	LFFI	010
 #define	LFFL	020
-
-/* flags for ffont */
-
-#define	FNOKERN	01
 
 extern	void		*readdesc(const char *);
 extern	void		*readfont(const char *, struct dev *, int);

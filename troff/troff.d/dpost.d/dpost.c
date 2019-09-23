@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)dpost.c	1.154 (gritter) 9/2/06
+ * Sccsid @(#)dpost.c	1.164 (gritter) 10/5/06
  */
 
 /*
@@ -383,9 +383,9 @@ int		fsize;			/* max size of a font files in bytes */
 int		unitwidth;		/* set to dev.unitwidth */
 char		*chname;		/* special character strings */
 short		*chtab;			/* used to locate character names */
-short		**fitab;		/* locates char info on each font */
+unsigned short	**fitab;		/* locates char info on each font */
 int		**fontab;		/* character width data for each font */
-short		**codetab;		/* and codes to get characters printed */
+unsigned short	**codetab;		/* and codes to get characters printed */
 char		**kerntab;		/* for makefont() */
 
 
@@ -433,6 +433,7 @@ int		res;			/* resolution assumed in input file */
 float		widthfac = 1.0;		/* for emulation = res/dev.res */
 float		horscale = 1.0;		/* horizontal font scaling */
 float		lasthorscale = 1.0;	/* last horizontal font scaling */
+int		wordspace = 0;		/* w command was last */
 
 
 /*
@@ -450,6 +451,7 @@ int		lastfont = -1;		/* last font we told printer about */
 int		lastsubfont = -1;	/* last extra encoding vector */
 float		lastx = -1;		/* printer's current position */
 int		lasty = -1;
+int		savey = -1;
 int		lastend;		/* where last character on this line was */
 
 
@@ -1559,6 +1561,7 @@ conv(
 		    break;
 
 	    case 'w':			/* word space */
+		    wordspace++;
 		    break;
 
 	    case 'V':			/* absolute vertical position */
@@ -1679,8 +1682,9 @@ devcntrl(
 		fgets(buf, size, fp);	/* in case there's a filename */
 		ungetc('\n', fp);	/* fgets() goes too far */
 		str1[0] = '\0';		/* in case there's nothing to come in */
-		sscanf(buf, "%s", str1);
-		loadfont(n, mapdevfont(str), str1, 0);
+		c = 0;
+		sscanf(buf, "%s %d", str1, &c);
+		loadfont(n, mapdevfont(str), str1, 0, c);
 		break;
 
 	/* these don't belong here... */
@@ -1871,7 +1875,8 @@ loadfont (
     int n,			/* load this font position */
     char *s,			/* with the file for this font */
     char *s1,			/* taken from here - possibly */
-    int forcespecial		/* this is definitively a special font */
+    int forcespecial,		/* this is definitively a special font */
+    int spec			/* map specification */
 )
 
 
@@ -1903,18 +1908,25 @@ loadfont (
 	return;
 
     path = temp;
-    if (strchr(s, '/') != NULL)
+    if (s1 && strchr(s1, '/') != NULL)
+	path = afmdecodepath(s1);
+    else if (s1 && strstr(s1, ".afm") != NULL)
+	snprintf(temp, sizeof temp, "%s/dev%s/%s", fontdir, devname, s1);
+    else if (strchr(s, '/') != NULL) {
 	path = afmdecodepath(s);
-    else if (strstr(s, ".afm") != NULL)
+	if (spec == 0 && s1)
+		spec = atoi(s1);
+    } else if (strstr(s, ".afm") != NULL) {
 	snprintf(temp, sizeof temp, "%s/dev%s/%s", fontdir, devname, s);
-    else snprintf(temp, sizeof temp, "%s/dev%s/%s.afm", fontdir, devname, s);
+	if (spec == 0 && s1)
+		spec = atoi(s1);
+    } else snprintf(temp, sizeof temp, "%s/dev%s/%s.afm", fontdir, devname, s);
 
     if ( (fin = open(path, O_RDONLY)) >= 0 )  {
 	struct afmtab	*a;
 	struct stat	st;
 	char	*contents;
 	int	i;
-	enum spec	spec;
 	if ((p = strrchr(s, '/')) == NULL)
 		p = s;
 	else
@@ -1922,7 +1934,6 @@ loadfont (
 	if (p[0] == 'S' && (p[1] == '\0' || digitchar(p[1]&0377) &&
 				p[2] == '\0' || p[2] == '.'))
 		forcespecial = 1;
-	spec = s1 && *s1 ? atoi(s1) : SPEC_NONE;
 	for (i = 0; i < afmcount; i++)
 		if (afmfonts[i] && strcmp(afmfonts[i]->path, path) == 0 &&
 				afmfonts[i]->spec == spec) {
@@ -2029,7 +2040,7 @@ loadspecial(void)
 	for ( i = 1, p = chname + dev.lchname; i <= dev.nfonts; i++ )  {
 	    nw = *p & BMASK;
 	    if ( ((struct Font *) p)->specfont == 1 )
-		loadfont(++nfonts, ((struct Font *)p)->namefont, NULL, 1);
+		loadfont(++nfonts, ((struct Font *)p)->namefont, NULL, 1, 0);
 	    p += 3 * nw + dev.nchtab + 128 - 32 + sizeof(struct Font);
 	}   /* End for */
 
@@ -2048,7 +2059,7 @@ loaddefault(void)
   int i;
 
   for (i = 0; defaultFonts[i] != NULL ; i++)
-    loadfont(++nfonts, defaultFonts[i], NULL, defaultFonts[i][0] == 'S');
+    loadfont(++nfonts, defaultFonts[i], NULL, defaultFonts[i][0] == 'S', 0);
 }
 
 
@@ -2254,7 +2265,7 @@ reset(void)
 
 
     lastx = -(slop + 1);
-    lasty = -1;
+    savey = lasty = -1;
     lastfont = lastsubfont = lastsize = -1;
     if (tracked)
 	    tracked = -1;
@@ -2285,7 +2296,7 @@ resetpos(void)
 
 
     lastx = -(slop + 1);
-    lasty = -1;
+    savey = lasty = -1;
 
 }   /* End of resetpos */
 
@@ -2323,9 +2334,9 @@ t_init(void)
 	if (dev.afmfonts) {
 		if (Sflag == 0)
 			pointslop = 0;
-		if (eflag == 0)
-			realencoding = encoding = HIGHDFLTENCODING;
 	}
+	if (eflag == 0)
+		encoding = dev.encoding;
 	if (encoding == 5) {
 	    LanguageLevel = MAX(LanguageLevel, 2);
 	    Binary++;
@@ -2400,7 +2411,7 @@ ple32(const char *cp)
 }
 
 static const char ps_adobe_font_[] = "%!PS-AdobeFont-";
-static const char ps_truetypefont_[] = "%!PS-TrueTypeFont-";
+static const char ps_truetypefont[] = "%!PS-TrueTypeFont";
 static const char hex[] = "0123456789abcdef";
 
 static void
@@ -2613,9 +2624,9 @@ supply1(char *font, char *file, char *type)
     if (fgets(line, sizeof line, fp) == NULL)
             error(FATAL, "missing data in %s", file);
     if (strncmp(line, ps_adobe_font_, strlen(ps_adobe_font_)) &&
-		    strncmp(line, ps_truetypefont_, strlen(ps_truetypefont_)))
+		    strncmp(line, ps_truetypefont, strlen(ps_truetypefont)))
 	    error(FATAL, "file %s does not start with \"%s\" or \"%s\"",
-			    file, ps_adobe_font_, ps_truetypefont_);
+			    file, ps_adobe_font_, ps_truetypefont);
     if (sfcount++ == 0)
         fprintf(sf, "%%%%DocumentSuppliedResources: font %s\n", font);
     else
@@ -2929,8 +2940,6 @@ t_track(char *buf)
  * Currently this is done in encodings 0, 4, and 5 only.
  */
 
-	if (encoding != 0 && encoding != 4 && encoding != 5)
-		return;
 	if (sscanf(buf, "%d", &t) != 1)
 		t = 0;
 	if (t != lasttrack) {
@@ -3040,6 +3049,13 @@ end\n",
 	if (n)
 		fprintf(gf, "@%d", n);
 	fprintf(gf, " def\n");
+	fprintf(gf, "/&%s", a->Font.intname);
+	if (n)
+		fprintf(gf, "@%d", n);
+	fprintf(gf, " {@%s", a->Font.intname);
+	if (n)
+		fprintf(gf, "@%d", n);
+	fprintf(gf, " F} bind def\n");
 }
 
 static void
@@ -3182,7 +3198,7 @@ t_sf(int forceflush)
     }	/* End if */
 
     cmd = 'f';
-    if (forceflush == 0 && (encoding == 4 || encoding == 5)) {
+    if (forceflush == 0) {
 	if (font == lastfont && subfont == lastsubfont)
 	    cmd = 's';
 	else if (size == lastsize && fractsize == lastfractsize)
@@ -3212,7 +3228,13 @@ t_sf(int forceflush)
         else
 	    fprintf(tf, "%g ", (double)fractsize);
     }
-    if (cmd == 'f' || cmd == 'F' || cmd == 'h') {
+    if (fontname[font].afm && cmd == 'F') {
+        if (subfont)
+    	    fprintf(tf, "&%s@%d\n", fontname[font].afm->Font.intname, subfont);
+        else
+    	    fprintf(tf, "&%s\n", fontname[font].afm->Font.intname);
+	cmd = 0;
+    } else if (cmd == 'f' || cmd == 'F' || cmd == 'h') {
         if (fontname[font].afm && subfont)
     	    fprintf(tf, "@%s@%d ", fontname[font].afm->Font.intname, subfont);
         else if (fontname[font].afm)
@@ -3222,7 +3244,8 @@ t_sf(int forceflush)
     }
     if (cmd == 'h')
 	    fprintf(tf, "%g ", horscale);
-    fprintf(tf, "%c\n", cmd);
+    if (cmd)
+	    fprintf(tf, "%c\n", cmd);
 
     if ( fontname[font].fontheight != 0 || fontname[font].fontslant != 0 ) {
 	if (size != FRACTSIZE)
@@ -3231,7 +3254,7 @@ t_sf(int forceflush)
 	    fprintf(tf, "%d %g changefont\n", fontname[font].fontslant, (fontname[font].fontheight != 0) ? (double)fontname[font].fontheight : (double)fractsize);
     }
 
-    if (tracked < 0)
+    if (tracked < 0 || tracked > 0 && forceflush)
 	    t_strack();
 
 }   /* End of t_sf */
@@ -3461,7 +3484,7 @@ xymove (
     fprintf(tf, "%d %d m\n", hpos, vpos);
 
     lastx = hpos;
-    lasty = vpos;
+    savey = lasty = vpos;
 
 }   /* End of xymove */
 
@@ -3499,8 +3522,8 @@ put1s (
 	 struct afmtab	*a;
 	 if ((a = fontname[font].afm) != NULL &&
 			 (np = afmnamelook(a, &s[2])) != NULL &&
-			 ((m = np->fival[0]) != -1 ||
-			  (m = np->fival[1]) != -1)) {
+			 ((m = np->fival[0]) != NOCODE ||
+			  (m = np->fival[1]) != NOCODE)) {
 	     put1(m+32);
 	     return;
 	 }
@@ -3533,7 +3556,7 @@ put1 (
     register int	j;		/* number of fonts we've checked so far */
     register int	k;		/* font we're currently looking at */
     int			*pw = NULL;	/* font widthtab and */
-    short		*p = NULL;	/* and codetab where c was found */
+    unsigned short	*p = NULL;	/* and codetab where c was found */
     int			code;		/* code used to get c printed */
     int			ofont;		/* font when we started */
 
@@ -3592,9 +3615,9 @@ put1 (
 	    lastw = horscale * widthfac * (int)((pw[i] * fractsize + unitwidth/2) / unitwidth);
 	if (widthfac == 1)	/* ignore fractional parts since troff */
 		lastw = (int)lastw;	/* does the same */
-	if (track && (encoding == 0 || encoding == 4 || encoding == 5))
+	if (track && encoding != MAXENCODING+2)
 		lastw += track;
-	if (code == -1 && fontname[k].afm)
+	if (code == NOCODE && fontname[k].afm)
 		code = c + 32;
 	oput(code);
     }	/* End if */
@@ -3631,6 +3654,7 @@ oprep(int maysplit, int stext)
         if ( ABS(hpos - lastx) > slop )
 	    endstring();
     }
+    wordspace = 0;
 }
 
 
@@ -3745,7 +3769,9 @@ endtext(void)
 
 {
 
+    char	buf[STRINGSPACE+100];
     int		i;			/* loop index */
+    int		n, m;
 
 
 /*
@@ -3788,19 +3814,55 @@ endtext(void)
 		*strptr = '\0';
 		line[textcount].width = lastx - line[textcount].start;
 		if ( spacecount != 0 || textcount != 1 )  {
-		    for ( i = textcount; i > 0; i-- )
-			fprintf(tf, "(%s)%d %d\n", line[i].str, line[i].spaces, line[i].width);
-		    fprintf(tf, " %d %d %d t\n", textcount, stringstart, lasty);
-		} else fprintf(tf, "(%s)%d %d w\n", line[1].str, stringstart, lasty);
+		    n = 0;
+		    for ( i = textcount; i > 0; i-- ) {
+			m = snprintf(buf, sizeof buf, "(%s)%d %d",
+				line[i].str, line[i].spaces, line[i].width);
+			if (i < textcount && n + m >= 80) {
+			    putc('\n', tf);
+			    n = 0;
+			}
+			fputs(buf, tf);
+			n += m;
+		    }
+		    if (lasty != savey)
+		        fprintf(tf, " %d %d %d t\n", textcount, stringstart, lasty);
+		    else
+		        fprintf(tf, " %d %d u\n", textcount, stringstart);
+		} else {
+			if (lasty != savey)
+			    fprintf(tf, "(%s)%d %d w\n", line[1].str, stringstart, lasty);
+			else
+			    fprintf(tf, "(%s)%d v\n", line[1].str, stringstart);
+		}
+		savey = lasty;
 		break;
 
 	    case 3:
 		*strptr = '\0';
 		if ( spacecount != 0 || textcount != 1 )  {
-		    for ( i = textcount; i > 0; i-- )
-			fprintf(tf, "(%s)%d", line[i].str, line[i].dx);
-		    fprintf(tf, " %d %d %d t\n", textcount, stringstart, lasty);
-		} else fprintf(tf, "(%s)%d %d w\n", line[1].str, stringstart, lasty);
+		    n = 0;
+		    for ( i = textcount; i > 0; i-- ) {
+			m = snprintf(buf, sizeof buf, "(%s)%d",
+				line[i].str, line[i].dx);
+			if (i < textcount && n + m >= 80) {
+			    putc('\n', tf);
+			    n = 0;
+			}
+			fputs(buf, tf);
+			n += m;
+		    }
+		    if (lasty != savey)
+		        fprintf(tf, " %d %d %d t\n", textcount, stringstart, lasty);
+		    else
+		        fprintf(tf, " %d %d u\n", textcount, stringstart);
+		} else {
+			if (lasty != savey)
+			    fprintf(tf, "(%s)%d %d w\n", line[1].str, stringstart, lasty);
+			else
+			    fprintf(tf, "(%s)%d v\n", line[1].str, stringstart);
+		}
+		savey = lasty;
 		break;
 
 	    case MAXENCODING+1:
@@ -3882,6 +3944,11 @@ endstring(void)
 
 	case 2:
 	case 3:
+	    if (!wordspace) {
+		    endtext();
+		    starttext();
+		    break;
+	    }
 	    dx = hpos - lastx;
 	    if ( spacecount++ == 0 )
 		line[textcount].dx = dx;
@@ -3945,9 +4012,10 @@ endline(void)
 
     endtext();
 
-    if ( encoding == 0 || encoding == 4 || encoding == MAXENCODING+1 )
+    if ( encoding == 0 || encoding == 4 || encoding == MAXENCODING+1 ) {
 	fprintf(tf, "%d %d m\n", hpos, vpos);
-    else if (encoding == 5) {
+	savey = vpos;
+    } else if (encoding == 5) {
 	    putint(hpos, tf);
 	    putint(vpos, tf);
 	    putc('m', tf);
@@ -4159,6 +4227,7 @@ charlib (
 		cat(temp, tf);
 	}   /* End if */
 	fprintf(tf, "%d %d m\n", stringstart = hpos + lastw, vpos);
+	savey = vpos;
     }	/* End if */
 
 }   /* End of charlib */

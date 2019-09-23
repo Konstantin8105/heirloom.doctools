@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)tdef.h	1.130 (gritter) 9/3/06
+ * Sccsid @(#)tdef.h	1.136 (gritter) 9/10/06
  */
 
 /*
@@ -166,6 +166,7 @@
 #define	RQ5	0021	/* fifth five bits of request number */
 #define	NSRQ	5	/* number of tchars to store a request */
 #define	CHAR	0022	/* formatted result of a .char execution */
+#define	INDENT	0023	/* current indent (informational only, no move) */
 
 #define	isxfunc(c, x)	(cbits(c) == XFUNC && fbits(c) == (x))
 
@@ -544,7 +545,9 @@ extern enum warn {
 enum flags {
 	FLAG_WATCH	= 01,
 	FLAG_STRING	= 02,
-	FLAG_USED	= 04
+	FLAG_USED	= 04,
+	FLAG_DIVERSION	= 010,
+	FLAG_LOCAL	= 020
 };
 
 struct	d {	/* diversion */
@@ -561,6 +564,9 @@ struct	d {	/* diversion */
 	int	hnl;
 	int	curd;
 	int	flss;
+	struct contab	*soff;
+	int	mlist[NTRAP];
+	int	nlist[NTRAP];
 	struct env	*boxenv;
 };
 
@@ -585,12 +591,20 @@ struct	s {	/* stack frame */
 	int	mname;
 	int	frame_cnt;
 	int	tail_cnt;
-	int	contp;
+	struct contab	*contp;
+	int	pull;
+	struct numtab	*numtab;
+	struct numtab	**nhash;
+	struct contab	*contab;
+	struct contab	**mhash;
+	int	NN;
+	int	NM;
 	enum {
 		LOOP_FREE = 01,
 		LOOP_NEXT = 02,
 		LOOP_EVAL = 04
 	} loopf;
+	enum flags	flags;
 };
 
 extern struct contab {

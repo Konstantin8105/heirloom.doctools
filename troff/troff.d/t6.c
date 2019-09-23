@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)t6.c	1.174 (gritter) 9/4/06
+ * Sccsid @(#)t6.c	1.184 (gritter) 10/9/06
  */
 
 /*
@@ -140,8 +140,10 @@ width(register tchar j)
 		return(ses);
 	if (i==ohc)
 		return(0);
-	i = trtab[i];
-	i = ftrans(fbits(j), i);
+	if (!xflag || !isdi(j)) {
+		i = trtab[i];
+		i = ftrans(fbits(j), i);
+	}
 	if (i < 32)
 		return(0);
 	lasttrack = 0;
@@ -150,11 +152,14 @@ width(register tchar j)
 		xpts = ppts;
 	} else 
 		xbits(j, 0);
-	if (widcache[i-32].fontpts == xfont + (xpts<<8) && !setwdf &&
-			!_minflg && !horscale) {
-		k = rawwidth = widcache[i-32].width;
+	if (widcache[i-32].fontpts == xfont + (xpts<<8) &&
+			(i > 32 || widcache[i-32].evid == evname) &&
+			!setwdf && !_minflg && !horscale) {
+		rawwidth = widcache[i-32].width - widcache[i-32].track;
+		k = widcache[i-32].width + lettrack;
 		lastrst = widcache[i-32].rst;
 		lastrsb = widcache[i-32].rsb;
+		lasttrack = widcache[i-32].track;
 	} else {
 		if (_minflg && i == 32 && cbits(j) != 32)
 			_minflg = 0;
@@ -200,12 +205,14 @@ getcw(register int i)
 	int	s, t;
 	double	z = 1, zv;
 	struct afmtab	*a;
+	int	cd = 0;
 
 	bd = 0;
 	if (i >= nchtab + 128-32) {
-		if (afmtab && fontbase[xfont]->afmpos - 1 >= 0)
-			i -= nchtab + 128;
-		else {
+		if (afmtab && fontbase[xfont]->afmpos - 1 >= 0) {
+			cd = nchtab + 128;
+			i -= cd;
+		} else {
 			j = abscw(i + 32 - (nchtab+128));
 			goto g0;
 		}
@@ -335,31 +342,30 @@ getcw(register int i)
 	rawwidth = k;
 	s = xpts;
 	lasttrack = 0;
-	if (s <= tracktab[ofont].s1 && tracktab[ofont].n1) {
-		nocache = 1;
+	if (s <= tracktab[ofont].s1 && tracktab[ofont].n1)
 		lasttrack = tracktab[ofont].n1;
-	} else if (s >= tracktab[ofont].s2 && tracktab[ofont].n2) {
-		nocache = 1;
+	else if (s >= tracktab[ofont].s2 && tracktab[ofont].n2)
 		lasttrack = tracktab[ofont].n2;
-	} else if (s > tracktab[ofont].s1 && s < tracktab[ofont].s2) {
+	else if (s > tracktab[ofont].s1 && s < tracktab[ofont].s2) {
 		int	r;
 		r = (s * tracktab[ofont].n2 - s * tracktab[ofont].n1
 				+ tracktab[ofont].s2 * tracktab[ofont].n1
 				- tracktab[ofont].s1 * tracktab[ofont].n2)
 			/ (tracktab[ofont].s2 - tracktab[ofont].s1);
-		if (r != 0) {
-			nocache = 1;
+		if (r != 0)
 			lasttrack = r;
-		}
 	}
 	k += lasttrack + lettrack;
-	if (nocache|bd|lettrack)
+	i += cd;
+	if (nocache|bd)
 		widcache[i].fontpts = 0;
 	else {
 		widcache[i].fontpts = xfont + (xpts<<8);
-		widcache[i].width = k;
+		widcache[i].width = k - lettrack;
 		widcache[i].rst = lastrst;
 		widcache[i].rsb = lastrsb;
+		widcache[i].track = lasttrack;
+		widcache[i].evid = evname;
 	}
 	return(k);
 	/* Unitwidth is Units/Point, where
@@ -446,10 +452,14 @@ kernadjust(tchar c, tchar d)
 	lastkern = 0;
 	if (!kern || ismot(c) || ismot(d))
 		return 0;
-	c = trtab[cbits(c)] | c & SFMASK;
-	c = ftrans(fbits(c), cbits(c)) | c & SFMASK;
-	d = trtab[cbits(d)] | d & SFMASK;
-	d = ftrans(fbits(d), cbits(d)) | d & SFMASK;
+	if (!isdi(c)) {
+		c = trtab[cbits(c)] | c & SFMASK;
+		c = ftrans(fbits(c), cbits(c)) | c & SFMASK;
+	}
+	if (!isdi(d)) {
+		d = trtab[cbits(d)] | d & SFMASK;
+		d = ftrans(fbits(d), cbits(d)) | d & SFMASK;
+	}
 	return getkw(c, d);
 }
 
@@ -580,7 +590,7 @@ getkw(tchar c, tchar d)
 			k = kp->n;
 		else if ((n = (fontbase[f]->afmpos)-1) >= 0 &&
 				n == (fontbase[g]->afmpos)-1 &&
-				(fontbase[f]->flgfont & FNOKERN) == 0) {
+				fontbase[f]->kernfont >= 0) {
 			a = afmtab[n];
 			I = i - 32;
 			J = j - 32;
@@ -589,6 +599,8 @@ getkw(tchar c, tchar d)
 			if (J >= nchtab + 128)
 				J -= nchtab + 128;
 			k = afmgetkern(a, I, J);
+			if (abs(k) < fontbase[f]->kernfont)
+				k = 0;
 		}
 		if (j>32 && kernafter != NULL && kernafter[fbits(c)] != NULL)
 			k += kernafter[fbits(c)][i];
@@ -644,10 +656,10 @@ postchar1(const char *temp, int f)
 		a = afmtab[i];
 		np = afmnamelook(a, temp);
 		if (np->afpos != 0) {
-			if (np->fival[0] >= 0 &&
+			if (np->fival[0] != NOCODE &&
 					fitab[f][np->fival[0]])
 				return np->fival[0] + 32 + nchtab + 128;
-			else if (np->fival[1] >= 0 &&
+			else if (np->fival[1] != NOCODE &&
 					fitab[f][np->fival[1]])
 				return np->fival[1] + 32 + nchtab + 128;
 			else
@@ -900,9 +912,13 @@ mchbits(void)
 void
 setps(void)
 {
-	register int i, j = 0, k;
+	tchar	c;
+	register int i, j = 0;
+	int	k;
 
-	i = cbits(getch());
+	i = cbits(c = getch());
+	if (ismot(c) && xflag)
+		return;
 	if (ischar(i) && isdigit(i)) {		/* \sd or \sdd */
 		i -= '0';
 		if (i == 0)		/* \s0 */
@@ -922,7 +938,7 @@ setps(void)
 		else
 			j = pts2u(j);
 	} else if (i == '+' || i == '-') {	/* \s+, \s- */
-		j = cbits(getch());
+		j = cbits(c = getch());
 		if (ischar(j) && isdigit(j)) {		/* \s+d, \s-d */
 			j -= '0';
 			j = pts2u(j);
@@ -930,30 +946,35 @@ setps(void)
 			j = cbits(getch()) - '0';
 			j = 10 * j + cbits(getch()) - '0';
 			j = pts2u(j);
-		} else if ((j == '[' || j == '\'') && xflag) {	/* \s+[dd], */
+		} else if (xflag) {	/* \s+[dd], */
 			k = j == '[' ? ']' : j;			/* \s-'dd' */
+			setcbits(c, k);
 			dfact = INCH;
 			dfactd = 72;
 			res = HOR;
 			j = atoi();
 			if (nonumb)
 				return;
-			if (cbits(getch()) != k)
+			if (!issame(getch(), c))
 				nodelim(k);
 		}
 		if (i == '-')
 			j = -j;
 		j += apts;
-	} else if ((i == '[' || i == '\'') && xflag) {	/* \s'+dd', \s[dd] */
-		if (i == '[')
+	} else if (xflag) {	/* \s'+dd', \s[dd] */
+		if (i == '[') {
 			i = ']';
+			setcbits(c, i);
+		}
 		dfact = INCH;
 		dfactd = 72;
 		res = HOR;
-		j = inumb(&apts);
+		j = inumb2(&apts, &k);
 		if (nonumb)
 			return;
-		if (cbits(getch()) != i)
+		if (j == 0 && k == 0)
+			j = apts1;
+		if (!issame(getch(), c))
 			nodelim(i);
 	}
 	casps1(j);
@@ -1081,9 +1102,9 @@ setwd(void)
 	if (!issame(i, delim))
 		nodelim(delim);
 	setn1(wid, 0, (tchar) 0);
-	prwatchn(CT);
-	prwatchn(SB);
-	prwatchn(ST);
+	prwatchn(&numtab[CT]);
+	prwatchn(&numtab[SB]);
+	prwatchn(&numtab[ST]);
 	setnr("rst", rst, 0);
 	setnr("rsb", rsb, 0);
 	numtab[HP].val = savhp;
@@ -1310,13 +1331,13 @@ addlig(int f, tchar *from, int to)
 	 * Fi, and Fl, hide them. The ".flig" request is intended for
 	 * use in combination with expert fonts only.
 	 */
-	if (to == LIG_FF && fitab[f][LIG_FF-32] >= 0)
+	if (to == LIG_FF && fitab[f][LIG_FF-32] != NOCODE)
 		if (codetab[f][fitab[f][LIG_FF-32]] < 32)
 			fitab[f][LIG_FF-32] = 0;
-	if (to == LIG_FFI && fitab[f][LIG_FFI-32] >= 0)
+	if (to == LIG_FFI && fitab[f][LIG_FFI-32] != NOCODE)
 		if (codetab[f][fitab[f][LIG_FFI-32]] < 32)
 			fitab[f][LIG_FFI-32] = 0;
-	if (to == LIG_FFL && fitab[f][LIG_FFL-32] >= 0)
+	if (to == LIG_FFL && fitab[f][LIG_FFL-32] != NOCODE)
 		if (codetab[f][fitab[f][LIG_FFL-32]] < 32)
 			fitab[f][LIG_FFL-32] = 0;
 }
@@ -1617,7 +1638,7 @@ setfp(int pos, int f, char *truename)	/* mount font f at position pos[0...nfonts
 		/* comes out too soon.  pushing back FONTPOS doesn't work */
 		/* with .ft commands because input is flushed after .xx cmds */
 	if (realpage && ap == NULL)
-		ptfpcmd(pos, shortname);
+		ptfpcmd(pos, shortname, NULL, 0);
 	if (pos == 0)
 		ch = (tchar) FONTPOS | (tchar) f << 22;
 	return(pos);
@@ -2069,7 +2090,7 @@ done:	afmtab = realloc(afmtab, (nafm+1) * sizeof *afmtab);
 	}
 	checkenminus(nf);
 	if (realpage)
-		ptfpcmd(nf, a->path);
+		ptfpcmd(nf, macname(fontlab[nf]), a->path, (int)a->spec);
 	return 1;
 }
 
@@ -2196,7 +2217,7 @@ casekern(void)
 void
 casefkern(void)
 {
-	int	f, i;
+	int	f, i, j;
 
 	lgf++;
 	if (skip(1))
@@ -2204,10 +2225,13 @@ casefkern(void)
 	i = getrq(2);
 	if ((f = findft(i, 1)) < 0)
 		return;
-	if (skip(0) || atoi())
-		fontbase[f]->flgfont &= ~FNOKERN;
-	else
-		fontbase[f]->flgfont |= FNOKERN;
+	if (skip(0))
+		fontbase[f]->kernfont = 0;
+	else {
+		j = atoi();
+		if (!nonumb)
+			fontbase[f]->kernfont = j ? j : -1;
+	}
 }
 
 static void
@@ -2294,7 +2318,7 @@ setpapersize(int setmedia)
 	pl = defaultpl = y;
 	if (numtab[NL].val > pl) {
 		numtab[NL].val = pl;
-		prwatchn(NL);
+		prwatchn(&numtab[NL]);
 	}
 	po = x > 6 * PO ? PO : x / 8;
 	ll = ll1 = lt = lt1 = x - 2 * po;

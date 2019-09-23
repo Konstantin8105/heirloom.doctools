@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n5.c	1.91 (gritter) 9/3/06
+ * Sccsid @(#)n5.c	1.98 (gritter) 9/11/06
  */
 
 /*
@@ -530,13 +530,22 @@ casepl(void)
 		pl = i;
 	if (numtab[NL].val > pl) {
 		numtab[NL].val = pl;
-		prwatchn(NL);
+		prwatchn(&numtab[NL]);
 	}
 }
 
 
-void
-casewh(void)
+static void
+chkt(struct d *dp, int n)
+{
+	if (n <= 0 && dp != d)
+		if (warn & WARN_RANGE)
+			errprint("trap at %d not effective in diversion", n);
+}
+
+
+static void
+_casewh(struct d *dp)
 {
 	register int i, j, k;
 
@@ -547,25 +556,40 @@ casewh(void)
 		return;
 	skip(0);
 	j = getrq(1);
-	if ((k = findn(i)) != NTRAP) {
-		mlist[k] = j;
+	if ((k = findn(dp, i)) != NTRAP) {
+		dp->mlist[k] = j;
 		return;
 	}
 	for (k = 0; k < NTRAP; k++)
-		if (mlist[k] == 0)
+		if (dp->mlist[k] == 0)
 			break;
 	if (k == NTRAP) {
 		flusho();
 		errprint("cannot plant trap.");
 		return;
 	}
-	mlist[k] = j;
-	nlist[k] = i;
+	dp->mlist[k] = j;
+	dp->nlist[k] = i;
+	chkt(dp, i);
 }
 
 
 void
-casech(void)
+casewh(void)
+{
+	_casewh(d);
+}
+
+
+void
+casedwh(void)
+{
+	_casewh(dip);
+}
+
+
+static void
+_casech(struct d *dp)
 {
 	register int i, j, k;
 
@@ -575,7 +599,7 @@ casech(void)
 		return;
 	else  {
 		for (k = 0; k < NTRAP; k++)
-			if (mlist[k] == j)
+			if (dp->mlist[k] == j)
 				break;
 	}
 	if (k == NTRAP)
@@ -583,8 +607,23 @@ casech(void)
 	skip(0);
 	i = vnumb((int *)0);
 	if (nonumb)
-		mlist[k] = 0;
-	nlist[k] = i;
+		dp->mlist[k] = 0;
+	dp->nlist[k] = i;
+	chkt(dp, i);
+}
+
+
+void
+casech(void)
+{
+	_casech(d);
+}
+
+
+void
+casedch(void)
+{
+	_casech(dip);
 }
 
 
@@ -606,12 +645,12 @@ setolt(void)
 
 
 int 
-findn(int i)
+findn(struct d *dp, int i)
 {
 	register int k;
 
 	for (k = 0; k < NTRAP; k++)
-		if ((nlist[k] == i) && (mlist[k] != 0))
+		if ((dp->nlist[k] == i) && (dp->mlist[k] != 0))
 			break;
 	return(k);
 }
@@ -625,7 +664,7 @@ casepn(void)
 	skip(1);
 	noscale++;
 	i = max(inumb(&numtab[PN].val), 0);
-	prwatchn(PN);
+	prwatchn(&numtab[PN]);
 	noscale = 0;
 	if (!nonumb) {
 		npn = i;
@@ -657,7 +696,7 @@ casebp(void)
 
 
 static void
-tmtmcwr(int ab, int tmc, int wr, int ep)
+tmtmcwr(int ab, int tmc, int wr, int ep, int tmm)
 {
 	const char tmtab[] = {
 		'a',000,000,000,000,000,000,000,
@@ -666,16 +705,45 @@ tmtmcwr(int ab, int tmc, int wr, int ep)
 		'!',000,000,000,000,000,000,'~',
 		000
 	};
+	struct contab	*cp;
 	register int i, j;
 	tchar	c;
 	char	tmbuf[NTM];
+	filep	savip = ip;
+	int	discard = 0;
 
 	lgf++;
-	copyf++;
-	if (skip(0) && ab)
-		errprint("User Abort");
-	for (i = 0; i < NTM - 5 - mb_cur_max; ) {
-		if ((c = getch()) == '\n') {
+	if (tmm) {
+		if (skip(1) || (i = getrq(0)) == 0)
+			return;
+		if ((cp = findmn(i)) == NULL || !cp->mx) {
+			nosuch(i);
+			return;
+		}
+		savip = ip;
+		ip = (filep)cp->mx;
+		app++;
+		copyf++;
+	} else {
+		copyf++;
+		if (skip(0) && ab)
+			errprint("User Abort");
+	}
+loop:	for (i = 0; i < NTM - 5 - mb_cur_max; ) {
+		if (tmm) {
+			if ((c = rbf()) == 0) {
+				ip = savip;
+				tmm = 0;
+				app--;
+				break;
+			}
+		} else
+			c = getch();
+		if (discard) {
+			discard--;
+			continue;
+		}
+		if (c == '\n') {
 			tmbuf[i++] = '\n';
 			break;
 		}
@@ -698,6 +766,8 @@ tmtmcwr(int ab, int tmc, int wr, int ep)
 		tmbuf[i++] = '\\';
 		if (c == (OHC|BLBIT))
 			j = ':';
+		else if (istrans(c))
+			j = ')';
 		else if (j >= 0 && j < sizeof tmtab && tmtab[j])
 			j = tmtab[j];
 		else if (j == ACUTE)
@@ -708,8 +778,17 @@ tmtmcwr(int ab, int tmc, int wr, int ep)
 			j = '_';
 		else if (j == MINUS)
 			j = '-';
-		else
+		else {
 			i--;
+			if (c == WORDSP)
+				j = ' ';
+			else if (j == WORDSP)
+				continue;
+			else if (j == FLSS) {
+				discard++;
+				continue;
+			}
+		}
 		if (j == XFUNC)
 			switch (fbits(c)) {
 			case CHAR:
@@ -735,6 +814,8 @@ tmtmcwr(int ab, int tmc, int wr, int ep)
 		fdprintf(stderr, "%s", tmbuf);
 	} else if (i)
 		write(wr, tmbuf, i);
+	if (tmm)
+		goto loop;
 	copyf--;
 	lgf--;
 }
@@ -742,19 +823,19 @@ tmtmcwr(int ab, int tmc, int wr, int ep)
 void
 casetm(int ab)
 {
-	tmtmcwr(ab, 0, -1, 0);
+	tmtmcwr(ab, 0, -1, 0, 0);
 }
 
 void
 casetmc(void)
 {
-	tmtmcwr(0, 1, -1, 0);
+	tmtmcwr(0, 1, -1, 0, 0);
 }
 
 void
 caseerrprint(void)
 {
-	tmtmcwr(0, 1, -1, 1);
+	tmtmcwr(0, 1, -1, 1, 0);
 }
 
 static struct stream {
@@ -806,7 +887,7 @@ getstream(const char *name)
 }
 
 static void
-write1(int writec)
+write1(int writec, int writem)
 {
 	int	i;
 
@@ -815,19 +896,25 @@ write1(int writec)
 		return;
 	if ((i = getstream(nextf)) < 0)
 		return;
-	tmtmcwr(0, writec, streams[i].fd, 0);
+	tmtmcwr(0, writec, streams[i].fd, 0, writem);
 }
 
 void
 casewrite(void)
 {
-	write1(0);
+	write1(0, 0);
 }
 
 void
 casewritec(void)
 {
-	write1(1);
+	write1(1, 0);
+}
+
+void
+casewritem(void)
+{
+	write1(0, 1);
 }
 
 void
@@ -1326,7 +1413,8 @@ caseif(int x)
 		warn &= ~(WARN_MAC|WARN_SPACE|WARN_REG);
 		if (!skip(1)) {
 			j = getrq(2);
-			true = (cbits(i) == 'r' ? usedr(j) : findmn(j)) >= 0;
+			true = (cbits(i) == 'r' ?
+					usedr(j) != NULL : findmn(j) != NULL);
 		}
 		warn = w;
 		break;
@@ -1423,7 +1511,7 @@ casewhile(void)
 		errprint("%d excess delimiter(s)", -level);
 	wbt(0);
 	copyf--, clonef--;
-	pushi(newip, LOOP);
+	pushi(newip, LOOP, 0);
 	offset = dip->op;
 }
 
@@ -1598,7 +1686,7 @@ caserd(void)
 	}
 	collect();
 	tty++;
-	pushi(-1, PAIR('r','d'));
+	pushi(-1, PAIR('r','d'), 0);
 }
 
 
@@ -1784,7 +1872,7 @@ casene(void)
 
 
 void
-casetr(void)
+casetr(int flag)
 {
 	register int i, j;
 	tchar k;
@@ -1799,7 +1887,29 @@ casetr(void)
 		if ((j = cbits(k)) == '\n')
 			j = ' ';
 		trtab[i] = j;
+		if (flag & 1)
+			trintab[j] = i;
+		else
+			trintab[j] = 0;
+		if (flag & 2)
+			trnttab[i] = i;
+		else
+			trnttab[i] = j;
 	}
+}
+
+
+void
+casetrin(void)
+{
+	casetr(1);
+}
+
+
+void
+casetrnt(void)
+{
+	casetr(2);
 }
 
 
@@ -1945,7 +2055,8 @@ casenhychar(void)
 void
 casemk(void)
 {
-	register int i, j, k;
+	register int i, j;
+	struct numtab	*np;
 
 	if (dip != d)
 		j = dip->dnl; 
@@ -1957,8 +2068,9 @@ casemk(void)
 	}
 	if ((i = getrq(1)) == 0)
 		return;
-	numtab[k = findr(i)].val = j;
-	prwatchn(k);
+	np = findr(i);
+	np->val = j;
+	prwatchn(np);
 }
 
 
@@ -2005,7 +2117,7 @@ casenm(void)
 	i = inumb(&numtab[LN].val);
 	if (!nonumb)
 		numtab[LN].val = max(i, 0);
-	prwatchn(LN);
+	prwatchn(&numtab[LN]);
 	getnm(&ndf, 1);
 	getnm(&nms, 0);
 	getnm(&ni, 0);

@@ -1,3 +1,84 @@
+Release 061010
+* A simplistic XSLT stylesheet to convert OpenDocument text to troff input
+  has been added. See the comments in the file "stuff/odt2tr.xsl" for usage
+  instructions.
+* [nt]roff: Local strings and number registers are now supported. They can
+  be defined using ".lds", ".lnr", and ".lnrf". A local string or register
+  is visible only in the instance of the macro in which is has been defined
+  and can then be accessed like a standard global string or register.
+* [nt]roff: The ".pull" request has been introduced to print text of a given
+  height from a diversion and remove it afterwards.
+* [nt]roff: The ".writem" request has been added to write the contents of
+  a string, macro, or diversion to a file stream.
+* [nt]roff: The ".dwh" and ".dch" requests have been introduced to allow
+  multiple diversion traps in the same diversion.
+* [nt]roff: The ".trin" (translate but retranslate with ".asciify") and
+  ".trnt" (translate but not in transparent mode) requests have been added.
+* [nt]roff: The "\n[.dilev]" register contains the current diversion level.
+* [nt]roff: The "\B" escape sequence (check for valid numerical expression)
+  is now available in regular mode too, not only in groff compatibility mode.
+* troff: The second argument to the ".fkern" request now specifies a minimum
+  absolute amount for kerning pairs read from font metrics files. Kerning
+  pairs with smaller adjustments are ignored.
+* tbl: Can now optionally use graphic drawing commands (troff "\D") instead
+  of repeated-character line drawing (troff "\l" and "\L"). The "graphics"
+  option enables it per table, and the "-g" command line option enables it
+  globally.
+* tbl: The static limits on the number of table lines, columns, and heading
+  lines have been removed. In effect, all lines of a table are considered
+  when the column widths are computed, and ".T&" can occur at any line.
+* tbl: The "nokeep" option causes tbl not to write a ".ne" command for a
+  boxed table.
+* troff: The CW, CI, CB, and CX fonts no longer substitute the "fi" and "fl"
+  ligatures with the "devps" device. This is consistent with "devpost".
+* [nt]roff: If a word starts with a motion followed by a hyphenation
+  indicator, such as "\h'1m'\%text" or "\|\%text", hyphenation for the
+  word is now suppressed, and no hyphen is generated.
+* [nt]roff: When text from a diversion is output or rediverted, it is no
+  longer subject to character translations specified with ".tr" and ".ftr".
+* [nt]roff: In groff compatibility mode, unless a string is interpolated
+  with explicit arguments, the arguments to the surrounding macro instance
+  remain visible and can be referenced by "\$" from within the string.
+* [nt]roff: The ".length" and ".index" request now strip an initial """ in
+  their last argument to allow initial white space.
+* [nt]roff: The blank line macro is not called when a diversion is reread
+  in nofill mode anymore.
+* troff: The escape sequence "\s[0]" now resets the point size to the
+  previous value as "\s0" does.
+* [nt]roff: Arbitrary delimiters are now allowed with "\s''" escape
+  sequences.
+* [nt]roff: Fixed a bug that caused ".shift" without arguments to be ignored
+  if the last previous numerical expression was invalid.
+* troff: The indent of the current line is no longer part of a PDF link
+  that continues from the previous line.
+* [nt]roff: ".rm" and ".rr" no longer issue a warning if one of their
+  arguments is not a defined macro or register, respectively.
+* troff: Fixed an error that sometimes caused the "x X Track" command to miss
+  in intermediate output.
+* troff, dpost: The short font name is now part of the "x font" commands
+  in intermediate output for Type 1, TrueType, and OpenType fonts.
+* troff: Before generating an "x X" command because of a "\X" or "\Y" escape
+  sequence, the current horizonal position is now emitted to intermediate
+  output. This makes input like "\h'1i'\X'anything'" work as expected.
+* troff: Changes between environments with different ".ss" settings are now
+  handled correctly.
+* dpost: The default encoding for the "ps" device is now "3".
+* dpost: The PostScript "awidthshow" operator is now used with the "-e2" and
+  "-e3" encoding options, resulting in reasonable output in combination with
+  the ".track" request.
+* dpost: With the "-e2" and "-e3" encoding options, use only word spaces as
+  indicated by troff for the "widthshow" PostScript operator. This usually
+  results in slightly larger PostScript output but is better encodable when
+  distilled to PDF so that PDF files become smaller.
+* troff: An internal character width caching error has been fixed; it could
+  lead to misaligned characters when setting text in fonts containing more
+  than 400 characters.
+* troff, dpost: Can now handle fonts with up to 65534 characters.
+* eqn: Avoid to recognize delimiters inside troff escape sequences with "("
+  or "[" as well as directly behind a sequence of backslash characters.
+* -mm macros: Fixed a bug which caused .ML output to disappear unless in
+  troff -x0 mode.
+
 Release 060905
 * [nt]roff: The new ".brnl" request causes a break each time a newline is
   encountered at the end of a text input line. Unlike nofill mode, text is

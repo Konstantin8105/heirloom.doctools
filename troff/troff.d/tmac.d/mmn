@@ -28,7 +28,7 @@
 .\"	C NROFF Version	from OpenSolaris mmn.src	11.31
 .\"
 .\" Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
-.\" Sccsid @(#)mmn	1.4 (gritter) 3/11/06
+.\" Sccsid @(#)mmn	1.6 (gritter) 10/3/06
 .nr :a 0 1
 .nr :b 0
 .nr :c 0

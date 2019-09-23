@@ -18,7 +18,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)t..c	1.13 (gritter) 2/26/06
+ * Sccsid @(#)t..c	1.19 (gritter) 9/11/06
  */
 
 /* t..c : external declarations */
@@ -31,56 +31,60 @@
 # define getc(f) _IO_getc_unlocked(f)
 # endif
 
-# define MAXLIN 4000
-# define MAXHEAD 100
-# define MAXCOL 100
 # define MAXCHS 2000
 # define MAXSTR 1024
 # define MAXRPT 100
 # define CLLEN 100
 # define SHORTLINE 4
 # define BIGBUF 8192
+extern int MAXLIN;
+extern int MAXCOL;
+extern int MAXHEAD;
 extern int nlin, ncol, iline, nclin, nslin;
-extern int style[MAXHEAD][MAXCOL];
-extern int ctop[MAXHEAD][MAXCOL];
-extern char font[MAXHEAD][MAXCOL][2];
-extern char csize[MAXHEAD][MAXCOL][4];
-extern char vsize[MAXHEAD][MAXCOL][4];
-extern char cll[MAXCOL][CLLEN];
-extern int stynum[];
+extern int **style;
+extern int **ctop;
+extern char ***font;
+extern char ***csize;
+extern char ***vsize;
+extern char **cll;
+extern int *stynum;
 extern int F1, F2;
-extern int lefline[MAXHEAD][MAXCOL];
-extern int fullbot[];
-extern char *instead[];
+extern int **lefline;
+extern int *fullbot;
+extern char **instead;
 extern int expflg;
 extern int ctrflg;
 extern int evenflg;
-extern int evenup[];
+extern int *evenup;
 extern int boxflg;
 extern int dboxflg;
 extern int decimalpoint;
 extern int linsize;
 extern int tab;
 extern int pr1403;
+extern int graphics;
+extern int Graphics;
 extern int linsize, delim1, delim2;
 extern int allflg;
 extern int textflg;
 extern int left1flg;
 extern int rightl;
 struct colstr {char *col, *rcol;};
-extern struct colstr *table[];
+extern struct colstr **table;
 extern char *cspace, *cstore, *cbase;
 extern char *exstore, *exlim;
-extern int sep[];
-extern int used[], lused[], rused[];
-extern int linestop[];
+extern int *sep;
+extern int *used, *lused, *rused;
+extern int *linestop;
 extern char *leftover;
 extern char *last, *ifile;
+extern int *topat;
 extern int texname;
 extern int texct;
 extern int texct2;
 extern char texstr[];
 extern int linstart;
+extern int nokeep;
 
 extern const char *progname;
 
@@ -167,6 +171,7 @@ void restline(void);
 void cleanfc(void);
 void warnon(void);
 void warnoff(void);
+void svgraph(void);
 /* tg.c */
 int get_text(char *, int, int, char *, char *);
 void untext(void);

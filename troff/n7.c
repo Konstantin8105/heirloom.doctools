@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n7.c	1.101 (gritter) 9/5/06
+ * Sccsid @(#)n7.c	1.106 (gritter) 9/9/06
  */
 
 /*
@@ -92,6 +92,8 @@ int	brflg;
 #undef	iswascii
 #define	iswascii(c)	(((c) & ~(wchar_t)0177) == 0)
 
+static void	chkpull(int);
+static int	_findt(struct d *, int, int);
 static tchar	adjbit(tchar);
 static void	sethtdp(void);
 static void	leftend(tchar, int);
@@ -178,6 +180,7 @@ tbreak(void)
 	if (lastl + un > dip->maxl)
 		dip->maxl = lastl + un;
 	horiz(un);
+	pchar(mkxfunc(INDENT, un));
 #ifdef NROFF
 	if (adrem % t.Adj)
 		resol = t.Hor; 
@@ -517,7 +520,7 @@ callsp(void)
 	else 
 		i = lss;
 	flss = 0;
-	if (blmac)
+	if (blmac && (fi || (frame->flags & FLAG_DIVERSION) == 0))
 		control(blmac, 0);
 	else
 		casesp(i);
@@ -614,7 +617,7 @@ storelsh(tchar c, int w)
 void
 newline(int a)
 {
-	register int i, j, nlss = 0;
+	register int i, j, nlss = 0, nl;
 	int	opn;
 
 	if (a)
@@ -624,7 +627,7 @@ newline(int a)
 		pchar1((tchar)FLSS);
 		if (flss)
 			lss = flss;
-		i = lss + dip->blss;
+		i = nlss = lss + dip->blss;
 		dip->dnl += i;
 		pchar1((tchar)i);
 		pchar1((tchar)'\n');
@@ -635,14 +638,16 @@ newline(int a)
 			pchar1((tchar)dip->alss);
 			pchar1((tchar)'\n');
 			dip->dnl += dip->alss;
+			nlss += dip->alss;
 			dip->alss = 0;
 		}
+		chkpull(nlss);
 		if (vpt > 0 && dip->ditrap && !dip->ditf && dip->dnl >= dip->ditrap && dip->dimac)
 			if (control(dip->dimac, 0)) {
 				trap++; 
 				dip->ditf++;
 			}
-		return;
+		goto nlt;
 	}
 	j = lss;
 	if (flss)
@@ -657,6 +662,7 @@ newline(int a)
 	pchar1((tchar)'\n');
 	flss = 0;
 	lss = j;
+	chkpull(nlss);
 	if (vpt == 0 || numtab[NL].val < pl)
 		goto nl2;
 nl1:
@@ -704,30 +710,35 @@ nl2:
 		nolt = 0;
 		free(olt);
 	}
+nlt:
+	if (dip != d)
+		nl = dip->dnl;
+	else
+		nl = numtab[NL].val;
 	if (vpt <= 0)
 		/*EMPTY*/;
-	else if (numtab[NL].val == 0) {
-		if ((j = findn(0)) != NTRAP)
-			trap |= control(mlist[j], 0);
-	} else if ((i = findt(numtab[NL].val - nlss)) <= nlss) {
-		if ((j = findn1(numtab[NL].val - nlss + i)) == NTRAP) {
+	else if (nl == 0) {
+		if ((j = findn(dip, 0)) != NTRAP)
+			trap |= control(dip->mlist[j], 0);
+	} else if ((i = _findt(dip, nl - nlss, 0)) <= nlss) {
+		if ((j = findn1(dip, nl - nlss + i)) == NTRAP) {
 			flusho();
 			errprint("Trap botch.");
 			done2(-5);
 		}
-		trap |= control(mlist[j], 0);
+		trap |= control(dip->mlist[j], 0);
 	}
 }
 
 
 int 
-findn1(int a)
+findn1(struct d *dp, int a)
 {
 	register int i, j;
 
 	for (i = 0; i < NTRAP; i++) {
-		if (mlist[i]) {
-			if ((j = nlist[i]) < 0)
+		if (dp->mlist[i]) {
+			if ((j = dp->nlist[i]) < 0 && dp == d)
 				j += pl;
 			if (j == a)
 				break;
@@ -754,20 +765,36 @@ chkpn(void)
 }
 
 
+static void
+chkpull(int nlss)
+{
+	if (nlss > 0 && frame->pull) {
+		if (nlss >= frame->pull)
+			popi();
+		else
+			frame->pull -= nlss;
+	}
+}
+
 int 
-findt(int a)
+findt(struct d *dp, int a)
+{
+	return _findt(dp, a, 1);
+}
+
+static int
+_findt(struct d *dp, int a, int maydi)
 {
 	register int i, j, k;
 
 	k = INT_MAX;
-	if (dip != d) {
+	if (dip != d && maydi) {
 		if (dip->dimac && (i = dip->ditrap - a) > 0)
 			k = i;
-		return(k);
 	}
 	for (i = 0; i < NTRAP; i++) {
-		if (mlist[i]) {
-			if ((j = nlist[i]) < 0)
+		if (dp->mlist[i]) {
+			if ((j = dp->nlist[i]) < 0 && dp == d)
 				j += pl;
 			if ((j -= a) <= 0)
 				continue;
@@ -775,9 +802,11 @@ findt(int a)
 				k = j;
 		}
 	}
-	i = pl - a;
-	if (k > i)
-		k = i;
+	if (dp == d) {
+		i = pl - a;
+		if (k > i)
+			k = i;
+	}
 	return(k);
 }
 
@@ -791,7 +820,7 @@ findt1(void)
 		i = dip->dnl;
 	else 
 		i = numtab[NL].val;
-	return(findt(i));
+	return(findt(dip, i));
 }
 
 
@@ -819,7 +848,7 @@ eject(struct s *a)
 		return;
 e1:
 	savlss = lss;
-	lss = findt(numtab[NL].val);
+	lss = findt(d, numtab[NL].val);
 	newline(0);
 	lss = savlss;
 	if (numtab[NL].val && !trap)
@@ -1129,7 +1158,7 @@ getword(int x)
 {
 	register int j, k = 0, w;
 	register tchar i = 0, *wp, nexti, gotspc = 0, t;
-	int noword, n;
+	int noword, n, inword = 0;
 #if defined (EUC) && defined (NROFF)
 	wchar_t *wddelim;
 	char mbbuf3[MB_LEN_MAX + 1];
@@ -1287,6 +1316,10 @@ g0:
 	}
 	if (hyoff != 1) {
 		if (j == ohc) {
+			if (!inword && xflag) {
+				hyoff = 1;
+				goto g1;
+			}
 			hyoff = 2;
 			*hyp++ = wordp;
 			if (hyp > (hyptr + NHYP - 1))
@@ -1345,6 +1378,8 @@ g0:
 	} else
 g1:		nexti = GETCH();
 	j = cbits(i = nexti);
+	if (!ismot(i) && j != ohc)
+		inword = 1;
 #if defined (EUC) && defined (NROFF)
 	if (multi_locale)
 		if (collectmb(i))

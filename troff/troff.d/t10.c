@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)t10.c	1.87 (gritter) 9/5/06
+ * Sccsid @(#)t10.c	1.95 (gritter) 10/5/06
  */
 
 /*
@@ -76,8 +76,8 @@ short	*chtab;
 char	*chname;
 int	**fontab;
 char	**kerntab;
-short	**fitab;
-short	**codetab;
+unsigned short	**fitab;
+unsigned short	**codetab;
 
 int	Inch;
 int	Hor;
@@ -433,6 +433,8 @@ ptout0(tchar *pi, tchar *pend)
 			ptps();
 		if (lead)
 			ptlead();
+		if (esc)
+			ptesc();
 		fdprintf(ptid, "x X ");
 		/* 
 	     * not guaranteed of finding a XOFF if a word overflow
@@ -466,12 +468,8 @@ ptout0(tchar *pi, tchar *pend)
 		return(pi+outsize);
 	}
 	if (k == FONTPOS) {
-		char temp[3];
 		n = i >> 22;
-		temp[0] = n & BYTEMASK;
-		temp[1] = n >> BYTE;
-		temp[2] = 0;
-		ptfpcmd(0, temp);
+		ptfpcmd(0, macname(n), NULL, 0);
 		return(pi+outsize);
 	}
 	if (k == XFUNC) {
@@ -486,6 +484,10 @@ ptout0(tchar *pi, tchar *pend)
 		case LINKOFF:
 			ptlink(sbits(i));
 			linkout = 0;
+			return(pi+outsize);
+		case INDENT:
+			if (linkout)
+				linkhp += sbits(i);
 			return(pi+outsize);
 		case LETSP:
 			lettrack = sbits(i);
@@ -524,6 +526,7 @@ ptout0(tchar *pi, tchar *pend)
 		if (widcache[k-32].fontpts == xfont + (xpts<<8)  && !setwdf &&
 				kern == 0 && horscale == 0) {
 			w = widcache[k-32].width;
+			lasttrack = widcache[k-32].track;
 			bd = 0;
 			cs = 0;
 		} else {
@@ -539,7 +542,7 @@ ptout0(tchar *pi, tchar *pend)
 		ptps();
 	if (lead)
 		ptlead();
-	if (lettrack || mtrack)
+	if (lettrack || lasttrack || mtrack)
 		pttrack(0);
 	if (horscale || mhorscale)
 		pthorscale(0);
@@ -774,11 +777,17 @@ ptfont(void)
 }
 
 void
-ptfpcmd(int f, char *s)
+ptfpcmd(int f, char *s, char *path, int flags)
 {
 	if (ascii)
 		return;
-	fdprintf(ptid, "x font %d %s\n", f, s);
+	fdprintf(ptid, "x font %d %s", f, s);
+	if (path) {
+		fdprintf(ptid, " %s", path);
+		if (flags)
+			fdprintf(ptid, " %d", flags);
+	}
+	fdprintf(ptid, "\n");
 	ptfont();	/* make sure that it gets noticed */
 }
 
@@ -892,11 +901,12 @@ ptlink(int n)
 static void
 ptyon(int i)
 {
+	struct contab	*cp;
 	tchar	c;
-	int	j, k, nl;
+	int	k, nl;
 	filep	savip;
 
-	if ((j = findmn(i)) < 0 || !contab[j].mx) {
+	if ((cp = findmx(i)) == NULL || !cp->mx) {
 		nosuch(i);
 		return;
 	}
@@ -906,9 +916,11 @@ ptyon(int i)
 		ptps();
 	if (lead)
 		ptlead();
+	if (esc)
+		ptesc();
 	fdprintf(ptid, "x X ");
 	savip = ip;
-	ip = (filep)contab[j].mx;
+	ip = (filep)cp->mx;
 	app = 1;
 	k = -1;
 	nl = 0;
@@ -1006,12 +1018,13 @@ newpage(int n)	/* called at end of each output page (we hope) */
 			struct afmtab	*a = afmtab[(fontbase[i]->afmpos)-1];
 			if (a->encpath == NULL)
 				a->encpath = afmencodepath(a->path);
-			fdprintf(ptid, "x font %d %s %d\n", i,
+			fdprintf(ptid, "x font %d %s %s %d\n", i,
+				macname(fontlab[i]),
 				a->encpath, (int)a->spec);
 			if (a->supply)
 				ptsupplyfont(a->fontname, a->supply);
 		} else if (fontbase[i]->namefont && fontbase[i]->namefont[0])
-			fdprintf(ptid, "x font %d %s\n", i, fontbase[i]->namefont);
+			fdprintf(ptid, "x font %d %s\n", i, macname(fontlab[i]));
 	}
 	ptps();
 	ptfont();
