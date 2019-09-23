@@ -1,3 +1,36 @@
+Release 060409
+* dpost: An error that could lead to invalid PostScript output when the
+  last character of a long output string sequence was a backslash has
+  been fixed.
+* troff: The ".flig" request has been enhanced to enable the definition
+  of arbitrary font-specific ligatures, e.g. ".flig R Th \[T_h]" could
+  be used for a "Th" ligature. The previous syntax is still accepted.
+* troff: If a hyphentation point occurs within an automatically created
+  ligature, the ligature is now split into its parts.
+* troff: The "\;" escape sequence has been introduced as a ligature
+  suppressor without other side-effects.
+* troff: The ".fdeferlig" request has been introduced. It defers building
+  of a ligature by one character, e.g. if both "ff" and "fi" are defined
+  as ligatures and "ffi" appears in input, a single "f" followed by the
+  "fi" ligature can be constructed instead of a "ff" ligature followed by
+  a single "i".
+* [nt]roff: The hyphenation language as set by the ".hylang" request is
+  now specific to the current environment.
+* [nt]roff: The ".substring" and ".length" requests have been added to
+  replace a string by a substring of it and to determine the length of
+  a string, respectively.
+* troff: No longer prints a warning when a font selected with ".ft" is
+  not currently mounted but can be mounted in position 0.
+* nroff: No longer prints a warning when a font is selected with ".ft".
+* nroff: Multibyte characters are now emboldened correctly. Previously,
+  the number of backspace characters output corresponded to the length
+  of the multibyte sequence instead of the column width of the character
+  (bug reported by Alexander E. Patrakov).
+* dpost: The line width for drawing has been fixed; previously, lines
+  were 100 times too slim with the "ps" device.
+* troff: The "\C'xxx'" escape sequence is now available; it selects a
+  named character with the same effect as "\[xxx]".
+
 Release 060321
 * An revised version of the "Nroff/Troff User's Manual" is now available
   in the directory "doc/troff". It replaces the "NEWS" and "PDFS" text

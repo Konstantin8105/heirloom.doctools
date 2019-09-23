@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n3.c	1.73 (gritter) 2/17/06
+ * Sccsid @(#)n3.c	1.77 (gritter) 4/8/06
  */
 
 /*
@@ -81,6 +81,8 @@ int	strflg;
 #endif
 
 static void	caseshift(void);
+static void	casesubstring(void);
+static void	caselength(void);
 static int	getls(int);
 static void	addcon(int, char *, void(*)(int));
 
@@ -136,6 +138,9 @@ growcontab(void)
 		addcon(i++, "fps", (void(*)(int))casefps);
 		addcon(i++, "vpt", (void(*)(int))casevpt);
 		addcon(i++, "fspacewidth", (void(*)(int))casefspacewidth);
+		addcon(i++, "length", (void(*)(int))caselength);
+		addcon(i++, "substring", (void(*)(int))casesubstring);
+		addcon(i++, "fdeferlig", (void(*)(int))casefdeferlig);
 	} else {
 		for (i = 0; i < sizeof mhash / sizeof *mhash; i++)
 			if (mhash[i])
@@ -1049,6 +1054,7 @@ casedi(void)
 	dip->curd = i;
 	clrmn(oldmn);
 	k = (int *) & dip->dnl;
+	dip->flss = 0;
 	for (j = 0; j < 10; j++)
 		k[j] = 0;	/*not op and curd*/
 rtn:
@@ -1158,10 +1164,12 @@ casepc(void)
 void
 casechop(void)
 {
-	int	a = app;
 	int	i, j;
-	filep	savip, savoffset;
+	filep	savip;
 
+	if (dip != d)
+		wbfl();
+	lgf++;
 	skip(1);
 	if ((i = getrq()) == 0)
 		return;
@@ -1174,16 +1182,112 @@ casechop(void)
 	savip = ip;
 	ip = (filep)contab[j].mx;
 	app = 1;
-	while ((i = rbf()) != 0)
-		i = 1;
-	app = a;
-	savoffset = offset;
+	while (rbf() != 0);
+	app = 0;
 	if (ip > (filep)contab[j].mx) {
 		offset = ip - 1;
-		wbf(0);
+		wbt(0);
 	}
 	ip = savip;
-	offset = savoffset;
+	offset = dip->op;
+}
+
+void
+casesubstring(void)
+{
+	int	i, j, k, sz = 0, st;
+	int	n1, n2 = -1;
+	tchar	*tp = NULL, c;
+	filep	savip;
+
+	if (dip != d)
+		wbfl();
+	lgf++;
+	skip(1);
+	if ((i = getrq()) == 0)
+		return;
+	if (i >= 256)
+		i = maybemore(i, 0);
+	if ((j = findmn(i)) < 0) {
+		nosuch(i);
+		return;
+	}
+	if (skip(1))
+		return;
+	n1 = atoi();
+	if (skip(0) == 0)
+		n2 = atoi();
+	savip = ip;
+	ip = (filep)contab[j].mx;
+	k = 0;
+	app = 1;
+	while ((c = rbf()) != 0) {
+		if (k >= sz) {
+			sz += 512;
+			tp = realloc(tp, sz * sizeof *tp);
+		}
+		tp[k++] = c;
+	}
+	app = 0;
+	ip = savip;
+	if ((offset = finds(i)) != 0) {
+		st = 0;
+		if (n1 < 0)
+			n1 = k + n1;
+		if (n2 < 0)
+			n2 = k + n2;
+		if (n1 >= 0 || n2 >= 0) {
+			if (n2 < n1) {
+				j = n1;
+				n1 = n2;
+				n2 = j;
+			}
+			for (j = 0; j <= k; j++) {
+				if (st == 0) {
+					if (j >= n1)
+						st = 1;
+				}
+				if (st == 1) {
+					wbf(tp[j]);
+					if (j >= n2)
+						break;
+				}
+			}
+		}
+		wbt(0);
+		clrmn(oldmn);
+		if (newmn) {
+			if (contab[newmn].rq)
+				munhash(&contab[newmn]);
+			contab[newmn].rq = i;
+			maddhash(&contab[newmn]);
+		}
+	}
+	free(tp);
+	offset = dip->op;
+	ip = savip;
+}
+
+void
+caselength(void)
+{
+	int	i, j;
+
+	lgf++;
+	skip(1);
+	if ((i = getrq()) == 0)
+		return;
+	if (i >= 256)
+		i = maybemore(i, 1);
+	j = 0;
+	lgf--;
+	copyf++;
+	if (skip(1) == 0) {
+		while(cbits(getch()) != '\n')
+			j++;
+	}
+	copyf--;
+	numtab[findr(i)].val = j;
 }
 
 
