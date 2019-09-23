@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)dpost.c	1.121 (gritter) 12/22/05
+ * Sccsid @(#)dpost.c	1.134 (gritter) 2/1/06
  */
 
 /*
@@ -461,7 +461,7 @@ int		lastend;		/* where last character on this line was */
  *
  * When font metrics are directly read from AFM files, all characters that
  * are not ASCII are put into the remaining positions in PostScript encoding
- * vectors. Their position in these vectors in recorded in afmmap, and
+ * vectors. Their position in these vectors in recorded in afm->encmap, and
  * characters from troff are translated if necessary.
  *
  */
@@ -470,7 +470,6 @@ int		lastend;		/* where last character on this line was */
 struct  {
 
 	struct afmtab	*afm;		/* AFM data, if any */
-	int	*afmmap;		/* map of non-ASCII characters */
 	char	*name;			/* name of the font loaded here */
 	int	number;			/* its internal number */
 
@@ -608,9 +607,12 @@ static struct box {
  */
 
 static enum {
-	M_NONE	= 00,
-	M_CUT	= 01,
-	M_REG	= 02
+	M_NONE	= 000,
+	M_CUT	= 001,
+	M_STAR	= 002,
+	M_REG	= 004,
+	M_COL	= 010,
+	M_ALL	= 077
 } Mflag;
 
 static void	setmarks(char *);
@@ -899,12 +901,16 @@ header(FILE *fp)
     struct Bookmark	*bp;
     time_t	now;
     int		n;
-    double	x, y;
+    double	x = 0, y = 0;
     char	buf[4096];
     char	crdbuf[40];
 
 
     time(&now);
+    if (mediasize.flag) {
+	x = mediasize.val[2] * 72.0 / res;
+	y = mediasize.val[3] * 72.0 / res;
+    }
     fprintf(fp, "%s", CONFORMING);
     fprintf(fp, "%s %s\n", CREATOR, creator);
     fprintf(fp, "%s %s", CREATIONDATE, ctime(&now));
@@ -920,9 +926,11 @@ header(FILE *fp)
 	unlink(temp_file);
     }	/* End if */
     fprintf(fp, "%s %d\n", PAGES, printed);
+    if (mediasize.flag & 2)
+	fprintf(fp, "%%%%DocumentMedia: x%gy%g %g %g 0 () ()\n", x, y, x, y);
 
     if (got_otf)
-        fprintf(fp, "%%%%DocumentNeededResources: ProcSet (FontSetInit)\n");
+        fprintf(fp, "%%%%DocumentNeededResources: procset FontSetInit 0 0\n");
     fflush(sf);
     rewind(sf);
     while ((n = fread(buf, 1, sizeof buf, sf)) > 0)
@@ -978,6 +986,10 @@ header(FILE *fp)
 	    fprintf(fp, "_cutmarks\n");
     if (Mflag & M_REG)
 	    fprintf(fp, "_regmarks\n");
+    if (Mflag & M_STAR)
+	    fprintf(fp, "_startargets\n");
+    if (Mflag & M_COL)
+	    fprintf(fp, "_colorbars\n");
     fprintf(fp, "} def\n");
 
     fflush(gf);
@@ -985,8 +997,6 @@ header(FILE *fp)
     while ((n = fread(buf, 1, sizeof buf, gf)) > 0)
 	    fwrite(buf, 1, n, fp);
     if (mediasize.flag) {
-	    x = mediasize.val[2] * 72.0 / res;
-	    y = mediasize.val[3] * 72.0 / res;
 	    fprintf(fp, "/pagebbox [0 0 %g %g] def\n", x, y);
 	    fprintf(fp, "userdict /gotpagebbox true put\n");
 	    if (mediasize.flag & 2)
@@ -1238,10 +1248,16 @@ setmarks(char *str)
 		for (sp = str; *sp && *sp != ':'; sp++);
 		c = *sp;
 		*sp = 0;
-		if (prefix(str, "cut"))
+		if (prefix(str, "cutmarks"))
 			Mflag |= M_CUT;
-		else if (prefix(str, "registration"))
+		else if (prefix(str, "registrationmarks"))
 			Mflag |= M_REG;
+		else if (prefix(str, "startargets"))
+			Mflag |= M_STAR;
+		else if (prefix(str, "colorbars"))
+			Mflag |= M_COL;
+		else if (prefix(str, "all"))
+			Mflag |= M_ALL;
 		else
 			error(FATAL, "unknown mark: -M %s", str);
 		*sp = c;
@@ -1272,7 +1288,6 @@ setup(void)
     writerequest(0, stdout);		/* global requests eg. manual feed */
     fprintf(stdout, "/resolution %d def\n", res);
     fprintf(stdout, "setup\n");
-    fprintf(stdout, "/Dsetup where { pop Dsetup } if\n");
     fprintf(stdout, "%d setdecoding\n", encoding);
 
     if ( formsperpage > 1 )  {		/* followed by stuff for multiple pages */
@@ -1817,6 +1832,7 @@ loadfont (
     int		fin;			/* for reading *s.afm file */
     int		nw;			/* number of width table entries */
     char	*p;
+    char	*path;
 
 
 /*
@@ -1836,13 +1852,14 @@ loadfont (
     if ( fontbase[n] != NULL && strcmp(s, fontbase[n]->namefont) == 0 )
 	return;
 
+    path = temp;
     if (strchr(s, '/') != NULL)
-	strcpy(temp, s);
+	path = afmdecodepath(s);
     else if (strstr(s, ".afm") != NULL)
 	snprintf(temp, sizeof temp, "%s/dev%s/%s", fontdir, devname, s);
     else snprintf(temp, sizeof temp, "%s/dev%s/%s.afm", fontdir, devname, s);
 
-    if ( (fin = open(temp, O_RDONLY)) >= 0 )  {
+    if ( (fin = open(path, O_RDONLY)) >= 0 )  {
 	struct afmtab	*a;
 	struct stat	st;
 	char	*contents;
@@ -1857,7 +1874,7 @@ loadfont (
 		forcespecial = 1;
 	spec = s1 && *s1 ? atoi(s1) : SPEC_NONE;
 	for (i = 0; i < afmcount; i++)
-		if (afmfonts[i] && strcmp(afmfonts[i]->path, temp) == 0 &&
+		if (afmfonts[i] && strcmp(afmfonts[i]->path, path) == 0 &&
 				afmfonts[i]->spec == spec) {
 			a = afmfonts[i];
 			close(fin);
@@ -1872,8 +1889,10 @@ loadfont (
 		goto fail;
 	}
 	close(fin);
-	a->path = malloc(strlen(temp) + 1);
-	strcpy(a->path, temp);
+	a->path = malloc(strlen(path) + 1);
+	strcpy(a->path, path);
+	if (path != temp)
+		free(path);
 	a->file = s;
 	a->spec = spec;
 	if (afmget(a, contents, st.st_size) < 0) {
@@ -1895,6 +1914,8 @@ have:   fontbase[n] = &a->Font;
     	t_fp(n, a->fontname, fontbase[n]->intname, a);
 	goto done;
     }
+    if (strchr(s, '/') != NULL)
+	goto fail;
     if ( s1 == NULL || s1[0] == '\0' )
 	snprintf(temp, sizeof temp, "%s/dev%s/%s", fontdir, devname, s);
     else snprintf(temp, sizeof temp, "%s/%s", s1, s);
@@ -2313,7 +2334,7 @@ t_supply(char *font)		/* supply a font */
 			return;
 	sp = calloc(1, sizeof *sp);
 	sp->font = strdup(font);
-	sp->file = strdup(file);
+	sp->file = afmdecodepath(file);
 	sp->type = type && *type ? strdup(type) : NULL;
 	sp->next = supplylist;
 	supplylist = sp;
@@ -2421,6 +2442,7 @@ supplypfb(char *font, char *path, FILE *fp)
 static void
 supplyotf(char *font, char *path, FILE *fp)
 {
+	static int	cffcount;
 	struct stat	st;
 	char	*contents;
 	size_t	size, offset, length;
@@ -2437,12 +2459,20 @@ supplyotf(char *font, char *path, FILE *fp)
 		free(contents);
 		return;
 	}
-	fprintf(rf, "%%%%IncludeResource: ProcSet (FontSetInit)\n");
+	/*
+	 * Adobe Technical Note #5176, "The Compact Font Format
+	 * Specification", Version 1.0, 12/4/2003, p. 53 proposes
+	 * a weird syntax for CFF DSC comments ("ProcSet" etc.);
+	 * Adobe Distiller 7 complains about it with DSC warnings
+	 * enabled. What follows is an attempt to fix this.
+	 */
+	if (cffcount++ == 0)
+		fprintf(rf, "%%%%IncludeResource: procset FontSetInit 0 0\n");
         if (sfcount++ == 0)
         	fprintf(sf, "%%%%DocumentSuppliedResources: font %s\n", font);
         else
         	fprintf(sf, "%%%%+ font %s\n", font);
-	fprintf(rf, "%%%%BeginResource: FontSet (%s)\n", font);
+	fprintf(rf, "%%%%BeginResource: font %s\n", font);
 	fprintf(rf, "/FontSetInit /ProcSet findresource begin\n");
 	fprintf(rf, "%%%%BeginData: %ld Binary Bytes\n",
 			(long)(length + 13 + strlen(font) + 12));
@@ -2830,7 +2860,7 @@ t_track(char *buf)
 		t = 0;
 	if (t != lasttrack) {
 		tracked = -1;
-	} else if (t)
+	} else if (t && tracked != -1)
 		tracked = 1;
 	track = t;
 }
@@ -2840,8 +2870,10 @@ t_strack(void)
 {
 	endtext();
 	fprintf(tf, "%d T\n", track);
-	tracked = track != 0;
-	lasttrack = track;
+	if (tf == stdout) {
+		tracked = track != 0;
+		lasttrack = track;
+	}
 }
 
 /*****************************************************************************/
@@ -2939,7 +2971,7 @@ static int *
 printencvector(struct afmtab *a)
 {
 	int	i, j, k, n, col = 0, s, w;
-	int	*afmmap = NULL;
+	int	*encmap = NULL;
 
 	fprintf(gf, "/Encoding-@%s@0 [\n", a->Font.intname);
 	col = 0;
@@ -2949,7 +2981,7 @@ printencvector(struct afmtab *a)
 	 */
 	s = 128 - 32;
 	w = 128;
-	afmmap = calloc(256 + nchtab + a->nchars, sizeof *afmmap);
+	encmap = calloc(256 + nchtab + a->nchars, sizeof *encmap);
 	col += fprintf(gf, "/.notdef");
 	printencsep(&col);
 	for (j = 1; j < 32; j++) {
@@ -2961,7 +2993,7 @@ printencvector(struct afmtab *a)
 				(k = a->fitab[s]) != 0 &&
 				k < a->nchars &&
 				a->nametab[k] != NULL) {
-			afmmap[s - 128 + 32] = j;
+			encmap[s - 128 + 32] = j;
 			col += fprintf(gf, "/%s", a->nametab[k]);
 			printencsep(&col);
 			s++;
@@ -2986,7 +3018,7 @@ printencvector(struct afmtab *a)
 					(k = a->fitab[s]) != 0 &&
 					k < a->nchars &&
 					a->nametab[k] != NULL) {
-				afmmap[s - 128 + 32] = i + 32;
+				encmap[s - 128 + 32] = i + 32;
 				col += fprintf(gf, "/%s", a->nametab[k]);
 				printencsep(&col);
 				s++;
@@ -3010,7 +3042,7 @@ printencvector(struct afmtab *a)
 					(k = a->fitab[s]) != 0 &&
 					k < a->nchars &&
 					a->nametab[k] != NULL) {
-				afmmap[s - 128 + 32] = i | n << 8;
+				encmap[s - 128 + 32] = i | n << 8;
 				col += fprintf(gf, "/%s", a->nametab[k]);
 				printencsep(&col);
 				s++;
@@ -3021,7 +3053,7 @@ printencvector(struct afmtab *a)
 		}
 		endvec(a, n++);
 	}
-	return afmmap;
+	return encmap;
 }
 /*****************************************************************************/
 
@@ -3076,12 +3108,11 @@ t_sf(int forceflush)
 	lastfractsize = fractsize;
 	if ( seenfonts[fnum] == 0 ) {
 	    documentfonts();
-	    if (fontname[font].afm) {
+	    if (fontname[font].afm)
 		t_dosupply(fontname[font].afm->fontname);
-		fontname[font].afmmap = printencvector(fontname[font].afm);
-	    }
-	} else if (fontname[font].afm && fontname[font].afmmap == NULL)
-		fontname[font].afmmap = printencvector(fontname[font].afm);
+	}
+	if (fontname[font].afm && fontname[font].afm->encmap == NULL)
+	    fontname[font].afm->encmap = printencvector(fontname[font].afm);
 	seenfonts[fnum] = 1;
     }	/* End if */
 
@@ -3370,6 +3401,18 @@ put1s (
  */
 
 
+    if (s[0] == 'P' && s[1] == 'S' && s[2] != 0) {	/* PostScript name */ 
+         int	m;
+	 struct namecache	*np;
+	 struct afmtab	*a;
+	 if ((a = fontname[font].afm) != NULL &&
+			 (np = afmnamelook(a, &s[2])) != NULL &&
+			 ((m = np->fival[0]) != -1 ||
+			  (m = np->fival[1]) != -1)) {
+	     put1(m+32);
+	     return;
+	 }
+    }
     if ( strcmp(s, &chname[chtab[i]]) != 0 )
 	for ( i = 0; i < nchtab; i++ )
 	    if ( strcmp(&chname[chtab[i]], s) == 0 )
@@ -3457,6 +3500,8 @@ put1 (
 	    lastw = widthfac * (int)((pw[i] * fractsize + unitwidth/2) / unitwidth);
 	if (track && (encoding == 0 || encoding == 4 || encoding == 5))
 		lastw += track;
+	if (code == -1 && fontname[k].afm)
+		code = c + 32;
 	oput(code);
     }	/* End if */
 
@@ -3900,10 +3945,9 @@ addoctal (
  */
 
 
-    if (fontname[font].afm && fontname[font].afmmap == NULL)
-	    oprep();
-    if (c >= 128 && fontname[font].afmmap) {
-	    c = fontname[font].afmmap[c - 128];
+    oprep();
+    if (c >= 128 && fontname[font].afm->encmap) {
+	    c = fontname[font].afm->encmap[c - 128];
 	    subfont = c >> 8;
 	    c &= 0377;
     } else
@@ -4262,7 +4306,7 @@ t_pdfmark(char *buf)
 			strcmp(buf, "BookmarkClosed") == 0;
 		endtext();
 		fprintf(tf, "[ /Dest /Bookmark$%d\n"
-			    "  /View [/FitH %g]\n"
+			    "  /View [/XYZ -4 %g 0]\n"
 			    "/DEST pdfmark\n",
 			nBookmarks - 1,
 			pagelength - (lasty >= 0 ? vpos * 72.0 / res : 0));

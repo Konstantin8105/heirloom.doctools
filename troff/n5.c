@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n5.c	1.31 (gritter) 12/25/05
+ * Sccsid @(#)n5.c	1.35 (gritter) 1/31/06
  */
 
 /*
@@ -191,7 +191,7 @@ chget(int c)
 		ch = i;
 		return(c);
 	} else 
-		return(i & BYTEMASK);
+		return(cbits(i));
 }
 
 
@@ -413,7 +413,7 @@ casewh(void)
 	skip(0);
 	j = getrq();
 	if (j >= 256)
-		j = maybemore(j, 0);
+		j = maybemore(j, 1);
 	if ((k = findn(i)) != NTRAP) {
 		mlist[k] = j;
 		return;
@@ -454,6 +454,16 @@ casech(void)
 	if (nonumb)
 		mlist[k] = 0;
 	nlist[k] = i;
+}
+
+
+void
+casevpt(void)
+{
+	if (skip(1))
+		return;
+	vpt = atoi() != 0;
+	setnr(".vpt", vpt, 0);
 }
 
 
@@ -1421,6 +1431,8 @@ casemk(void)
 	}
 	if ((i = getrq()) == 0)
 		return;
+	if (i >= 256)
+		i = maybemore(i, 1);
 	numtab[findr(i)].val = j;
 }
 

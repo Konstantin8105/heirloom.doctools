@@ -1,3 +1,64 @@
+Release 060208
+* troff: Eastern European characters for Unicode/PostScript conversion
+  have been added (patch by Vladimir B. Machulsky).
+* troff, dpost: Font file names can now contain spaces or bytes outside
+  the ASCII range. A "%xx" escape sequence, where "xx" are hexadecimal
+  digits, has been introduced in order to achieve this. The description
+  of ".fp" in the "NEWS" file contains details on this.
+* [nt]roff: The ".vpt" request has been added to make it possible to
+  disable vertical position traps.
+* dpost: With the ".track" command, the tracking amount was not properly
+  initialized at every page of PostScript output. This could result in
+  incorrect arrangements of characters.
+* [nt]roff: Diagnostic messages now include the number of the current
+  output page.
+* [nt]roff: Page breaks inside a diversion are now properly ignored.
+* dpost: When a font was mounted replacing another font on the same
+  physical position, non-ASCII characters were not printed correctly
+  afterwards (bug reported by Vladimir B. Machulsky).
+* dpost: The BookMark device command now causes "/XYZ" destination keys
+  to be written to PDF documents. This has the effect that the current
+  zoom factor is retained when a bookmark is selected.
+* pic, grap: Fixed 8-bit input in label texts (bug reported by Vladimir
+  B. Machulsky).
+* troff: The ".trimat", ".bleedat", and ".cropat" requests caused some
+  following requests (e.g. ".fp") to fail because of an improper reset
+  of number scaling (bug reported by Sebastian Leusch).
+* troff: If the "\~" character appeared as part of the first word of
+  a line not immediately following a break, the current line and the
+  line before it were not justified correctly (bug reported by
+  Christian Schaper).
+* [nt]roff: The ".spreadwarn" request was wrongly called ".spreadlimit"
+  in the NEWS file.
+
+Release 060114
+* troff: The internal codes for PostScript characters are now unique across
+  all fonts. In effect, requests like ".tr" or ".lc" now handle arbitrary
+  characters correctly, including locale-dependent ones.
+* [nt]roff: The ".mk" request now accepts long register names.
+* [nt]roff: Using ".wh" with an undefined long macro name now works as with
+  undefined short names; the macro is executed once it has been created.
+* troff/dpost: PostScript characters are now passed as "CPSname" in the
+  intermediate output (instead of "Nnnn").
+* troff/dpost/otfdump: Apple TrueType fonts with a "true" header magic can
+  now be read (thanks to Stefan Tramm).
+* troff/dpost/otfdump: TrueType handling has been made more robust against
+  an error in Microsoft/Unicode "cmap" subtables.
+* dpost: Error messages now include the number of the current output page.
+* dpost: Color bars can now be generated with "-M colorbars", star targets
+  with "-M startargets", and all marks are enabled with "-M all".
+* dpost: The ".mediasize" request now also causes a "%%DocumentMedia:" DSC
+  comment to be written. This enables some PostScript previewer programs
+  to determine the document size.
+* troff: On a font mounted with ".fps punct", the "\(en" character is now
+  available as expected.
+* pic/dpost: The PostScript implementation of the "Dl" (draw line)
+  operation has been fixed to move to the beginning of the line properly
+  even when "inpath" is set. This fixes "box fill 0" for pic.
+* dpost: The geometry setup for drawing commands is now executed in the
+  setup section for each page. This makes pic work with filters that
+  re-arrange pages in PostScript.
+
 Release 051227
 * [nt]roff: A new extension level "3" is available. In this level, undefined
   long requests whose first two characters form an existing short request

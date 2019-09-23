@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n1.c	1.56 (gritter) 12/19/05
+ * Sccsid @(#)n1.c	1.60 (gritter) 2/5/06
  */
 
 /*
@@ -73,6 +73,7 @@ char *xxxvers = "@(#)roff:n1.c	2.13";
 #include <stddef.h>
 #include <limits.h>
 #include <wchar.h>
+#include <wctype.h>
 #endif	/* EUC */
 
 #include "tdef.h"
@@ -101,7 +102,9 @@ char	*mbbuf1p = mbbuf1;
 wchar_t	twc = 0;
 #endif	/* EUC */
 
+static void printlong(long, int);
 static void printn(long, long);
+static char *sprintlong(char *s, long, int);
 static char *sprintn(char *s, long n, int b);
 #define	vfdprintf	xxvfdprintf
 static void vfdprintf(int fd, const char *fmt, va_list ap);
@@ -290,7 +293,7 @@ start:
 loop:
 	xflag = _xflag;
 	copyf = lgf = nb = nflush = nlflg = 0;
-	if (ip && rbf0(ip) == 0 && ejf && frame->pframe <= ejl) {
+	if (ip && rbf0(ip) == 0 && dip == d && ejf && frame->pframe <= ejl) {
 		nflush++;
 		trap = 0;
 		eject((struct s *)0);
@@ -423,6 +426,7 @@ init2(void)
 	numtab[PID].val = getpid();
 	spreadlimit = 3*EM;
 	setnr(".warn", warn, 0);
+	setnr(".vpt", vpt, 0);
 	olinep = oline;
 	ioff = 0;
 	numtab[HP].val = init = 0;
@@ -510,6 +514,8 @@ verrprint(const char *s, va_list ap)
 	if (numtab[CD].val > 0)
 		fdprintf(stderr, "; line %d, file %s", numtab[CD].val,
 			 cfname[ifi] ? cfname[ifi] : "");
+	if (xflag && realpage)
+		fdprintf(stderr, "; page %ld", realpage);
 	fdprintf(stderr, "\n");
 	stackdump();
 #ifdef	DEBUG
@@ -577,16 +583,10 @@ loop:
 		putchar(c);
 	}
 	c = *fmt++;
-	if (c == 'd') {
+	if (c == 'd' || c == 'u' || c == 'o' || c == 'x') {
 		i = va_arg(ap, int);
-		if (i < 0) {
-			putchar('-');
-			i = -i;
-		}
-		printn((long)i, 10);
-	} else if (c == 'u' || c == 'o' || c == 'x')
-		printn(va_arg(ap, long), c == 'o' ? 8 : (c == 'x' ? 16 : 10));
-	else if (c == 'c') {
+		printlong(i, c);
+	} else if (c == 'c') {
 		if (c > 0177 || c < 040)
 			putchar('\\');
 		putchar(va_arg(ap, int) & 0177);
@@ -607,10 +607,78 @@ loop:
 		sprintf(s = tmp, fmt, va_arg(ap, double));
 		while (c = *s++)
 			putchar(c);
+	} else if (c == 'p') {
+		i = (intptr_t)va_arg(ap, void *);
+		putchar('0');
+		putchar('x');
+		printlong(i, 'x');
+	} else if (c == 'l') {
+		c = *fmt++;
+		if (c == 'd' || c == 'u' || c == 'o' || c == 'x') {
+			i = va_arg(ap, long);
+			printlong(i, c);
+		} else if (c == 'c') {
+			i = va_arg(ap, int);
+			if (c & ~0177) {
+#ifdef	EUC
+				char	mb[MB_LEN_MAX];
+				int	j, n;
+				n = wctomb(mb, i);
+				for (j = 0; j < n; j++)
+					putchar(mb[j]&0377);
+#endif	/* EUC */
+			} else
+				putchar(i);
+		}
+	} else if (c == 'U') {
+		i = va_arg(ap, int);
+		putchar('U');
+		putchar('+');
+		if (i < 0x1000)
+			putchar('0');
+		if (i < 0x100)
+			putchar('0');
+		if (i < 0x10)
+			putchar('0');
+		printn((long)i, 16);
+#ifdef	EUC
+		if (iswprint(i)) {
+			char	mb[MB_LEN_MAX];
+			int	j, n;
+			n = wctomb(mb, i);
+			putchar(' ');
+			putchar('(');
+			for (j = 0; j < n; j++)
+				putchar(mb[j]&0377);
+			putchar(')');
+		}
+#endif	/* EUC */
 	}
 	goto loop;
 }
 
+
+static void
+printlong(long i, int fmt)
+{
+	switch (fmt) {
+	case 'd':
+		if (i < 0) {
+			putchar('-');
+			i = -i;
+		}
+		/*FALLTHRU*/
+	case 'u':
+		printn(i, 10);
+		break;
+	case 'o':
+		printn(i, 8);
+		break;
+	case 'x':
+		printn(i, 16);
+		break;
+	}
+}
 
 /*
  * Print an unsigned integer in base b.
@@ -651,16 +719,10 @@ loop:
 		*str++ = c;
 	}
 	c = *fmt++;
-	if (c == 'd') {
+	if (c == 'd' || c == 'u' || c == 'o' || c == 'x') {
 		i = va_arg(ap, int);
-		if (i < 0) {
-			*str++ = '-';
-			i = -i;
-		}
-		str = sprintn(str, (long)i, 10);
-	} else if (c == 'u' || c == 'o' || c == 'x')
-		str = sprintn(str, va_arg(ap, long), c == 'o' ? 8 : (c == 'x' ? 16 : 10));
-	else if (c == 'c') {
+		str = sprintlong(str, i, c);
+	} else if (c == 'c') {
 		if (c > 0177 || c < 040)
 			*str++ = '\\';
 		*str++ = va_arg(ap, int) & 0177;
@@ -678,8 +740,53 @@ loop:
 		char	fmt[] = "%%";
 		fmt[1] = c;
 		str += sprintf(str, fmt, va_arg(ap, double));
+	} else if (c == 'p') {
+		i = (intptr_t)va_arg(ap, void *);
+		*str++ = '0';
+		*str++ = 'x';
+		str = sprintlong(str, i, 'x');
+	} else if (c == 'l') {
+		c = *fmt++;
+		if (c == 'd' || c == 'u' || c == 'o' || c == 'x') {
+			i = va_arg(ap, long);
+			printlong(i, c);
+		} else if (c == 'c') {
+			i = va_arg(ap, int);
+			if (i & ~0177) {
+#ifdef	EUC
+				int	n;
+				n = wctomb(str, i);
+				if (n > 0)
+					str += n;
+#endif	/* EUC */
+			} else
+				*str++ = i;
+		}
 	}
 	goto loop;
+}
+
+static char *
+sprintlong(char *s, long i, int fmt)
+{
+	switch (fmt) {
+	case 'd':
+		if (i < 0) {
+			*s++ = '-';
+			i = -i;
+		}
+		/*FALLTHRU*/
+	case 'u':
+		s = sprintn(s, i, 10);
+		break;
+	case 'o':
+		s = sprintn(s, i, 8);
+		break;
+	case 'x':
+		s = sprintn(s, i, 16);
+		break;
+	}
+	return s;
 }
 
 /*

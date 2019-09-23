@@ -23,7 +23,7 @@
 /*
  * Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)afm.h	1.20 (gritter) 12/22/05
+ * Sccsid @(#)afm.h	1.23 (gritter) 1/26/06
  */
 
 #ifndef	TROFF_AFM_H
@@ -64,10 +64,12 @@ struct feature {
 
 extern struct afmtab {
 	struct Font	Font;
+	char	*encpath;
 	char	*path;
 	char	*file;
 	char	*base;
 	char	*fontname;
+	char	*supply;
 	int	*fontab;
 	char	*kerntab;
 	short	*codetab;
@@ -76,6 +78,7 @@ extern struct afmtab {
 	int	*unitab;
 	int	nunitab;
 	void	*unimap;
+	int	*encmap;
 	struct namecache	*namecache;
 	int	nameprime;
 	struct kernpair	*kernpairs;
@@ -118,6 +121,9 @@ extern	void	afmaddchar(struct afmtab *, int, int, int, int, int[],
 			char *, enum spec, int);
 extern	struct kernpair	*afmkernlook(struct afmtab *, int, int);
 extern	int	nextprime(int n);
+extern	unsigned	pjw(const char *);
+extern	char	*afmencodepath(const char *);
+extern	char	*afmdecodepath(const char *);
 #ifdef	DPOST
 #include <stdio.h>
 extern	int	otfcff(const char *, char *, size_t, size_t *, size_t *);

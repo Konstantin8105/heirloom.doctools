@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)ext.h	1.33 (gritter) 12/19/05
+ * Sccsid @(#)ext.h	1.35 (gritter) 2/5/06
  */
 
 /*
@@ -156,6 +156,7 @@ extern	int	quiet;
 extern	int	ralss;
 extern	int	rargc;
 extern	int	raw;
+extern	long	realpage;
 extern	int	res;
 extern	int	setwdf;
 extern	int	sfont;
@@ -172,6 +173,7 @@ extern	int	tty;
 extern	int	ttyod;
 extern	int	ulfont;
 extern	int	vflag;
+extern	int	vpt;
 extern	int	wbfi;
 extern	int	widthp;
 extern	int	xflag;

@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n7.c	1.40 (gritter) 12/6/05
+ * Sccsid @(#)n7.c	1.42 (gritter) 2/5/06
  */
 
 /*
@@ -524,7 +524,7 @@ newline(int a)
 			dip->dnl += dip->alss;
 			dip->alss = 0;
 		}
-		if (dip->ditrap && !dip->ditf && dip->dnl >= dip->ditrap && dip->dimac)
+		if (vpt > 0 && dip->ditrap && !dip->ditf && dip->dnl >= dip->ditrap && dip->dimac)
 			if (control(dip->dimac, 0)) {
 				trap++; 
 				dip->ditf++;
@@ -544,7 +544,7 @@ newline(int a)
 	pchar1((tchar)'\n');
 	flss = 0;
 	lss = j;
-	if (numtab[NL].val < pl)
+	if (vpt == 0 || numtab[NL].val < pl)
 		goto nl2;
 nl1:
 	ejf = dip->hnl = numtab[NL].val = 0;
@@ -584,7 +584,9 @@ nlpn:
 	}
 nl2:
 	trap = 0;
-	if (numtab[NL].val == 0) {
+	if (vpt <= 0)
+		/*EMPTY*/;
+	else if (numtab[NL].val == 0) {
 		if ((j = findn(0)) != NTRAP)
 			trap = control(mlist[j], 0);
 	} else if ((i = findt(numtab[NL].val - nlss)) <= nlss) {
@@ -680,6 +682,14 @@ eject(struct s *a)
 
 	if (dip != d)
 		return;
+	if (vpt == 0) {
+		if (donef == 0) {
+			errprint("page not ejected because traps are disabled");
+			return;
+		}
+		errprint("page forcefully ejected although traps are disabled");
+		vpt = -1;
+	}
 	ejf++;
 	if (a)
 		ejl = a;
@@ -701,8 +711,8 @@ int
 movword(void)
 {
 	register int w;
-	register tchar i, *wp, c, *lp, *lastlp;
-	int	savwch, hys;
+	register tchar i, *wp, c, *lp, *lastlp, lasti = 0;
+	int	savwch, hys, stretches = 0;
 
 	over = 0;
 	wp = wordp;
@@ -757,12 +767,15 @@ movword(void)
 		w += kernadjust(i, *wp ? *wp : ' ' | i&SFMASK);
 		wne -= w;
 		wch--;
+		if (cbits(i) == STRETCH && cbits(lasti) != STRETCH)
+			stretches++;
+		lasti = i;
 		storeline(i, w);
 	}
 	*linep = *wp;
 	lastlp = linep;
 	if (nel >= 0) {
-		nwd++;
+		nwd += stretches + 1;
 		return(0);	/* line didn't fill up */
 	}
 #ifndef NROFF
@@ -844,7 +857,6 @@ int
 getword(int x)
 {
 	register int j, k = 0;
-	int	lastj = 0;
 	register tchar i, *wp, nexti, gotspc = 0;
 	int noword;
 #ifdef EUC
@@ -1043,9 +1055,6 @@ g1:		nexti = GETCH();
 #endif /* EUC */
 	if (j != ' ') {
 		static char *sentchar = ".?!:";	/* sentence terminators */
-		if (j == STRETCH && lastj != j)
-			nwd++;
-		lastj = j;
 		if (j != '\n')
 #ifdef EUC
 #ifdef NROFF

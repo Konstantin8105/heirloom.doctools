@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)t10.c	1.58 (gritter) 12/22/05
+ * Sccsid @(#)t10.c	1.62 (gritter) 2/5/06
  */
 
 /*
@@ -82,8 +82,6 @@ int	nfonts;
 int	nsizes;
 int	nchtab;
 
-long	realpage;
-
 static float	mzoom;
 
 /* these characters are used as various signals or values
@@ -93,6 +91,7 @@ static float	mzoom;
 
 int	c_hyphen;
 int	c_emdash;
+int	c_endash;
 int	c_rule;
 int	c_minus;
 int	c_fi;
@@ -272,6 +271,7 @@ specnames(void)
 	} spnames[] = {
 		&c_hyphen, "hy",
 		&c_emdash, "em",
+		&c_endash, "en",
 		&c_rule, "ru",
 		&c_minus, "\\-",
 		&c_fi, "fi",
@@ -357,6 +357,7 @@ ptout(register tchar i)
 tchar *
 ptout0(tchar *pi, tchar *pend)
 {
+	struct afmtab	*a;
 	register int j;
 	register int k, w = 0;
 	int	z, dx, dy, dx2, dy2, n;
@@ -456,6 +457,10 @@ ptout0(tchar *pi, tchar *pend)
 		ptlead();
 	if (&pi[outsize] < pend)
 		w += getkw(pi[0], pi[outsize]);
+	if (afmtab && (j = (fontbase[xfont]->afmpos) - 1) >= 0)
+		a = afmtab[j];
+	else
+		a = NULL;
 	j = z = 0;
 	if (k != DRAWFCN) {
 		if (cs) {
@@ -568,9 +573,13 @@ ptout0(tchar *pi, tchar *pend)
 	} else {
 		if (esc)
 			ptesc();
-		if (k >= nchtab + 128)
-			fdprintf(ptid, "N%d\n", k - (nchtab+128));
-		else
+		if (k >= nchtab + 128) {
+			if (a && (j = a->fitab[k-nchtab-128-32]) < a->nchars &&
+					a->nametab[j] != NULL)
+				fdprintf(ptid, "CPS%s\n", a->nametab[j]);
+			else
+				fdprintf(ptid, "N%d\n", k - (nchtab+128));
+		} else
 			fdprintf(ptid, "C%s\n", &chname[chtab[k - 128]]);
 	}
 	if (bd) {
@@ -580,7 +589,11 @@ ptout0(tchar *pi, tchar *pend)
 		if (k < 128) {
 			fdprintf(ptid, "c%c\n", k);
 		} else if (k >= nchtab + 128) {
-			fdprintf(ptid, "N%d\n", k - (nchtab+128));
+			if (a && (j = a->fitab[k-nchtab-128-32]) < a->nchars &&
+					a->nametab[j] != NULL)
+				fdprintf(ptid, "CPS%s\n", a->nametab[j]);
+			else
+				fdprintf(ptid, "N%d\n", k - (nchtab+128));
 		} else
 			fdprintf(ptid, "C%s\n", &chname[chtab[k - 128]]);
 		if (z)
@@ -708,11 +721,15 @@ newpage(int n)	/* called at end of each output page (we hope) */
 		return;
 	fdprintf(ptid, "p%d\n", n);	/* new page */
 	for (i = 0; i <= nfonts; i++)
-		if (afmtab && fontbase[i]->afmpos)
+		if (afmtab && fontbase[i]->afmpos) {
+			struct afmtab	*a = afmtab[(fontbase[i]->afmpos)-1];
+			if (a->encpath == NULL)
+				a->encpath = afmencodepath(a->path);
 			fdprintf(ptid, "x font %d %s %d\n", i,
-				afmtab[(fontbase[i]->afmpos)-1]->path,
-				afmtab[(fontbase[i]->afmpos)-1]->spec);
-		else if (fontbase[i]->namefont && fontbase[i]->namefont[0])
+				a->encpath, a->spec);
+			if (a->supply)
+				ptsupplyfont(a->fontname, a->supply);
+		} else if (fontbase[i]->namefont && fontbase[i]->namefont[0])
 			fdprintf(ptid, "x font %d %s\n", i, fontbase[i]->namefont);
 	ptps();
 	ptfont();

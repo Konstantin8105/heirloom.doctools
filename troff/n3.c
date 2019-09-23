@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n3.c	1.70 (gritter) 12/25/05
+ * Sccsid @(#)n3.c	1.72 (gritter) 1/31/06
  */
 
 /*
@@ -134,6 +134,7 @@ growcontab(void)
 		addcon(i++, "bleedat", (void(*)(int))casebleedat);
 		addcon(i++, "cropat", (void(*)(int))casecropat);
 		addcon(i++, "fps", (void(*)(int))casefps);
+		addcon(i++, "vpt", (void(*)(int))casevpt);
 	} else {
 		for (i = 0; i < sizeof mhash / sizeof *mhash; i++)
 			if (mhash[i])
@@ -556,8 +557,8 @@ alloc (void)		/*return free blist[] block in nextb*/
 				cc2 = ' ';
 			fdprintf(stderr, "oldmn %d %c%c, ", oldmn, cc1, cc2);
 		}
-		fdprintf(stderr, "newmn %d; nextb was %x, will be %x\n",
-			newmn, nextb, j);
+		fdprintf(stderr, "newmn %d; nextb was %lx, will be %lx\n",
+			newmn, (long)nextb, (long)j);
 	}
 #endif	/* DEBUG */
 	return(nextb = j);
@@ -794,7 +795,7 @@ setbrk(int x)
 			edone(0100);
 		}
 		if (k != i + x) {	/*there must have been an intervening sbrk*/
-			errprint ("internal error in setbrk: i=%x, j=%d, k=%x",
+			errprint ("internal error in setbrk: i=%p, j=%d, k=%p",
 				i, j, k);
 			edone(0100);
 		}
@@ -891,7 +892,7 @@ collect(void)
 		argpp[j] = (tchar *)0;
 	}
 #if 0
-	errprint("savnxf=0x%x,nxf=0x%x,argpp=0x%x,strp=argppend=0x%x,lim=0x%x,enda=0x%x",
+	errprint("savnxf=0x%p,nxf=0x%p,argpp=0x%p,strp=argppend=0x%p,lim=0x%p,enda=0x%p",
 		savnxf, nxf, argpp, strp, lim, enda);
 #endif
 	strflg = 0;
@@ -915,7 +916,7 @@ collect(void)
 			*strp++ = i;
 			if (strflg && strp >= lim) {
 #if 0
-				errprint("strp=0x%x, lim = 0x%x",
+				errprint("strp=0x%p, lim = 0x%p",
 					strp, lim);
 #endif
 				errprint("Macro argument too long");

@@ -164,6 +164,13 @@ New and extended requests
 	"/usr/ucblib/doctools/font/devps/supplyname.pfb" (or
 	likewise). "supplyname" may also be the basename of a file like
 	"metricsname" above.
+	  The character "%" can be used to escape arbitrary bytes in
+	font file names. In particular, this is necessary to use font
+	files whose names contain spaces, bytes outside the ASCII range,
+	or a "%" itself. "%xx" represents the byte with the hexadecimal
+	code "xx", e.g., "%20" is a space character. In the path names
+	in TROFFONTS, only the "%" and ":" characters have to be masked
+	using this mechanism.
 
 .fps math,greek,punct,large r yy metricsname [supplyname]	troff only
 	mounts a font with a special character map. By default, special
@@ -245,12 +252,13 @@ New and extended requests
 .mediasize executive|letter|legal|ledger|tabloid|aN|bN|cN|x y	troff only
 	performs the same actions as the ".papersize" request and generates
 	a device setup command in addition (the PostScript Level 2 operator
-	"setpagedevice" with dpost). The effect of this command can be the
-	selection of a matching paper tray on a printer; on the other hand,
-	the document may not print at all if no such tray is available. In
-	general, it is recommended to use printer-specific options from a
-	PPD file when the file is submitted to the print spooling system
-	instead of this request. However, when generating PostScript as
+	"setpagedevice" as well as the DSC comment "%%DocumentMedia:" with
+	dpost). The effect of this command can be the selection of a
+	matching paper tray on a printer; on the other hand, the document
+	may not print at all if no such tray is available. In general, it
+	is recommended to use printer-specific options from a PPD file
+	when the file is submitted to the print spooling system instead
+	of this request. However, when generating PostScript as
 	intermediate format with the intent of PDF creation, use of this
 	request is recommended.
 
@@ -309,7 +317,7 @@ New and extended requests
 	shifts the arguments to the current macro by "n", or 1 if "n"
 	is missing.
 
-.spreadlimit [n]
+.spreadwarn [n]
 	sets or toggles a limit that causes a warning to be printed when
 	it is exceeded by the adjustment that is computed for the current
 	output line in ".ad b" mode. The limit is initially 3m, but the
@@ -327,13 +335,6 @@ New and extended requests
 	is similar to ".tm" and writes "message" to standard error, but
 	does not write a newline at the end.
 
-.tr abcd...
-	produces unspecified results if used with PostScript characters
-	"\[name]", Unicode characters "\U'...'", or localized input. The
-	".ftr" request should be used for such characters instead. With
-	ASCII and traditional troff special characters, the ".tr" request
-	continues to work as expected.
-
 .track ff s1 n1 s2 n2					troff only
 	specifies tracking of letter space for font ff. If the current font
 	is ff and the point size is below or equal to s1, white space of
@@ -349,14 +350,29 @@ New and extended requests
 
 .trimat left-offset top-offset width height
 	sets the "TrimBox" page parameter for PDF generation and enables
-	printing of visible cut marks and/or registration marks when used
-	with "dpost -M cut:registration". The four arguments give the
-	offset from the left and top margins of the document (as set by
-	".mediasize"), and width and height of the box. The default units
-	are points. The TrimBox specifies how the page is to be cut after
-	it has been printed; it is sort of an electronic equivalent for
-	cut marks (which should continue to be printed in addition). See
-	also the ".cropat" and ".bleedat" requests.
+	printing of marks with "dpost -M...".
+	  The four arguments give the offset from the left and top margins
+	of the document (as set by ".mediasize"), and width and height of
+	the box. The default units are points. The TrimBox specifies how
+	the page is to be cut after it has been printed; it is sort of
+	an electronic equivalent for cut marks (which should continue to
+	be printed in addition). See also the ".cropat" and ".bleedat"
+	requests.
+	  dpost can currently print the following marks:
+
+		-M cutmarks		cut marks
+		-M registrationmarks	registration marks
+		-M startargets		star targets
+		-M colorbars		color bars
+		-M all			all of the above
+	
+	Mark names can be abbreviated and combined by colons, e.g.
+	"-Mcut:reg" will print cut marks and registration marks.
+
+.vpt n
+	enables (n != 0) or disables (n = 0) page ejections and vertical
+	position traps, i.e. those set with ".wh" or ".dt". At end of
+	input, the page is forcefully ejected. The default is "enabled".
 
 .warn [+|-][bits|name] ...
 	controls warning messages, which may be given either numerically
@@ -464,6 +480,10 @@ New number registers
 \n[seconds]
 	prints the seconds portion of the current local time [0,60].
 
+\n[.vpt]
+	prints whether vertical position traps are enabled (1) or
+	disabled (0).
+
 \n[.warn]
 	prints the bits representing the currently activated warning
 	categories.
@@ -513,6 +533,9 @@ currently defined:
 Changes to troff intermediate output
 ====================================
 
+CPSname	specifies that the PostScript character "name" is to be
+	printed in the current font.
+
 s-23 d.d
 	is a crude way to tell the post-processor that "d.d" is a
 	(possibly fractional) point size for the current font. This
@@ -528,14 +551,8 @@ x font n filename
 	intermediate output with the most impact. First, it will trigger
 	buffer overflows in many existing variants of post-processors.
 	Second, the way how information about the font is exchanged in
-	the following output is specific to the current version of the
-	AFM/OpenType handling routines. For all characters that are
-	neither ASCII nor troff special, troff produces "Nnnn" commands,
-	where "nnn" is the position of the character in an encoding that
-	has been produced at runtime while reading the metrics data. The
-	post-processor thus has to know about the encoding, and this is
-	only guaranteed if the AFM/OpenType routines are the same as for
-	troff.
+	the following output may be specific to the current version of
+	the AFM/OpenType handling routines.
 	  If this is a problem, use -Tpost and no AFM or OpenType files.
 	Sorry, but direct handling of Type 1 fonts comes at a certain price.
 
@@ -555,8 +572,9 @@ x X CropAt left-offset top-offset width height
 x X PaperSize x y setmedia
 	results from the ".mediasize" or ".papersize" requests and gives
 	the paper size as "x" and "y" in device units. If "setmedia" is
-	non-zero, PostScript code for "setpagedevice" will also be
-	emitted. This command is not generated otherwise.
+	non-zero, PostScript code for "setpagedevice" and the DSC comment
+	"%%DocumentMedia:" will also be emitted. This command is not
+	generated otherwise.
 
 x X PDFMark attribute value
 	includes information that is used by the distiller utility when
@@ -614,4 +632,4 @@ x X TrimAt left-offset top-offset width height
 	in device units.
 
 
-Gunnar Ritter                                                   12/21/05
+Gunnar Ritter                                                   2/5/06

@@ -23,7 +23,7 @@
 /*
  * Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)afm.c	1.40 (gritter) 12/20/05
+ * Sccsid @(#)afm.c	1.43 (gritter) 1/25/06
  */
 
 #include <stdlib.h>
@@ -586,8 +586,13 @@ afmremap(struct afmtab *a)
 
 	for (i = 1; i < a->nchars; i++) {
 		if (a->codetab[i] == -1 && a->nametab[i] != NULL) {
+#if defined (DPOST) || defined (DUMP)
 			while (a->fitab[j] != 0)
 				j++;
+#else	/* TROFF */
+			extern int	ps2cc(const char *);
+			j = ps2cc(a->nametab[i]) + 128 - 32 + nchtab;
+#endif	/* TROFF */
 			a->fitab[j] = i;
 			np = afmnamelook(a, a->nametab[i]);
 			np->afpos = i;
@@ -822,7 +827,13 @@ afmalloc(struct afmtab *a, int n)
 {
 	int	i;
 
+#if defined (DPOST) || defined (DUMP)
 	a->fitab = calloc(n+NCHARLIB+1 + 128 - 32 + nchtab, sizeof *a->fitab);
+#else	/* TROFF */
+	extern int	psmaxcode;
+	a->fitab = calloc(n+NCHARLIB+1 + 128 - 32 + nchtab + psmaxcode+1,
+			sizeof *a->fitab);
+#endif	/* TROFF */
 	a->fontab = malloc((n+NCHARLIB+1)*sizeof *a->fontab);
 	a->fontab[0] = dev.res * dev.unitwidth / 72 / 3;
 	a->kerntab = calloc(n+NCHARLIB+1, sizeof *a->kerntab);
@@ -1052,4 +1063,57 @@ afmgetkern(struct afmtab *a, int ch1, int ch2)
 		return 0;
 }
 #endif	/* !DPOST */
+
+char *
+afmencodepath(const char *cp)
+{
+	const char	hex[] = "0123456789ABCDEF";
+	char	*enc, *ep;
+
+	ep = enc = malloc(3 * strlen(cp) + 1);
+	while (*cp) {
+		if (*cp&0200 || *cp <= 040 || *cp == 0177) {
+			*ep++ = '%';
+			*ep++ = hex[(*cp&0360) >> 4];
+			*ep++ = hex[*cp++&017];
+		} else
+			*ep++ = *cp++;
+	}
+	*ep = 0;
+	return enc;
+}
+
+static int
+unhex(int c)
+{
+	if (c >= 'A' && c <= 'F')
+		return c - 'A';
+	if (c >= 'a' && c <= 'f')
+		return c - 'a';
+	return c - '0';
+}
+
+static int
+xdigit(int c)
+{
+	return c >= 'A' && c <= 'F' || c >= 'a' && c <= 'f' ||
+		c >= '0' && c <= '9';
+}
+
+char *
+afmdecodepath(const char *cp)
+{
+	char	*dec, *dp;
+
+	dec = dp = malloc(strlen(cp) + 1);
+	while (*cp) {
+		if (cp[0] == '%' && xdigit(cp[1]&0377) && xdigit(cp[2]&0377)) {
+			*dp++ = unhex(cp[1]) << 4 | unhex(cp[2]);
+			cp += 3;
+		} else
+			*dp++ = *cp++;
+	}
+	*dp = 0;
+	return dec;
+}
 #endif	/* !DUMP */
