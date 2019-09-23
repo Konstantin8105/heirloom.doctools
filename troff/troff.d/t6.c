@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)t6.c	1.171 (gritter) 8/13/06
+ * Sccsid @(#)t6.c	1.174 (gritter) 9/4/06
  */
 
 /*
@@ -198,7 +198,7 @@ getcw(register int i)
 	int nocache = 0;
 	int	ofont = xfont;
 	int	s, t;
-	float	z = 1, zv;
+	double	z = 1, zv;
 	struct afmtab	*a;
 
 	bd = 0;
@@ -404,7 +404,7 @@ onfont(tchar c)
 static int
 fvert2pts(int f, int s, int k)
 {
-	float	z;
+	double	z;
 
 	if (k != 0) {
 		k = (k * u2pts(s) + (Unitwidth / 2)) / Unitwidth;
@@ -552,7 +552,7 @@ getkw(tchar c, tchar d)
 	struct knode	*kp;
 	struct afmtab	*a;
 	int	f, g, i, j, k, n, s, I, J;
-	float	z;
+	double	z;
 
 	if (isxfunc(c, CHAR))
 		c = charout[sbits(c)].ch;
@@ -800,10 +800,20 @@ caseps(void)
 	if (skip(0))
 		i = apts1;
 	else {
-		dfact = INCH;
-		dfactd = 72;
-		res = VERT;
+		if (xflag == 0) {
+			noscale++;
+			apts = u2pts(apts);
+		} else {
+			dfact = INCH;
+			dfactd = 72;
+			res = VERT;
+		}
 		i = inumb(&apts);
+		if (xflag == 0) {
+			noscale--;
+			i = pts2u(i);
+			apts = pts2u(apts);
+		}
 		if (nonumb)
 			return;
 	}
@@ -823,8 +833,6 @@ casps1(register int i)
 	if (i <= 0)
 		return;
 */
-	if (xflag == 0)
-		i = pts2u(u2pts(i));
 	apts1 = apts;
 	apts = i;
 	pts1 = pts;
@@ -917,14 +925,17 @@ setps(void)
 		j = cbits(getch());
 		if (ischar(j) && isdigit(j)) {		/* \s+d, \s-d */
 			j -= '0';
+			j = pts2u(j);
 		} else if (j == '(') {		/* \s+(dd, \s-(dd */
 			j = cbits(getch()) - '0';
 			j = 10 * j + cbits(getch()) - '0';
+			j = pts2u(j);
 		} else if ((j == '[' || j == '\'') && xflag) {	/* \s+[dd], */
 			k = j == '[' ? ']' : j;			/* \s-'dd' */
-			noscale++;
+			dfact = INCH;
+			dfactd = 72;
+			res = HOR;
 			j = atoi();
-			noscale--;
 			if (nonumb)
 				return;
 			if (cbits(getch()) != k)
@@ -932,14 +943,13 @@ setps(void)
 		}
 		if (i == '-')
 			j = -j;
-		j = pts2u(j);
 		j += apts;
 	} else if ((i == '[' || i == '\'') && xflag) {	/* \s'+dd', \s[dd] */
 		if (i == '[')
 			i = ']';
 		dfact = INCH;
 		dfactd = 72;
-		res = VERT;
+		res = HOR;
 		j = inumb(&apts);
 		if (nonumb)
 			return;

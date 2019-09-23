@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n7.c	1.93 (gritter) 8/12/06
+ * Sccsid @(#)n7.c	1.101 (gritter) 9/5/06
  */
 
 /*
@@ -47,13 +47,13 @@
  */
 
 #include <stdlib.h>
+#include <limits.h>
 #if defined (EUC) && defined (NROFF)
 #ifdef	__sun
 #include <widec.h>
 #else
 #include <wchar.h>
 #endif
-#include <limits.h>
 #endif /* EUC && NROFF */
 #include "tdef.h"
 #ifdef NROFF
@@ -94,6 +94,7 @@ int	brflg;
 
 static tchar	adjbit(tchar);
 static void	sethtdp(void);
+static void	leftend(tchar, int);
 #ifndef	NROFF
 #define	nroff		0
 extern int	lastrst;
@@ -375,12 +376,19 @@ t2:
 			goto t1;
 	}
 t3:
-	if (spread)
+	if (spread && !brpnl)
 		goto t5;
 	if (pendw || !wch)
 t4:
-		if (getword(0))
+		if (getword(0)) {
+			if (!pendw) {
+				if (brnl || brpnl && spread)
+					goto tb;
+				if (brpnl)
+					goto t5;
+			}
 			goto t6;
+		}
 	if (!movword())
 		goto t3;
 t5:
@@ -409,10 +417,15 @@ adj:
 			errprint("spreadlimit exceeded, %gm", (double)adsp/EM);
 	}
 	brflg = 1;
+tb:
 	tbreak();
 	spread = 0;
-	if (!trap && !recadj)
+	if (!trap && !recadj && !brnl && !brpnl)
 		goto t3;
+	if (brnl > 0 && brnl < INT_MAX)
+		brnl--;
+	if (brpnl > 0 && brpnl < INT_MAX)
+		brpnl--;
 	if (!nlflg)
 		goto rtn;
 t6:
@@ -444,8 +457,7 @@ nofill(void)
 		nwd = 10000;
 	}
 	nexti = GETCH();
-	if (!ce && !rj && !pendnf)
-		setlhang(nexti);
+	leftend(nexti, !ce && !rj && !pendnf);
 	while ((j = (cbits(i = nexti))) != '\n') {
 		if (stopch && issame(i, stopch))
 			break;
@@ -541,7 +553,7 @@ storeline(register tchar c, int w)
 			w = -1;
 			goto s1;
 		}
-		linep += k - line;
+		linep = (tchar *)((char *)linep + ((char *)k - (char *)line));
 		line = k;
 	}
 s1:
@@ -747,7 +759,7 @@ findt(int a)
 {
 	register int i, j, k;
 
-	k = MAXMOT;
+	k = INT_MAX;
 	if (dip != d) {
 		if (dip->dimac && (i = dip->ditrap - a) > 0)
 			k = i;
@@ -890,9 +902,9 @@ movword(void)
 		wp--;
 		if (wp > wordp)
 			wne -= kernadjust(wp[-1], wp[0]);
-		if (admod != 1 && admod != 2)
-			setlhang(*wp);
+		leftend(*wp, admod != 1 && admod != 2);
 	}
+	wsp = 0;
 	if (wne > nel - adspc && !hyoff && hyf && (hlm < 0 || hlc < hlm) &&
 	   (!nwd || nel + lsplow + lshlow - adspc >
 	    3 * (minsps && ad && !admod ? minsps : sps)) &&
@@ -1264,6 +1276,8 @@ a0:
 			storeword(t | SENTSP, ses);
 		spflg = 0;
 	}
+	if (!nwd)
+		wsp = wne;
 g0:
 	if (j == CONT) {
 		pendw = wordp;
@@ -1418,6 +1432,7 @@ storeword(register tchar c, register int w)
 
 	if (wordp == NULL || wordp >= &word[wdsize - 3]) {
 		tchar	*k, **h;
+		int	j;
 		if (over)
 			return;
 		wdsize += wdsize ? 100 : WDSIZE;
@@ -1429,10 +1444,11 @@ storeword(register tchar c, register int w)
 			w = -1;
 			goto s1;
 		}
-		wordp += k - word;
+		j = (char *)k - (char *)word;
+		wordp = (tchar *)((char *)wordp + j);
 		for (h = hyptr; h < hyp; h++)
 			if (*h)
-				*h += k - word;
+				*h = (tchar *)((char *)*h + j);
 		word = k;
 	}
 s1:
@@ -1542,6 +1558,28 @@ sethtdp(void)
 		maxcht = cht;
 	if ((cdp = -lastrsb) > maxcdp)
 		maxcdp = cdp;
+}
+
+static void
+leftend(tchar c, int hang)
+{
+	int	k, w;
+
+	if (lpfx) {
+		if (hang)
+			setlhang(lpfx[0]);
+		for (k = 0; lpfx[k]; k++) {
+			w = width(lpfx[k]);
+			w += k ? kernadjust(lpfx[k-1], lpfx[k]) : 0;
+			storeline(lpfx[k], w);
+		}
+		if (k) {
+			w = kernadjust(lpfx[k-1], c);
+			nel -= w;
+			ne += w;
+		}
+	} else if (hang)
+		setlhang(c);
 }
 
 #ifndef	NROFF

@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n3.c	1.141 (gritter) 8/12/06
+ * Sccsid @(#)n3.c	1.150 (gritter) 9/5/06
  */
 
 /*
@@ -96,6 +96,8 @@ static const struct {
 	{ "asciify",		(void(*)(int))caseasciify },
 	{ "bleedat",		(void(*)(int))casebleedat },
 	{ "blm",		(void(*)(int))caseblm },
+	{ "brnl",		(void(*)(int))casebrnl },
+	{ "brpnl",		(void(*)(int))casebrpnl },
 	{ "box",		(void(*)(int))casebox},
 	{ "boxa",		(void(*)(int))caseboxa},
 	{ "break",		(void(*)(int))casebreak},
@@ -134,6 +136,7 @@ static const struct {
 	{ "length",		(void(*)(int))caselength },
 	{ "letadj",		(void(*)(int))caseletadj },
 	{ "lhang",		(void(*)(int))caselhang },
+	{ "lpfx",		(void(*)(int))caselpfx },
 	{ "mediasize",		(void(*)(int))casemediasize },
 	{ "minss",		(void(*)(int))caseminss },
 	{ "nhychar",		(void(*)(int))casenhychar },
@@ -191,12 +194,15 @@ growcontab(void)
 		for (j = 0; longrequests[j].f; j++)
 			addcon(i++, longrequests[j].n, longrequests[j].f);
 	} else {
+		j = (char *)contab - (char *)onc;
 		for (i = 0; i < sizeof mhash / sizeof *mhash; i++)
 			if (mhash[i])
-				mhash[i] += contab - onc;
+				mhash[i] = (struct contab *)
+					((char *)mhash[i] + j);
 		for (i = 0; i < NM; i++)
 			if (contab[i].link)
-				contab[i].link += contab - onc;
+				contab[i].link = (struct contab *)
+					((char *)contab[i].link + j);
 	}
 	NM += inc;
 	return contab;
@@ -205,24 +211,24 @@ growcontab(void)
 void *
 growblist(void)
 {
+	static tchar	*_corebuf;
 	int	inc = 512;
 	tchar	*ocb;
 
-	if (nblist+inc > XBLIST)
-		return NULL;
 	if ((blist = realloc(blist, (nblist+inc) * sizeof *blist)) == NULL)
 		return NULL;
 	memset(&blist[nblist], 0, inc * sizeof *blist);
-	ocb = corebuf;
-	if ((corebuf = realloc(corebuf, (ENV_BLK+nblist+inc+1)
-					* BLK * sizeof *corebuf)) == NULL)
+	ocb = _corebuf;
+	if ((_corebuf = realloc(_corebuf,
+	    ((ENV_BLK+nblist+inc+1) * BLK + 1) * sizeof *_corebuf)) == NULL)
 		return NULL;
 	if (ocb == NULL)
-		memset(corebuf, 0, (ENV_BLK+1) * BLK * sizeof *corebuf);
+		memset(_corebuf, 0, ((ENV_BLK+1) * BLK + 1) * sizeof *_corebuf);
+	corebuf = &_corebuf[1];
 	memset(&corebuf[(ENV_BLK+nblist+1) * BLK], 0,
 			inc * BLK * sizeof *corebuf);
 	if (wbuf)
-		wbuf += corebuf - ocb;
+		wbuf = (tchar *)((char *)wbuf + ((char *)corebuf-(char *)ocb));
 	nblist += inc;
 	return blist;
 }
@@ -581,9 +587,7 @@ copyb(void)
 		i = cbits(ii = getch());
 		if (state == 2 && mn[j] == 0) {
 			ch = ii;
-			i = getach();
-			ch = ii;
-			if (!i)
+			if (!getach())
 				break;
 			state = 0;
 			goto c0;
@@ -755,7 +759,7 @@ rbf (void)		/*return next char from blist[] block*/
 	register tchar i;
 	register filep j, p;
 
-	if (ip == XBLIST*BLK) {		/* for rdtty */
+	if (ip == -1) {		/* for rdtty */
 		if (j = rdtty())
 			return(j);
 		else
@@ -945,7 +949,7 @@ setstr(void)
 void
 collect(void)
 {
-	return _collect(0);
+	_collect(0);
 }
 
 static void
@@ -1129,13 +1133,9 @@ casedi(int box)
 			prwatchn(DN);
 			prwatchn(DL);
 			if (dip->boxenv) {
-				free(line);
-				free(word);
-				free(hcode);
+				relsev(&env);
 				evcline(&env, dip->boxenv);
-				free(dip->boxenv->_line);
-				free(dip->boxenv->_word);
-				free(dip->boxenv->_hcode);
+				relsev(dip->boxenv);
 				free(dip->boxenv);
 			}
 			dip = &d[--dilev];
@@ -1446,7 +1446,8 @@ casetl(void)
 				tchar	*k;
 				bufsz += 100;
 				k = realloc(buf, bufsz * sizeof *buf);
-				tp += k - buf;
+				tp = (tchar *)
+				    ((char *)tp + ((char *)k - (char *)buf));
 				buf = k;
 			}
 			*tp++ = i;
@@ -1755,6 +1756,8 @@ caseunformat(int flag)
 				}
 			} else if (isadjmot(c))
 				continue;
+			else if (cbits(c) == PRESC)
+				setcbits(c, eschar);
 			if (flag & 1 && !ismot(c) && cbits(c) != SLANT) {
 #ifndef	NROFF
 				int	m = cbits(c);

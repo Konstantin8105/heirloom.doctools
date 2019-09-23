@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n5.c	1.84 (gritter) 8/12/06
+ * Sccsid @(#)n5.c	1.91 (gritter) 9/3/06
  */
 
 /*
@@ -51,6 +51,7 @@
 #include <fcntl.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <limits.h>
 #if defined (EUC) && defined (NROFF)
 #include <stddef.h>
 #ifdef	__sun
@@ -299,6 +300,33 @@ caseshc(void)
 	shc = skip(0) ? 0 : getch();
 }
 
+void
+caselpfx(void)
+{
+	int	n;
+	tchar	c;
+
+	if (skip(0)) {
+		free(lpfx);
+		lpfx = NULL;
+		nlpfx = 0;
+	} else {
+		for (n = 0; ; n++) {
+			if (n+1 >= nlpfx) {
+				nlpfx += 10;
+				lpfx = realloc(lpfx, nlpfx * sizeof *lpfx);
+			}
+			c = getch();
+			if (nlflg)
+				break;
+			if (n == 0 && cbits(c) == '"')
+				continue;
+			lpfx[n] = c;
+		}
+		lpfx[n] = 0;
+	}
+}
+
 int 
 max(int aa, int bb)
 {
@@ -352,6 +380,45 @@ caserj(void)
 {
 	if (xflag)
 		cerj(1);
+}
+
+
+static void
+_brnl(int p)
+{
+	int	n;
+
+	noscale++;
+	if (skip(0))
+		n = INT_MAX;
+	else {
+		n = atoi();
+		if (nonumb || n < 0)
+			n = p ? brpnl : brpnl;
+	}
+	noscale--;
+	tbreak();
+	if (p) {
+		brpnl = n;
+		brnl = 0;
+	} else {
+		brnl = n;
+		brpnl = 0;
+	}
+}
+
+
+void
+casebrnl(void)
+{
+	_brnl(0);
+}
+
+
+void
+casebrpnl(void)
+{
+	_brnl(1);
 }
 
 
@@ -1013,9 +1080,7 @@ caseevc(void)
 
 	if (getev(&nxev, &name) == 0 || (ep = findev(&nxev, name)) == NULL)
 		return;
-	free(env._hcode);
-	free(env._line);
-	free(env._word);
+	relsev(&env);
 	evc(&env, ep);
 }
 
@@ -1027,15 +1092,22 @@ evc(struct env *dp, struct env *sp)
 	if (dp != sp) {
 		name = dp->_evname;
 		memcpy(dp, sp, sizeof *dp);
-		dp->_hcode = malloc(dp->_nhcode * sizeof *dp->_hcode);
-		memcpy(dp->_hcode, sp->_hcode, dp->_nhcode * sizeof *dp->_hcode);
-		dp->_evname = name;
+		if (sp->_hcode) {
+			dp->_hcode = malloc(dp->_nhcode * sizeof *dp->_hcode);
+			memcpy(dp->_hcode, sp->_hcode, dp->_nhcode * sizeof *dp->_hcode);
+		}
+		if (sp->_lpfx) {
+			dp->_lpfx = malloc(dp->_nlpfx * sizeof *dp->_lpfx);
+			memcpy(dp->_lpfx, sp->_lpfx, dp->_nlpfx * sizeof *dp->_lpfx);
+			dp->_evname = name;
+		}
 	}
 	dp->_pendnf = 0;
 	dp->_pendw = 0;
 	dp->_pendt = 0;
 	dp->_wch = 0;
 	dp->_wne = 0;
+	dp->_wsp = 0;
 	dp->_wdstart = 0;
 	dp->_wdend = 0;
 	dp->_lnsize = 0;
@@ -1048,6 +1120,10 @@ evc(struct env *dp, struct env *sp)
 	dp->_seflg = 0;
 	dp->_ce = 0;
 	dp->_rj = 0;
+	if (dp->_brnl < INT_MAX)
+		dp->_brnl = 0;
+	if (dp->_brpnl < INT_MAX)
+		dp->_brpnl = 0;
 	dp->_nn = 0;
 	dp->_ndf = 0;
 	dp->_nms = 0;
@@ -1097,6 +1173,7 @@ evcline(struct env *dp, struct env *sp)
 	dp->_adflg = sp->_adflg;
 	dp->_adspc = sp->_adspc;
 	dp->_wne = sp->_wne;
+	dp->_wsp = sp->_wsp;
 	dp->_ne = sp->_ne;
 	dp->_nc = sp->_nc;
 	dp->_nwd = sp->_nwd;
@@ -1118,6 +1195,20 @@ evcline(struct env *dp, struct env *sp)
 	dp->_wordp = sp->_wordp + (dp->_word - sp->_word);
 	dp->_wdend = sp->_wdend + (dp->_word - sp->_word);
 	dp->_wdstart = sp->_wdstart + (dp->_word - sp->_word);
+}
+
+void
+relsev(struct env *ep)
+{
+	free(ep->_hcode);
+	ep->_hcode = NULL;
+	ep->_nhcode = 0;
+	free(ep->_line);
+	ep->_line = NULL;
+	ep->_lnsize = 0;
+	free(ep->_word);
+	ep->_word = NULL;
+	ep->_wdsize = 0;
 }
 
 void
@@ -1166,7 +1257,9 @@ caseif(int x)
 	skip(1);
 	if ((cbits(i = getch())) == '!') {
 		notflag = 1;
-		if (xflag && (cbits(i = getch())) == 'f')
+		if (xflag == 0)
+			/*EMPTY*/;
+		else if ((cbits(i = getch())) == 'f')
 			flt = 1;
 		else
 			ch = i;
@@ -1505,7 +1598,7 @@ caserd(void)
 	}
 	collect();
 	tty++;
-	pushi(XBLIST*BLK, PAIR('r','d'));
+	pushi(-1, PAIR('r','d'));
 }
 
 

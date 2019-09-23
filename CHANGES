@@ -1,3 +1,67 @@
+Release 060905
+* [nt]roff: The new ".brnl" request causes a break each time a newline is
+  encountered at the end of a text input line. Unlike nofill mode, text is
+  still wrapped to the line length.
+* [nt]roff: The new ".brpnl" request causes a break and a spread each time
+  a newline is encountered at the end of a text input line (as if it were
+  attached a "\p"). The "\p" escape sequence changes its semantics in this
+  mode and causes a break without a spread.
+* [nt]roff: The new ".lpfx" request allows to print a string whenever
+  a new output line is started. This is mainly useful to implement a
+  historic form of block quotation.
+* [nt]roff: The predefined number registers "\n[.in]", "\n[.hy]",
+  "\n[.int]", "\n[.lt]", "\n[.pn]", "\n[.psr]", and "\n[.sr]" have been
+  added.
+* [nt]roff: The semantics of the number registers "\n(.x" (remaining space
+  on current output line) and "\n(.y" (current actual indent) are now
+  documented.
+* [nt]roff: The "\n[.kc]" register has been introduced; it holds the width
+  of a word interrupted with "\c" on output.
+* [nt]roff: Control and escape characters written in a diversion are now
+  regular characters in groff compatibility mode.
+* [nt]roff: It is not a fatal error if the file specified with ".so" is not
+  accessible in groff compatibility mode.
+* [nt]roff: The value of the "\n(.k" register is computed differently in
+  groff compability mode now.
+* [nt]roff: The -mg macros now provide the fonts "C" and "CR".
+* [nt]roff: The -mg macros now provide an emulation of the ".mso" request.
+* [nt]roff: The command line options "-ds=x" and "-ra=N" are now accepted,
+  thus the string or register name before "=" can consist of more than one
+  character.
+* [nt]roff: The ".rd" request now works again; it caused a segmentation
+  fault since several releases.
+* [nt]roff: Formatting of a ".char" object immediately before a trap is
+  executed no longer causes pending input text to disappear (bug reported
+  by Sebastian Leusch).
+* troff: The escape sequence form "\s[+-]'n'" now works with fractional
+  point sizes.
+* troff: With xflag 0, fractional parts and units are now ignored with
+  the ".ps" command.
+* [nt]roff: With xflag 0, ".if !..." works correctly again.
+* [nt]roff: When copying text to a macro, if a line appeared that was a
+  prefix of the terminating macro, its last character was copied twice
+  (e.g. "..." with the standard ".." was copied as "...."). This has been
+  fixed.
+* -me macros: The macros now work with xflag > 0.
+* [nt]roff: The distance to the next trap, and, accordingly, the "\n(.t"
+  register, can now be larger than the maximum allowed motion with "\h"
+  and "\v". This allows very long pages without a "trap botch" error,
+  although vertical motions on such pages may require multiple "\v"
+  commands.
+* [nt]roff: Fixed a reallocation problem that caused segmentation faults
+  with some compilers.
+* [nt]roff: Fixed the "-u" option not to cause a segmentation fault.
+* [nt]roff: The "\n(.S" predefined number register has been removed again
+  since it conflicts with use of this name by "dot -Tpic". (The "\n[.tabs]"
+  register continues to be available with the same semantics.)
+* troff: There is now a "lc_ctype" keyword in the DESC file for the sake
+  of legacy post-processors that do not understand "x X LC_CTYPE".
+* dpost: Use the device given by "x T" in intermediate language for reading
+  font files only if its name starts with "ps" or if it has the "afmfonts"
+  keyword in its DESC file; otherwise use "devpost".
+* tbl: The forms "f (X)", "w (x)", and "fX." are now accepted in column
+  specifications.
+
 Release 060813
 * [nt]roff: A new type of traps is available: output-line traps. They are
   set with the new "\P" escape sequence and are invoked when the line that

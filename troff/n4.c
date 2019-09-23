@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n4.c	1.63 (gritter) 8/13/06
+ * Sccsid @(#)n4.c	1.73 (gritter) 9/5/06
  */
 
 /*
@@ -80,7 +80,7 @@ static struct acc	_inumb(int *, float *, int);
 void *
 grownumtab(void)
 {
-	int	i, inc = 20;
+	int	i, j, inc = 20;
 	struct numtab	*onc;
 
 	onc = numtab;
@@ -91,12 +91,15 @@ grownumtab(void)
 		for (i = 0; initnumtab[i].r; i++)
 			numtab[i] = initnumtab[i];
 	} else {
+		j = (char *)numtab - (char *)onc;
 		for (i = 0; i < sizeof nhash / sizeof *nhash; i++)
 			if (nhash[i])
-				nhash[i] += numtab - onc;
+				nhash[i] = (struct numtab *)
+					((char *)nhash[i] + j);
 		for (i = 0; i < NN; i++)
 			if (numtab[i].link)
-				numtab[i].link += numtab - onc;
+				numtab[i].link = (struct numtab *)
+					((char *)numtab[i].link + j);
 	}
 	NN += inc;
 	return numtab;
@@ -199,7 +202,7 @@ sl:
 		case 'x': 
 			if (gflag)
 				goto s0;
-			i = nel;	
+			i = nel - adspc;
 			break;
 		case 'y': 
 			if (gflag)
@@ -216,7 +219,16 @@ sl:
 			i = HOR;		
 			break;
 		case 'k': 
-			i = ne;		
+			i = ne + adspc;		
+			if (gflag) {
+				if (ce || rj || !fi ? pendnf : pendw != NULL)
+					i += wne - wsp;
+				else if (nwd) {
+					i += sps;
+					if (seflg || spflg)
+						i += ses;
+				}
+			}
 			break;
 		case 'P': 
 			i = print;		
@@ -250,10 +262,6 @@ sl:
 				cpushback((char *)revision);
 				return(0);
 			}
-			/*FALLTHRU*/
-		case 'S':
-			if (xflag)
-				goto tabs;
 			/*FALLTHRU*/
 
 		default:
@@ -397,7 +405,7 @@ sl:
 			i *= INCH / 72;
 #endif	/* NROFF */
 		} else if (strcmp(&name[1], "tabs") == 0) {
-		tabs:	TMYES;
+			TMYES;
 			for (i = 0; tabtab[i]; i++);
 			while (--i >= 0) {
 				cp = tb;
@@ -417,14 +425,44 @@ sl:
 				cpushback(tb);
 			}
 			return(0);
+		} else if (strcmp(&name[1], "lpfx") == 0) {
+			TMYES;
+			if (lpfx)
+				pushback(lpfx);
+			return(0);
 		} else if (strcmp(&name[1], "ce") == 0)
 			i = ce;
 		else if (strcmp(&name[1], "rj") == 0)
 			i = rj;
+		else if (strcmp(&name[1], "brnl") == 0)
+			i = brnl;
+		else if (strcmp(&name[1], "brpnl") == 0)
+			i = brpnl;
 		else if (strcmp(&name[1], "cht") == 0)
 			i = cht;
 		else if (strcmp(&name[1], "cdp") == 0)
 			i = cdp;
+		else if (strcmp(&name[1], "in") == 0)
+			i = un;
+		else if (strcmp(&name[1], "hy") == 0)
+			i = hyf;
+		else if (strcmp(&name[1], "int") == 0)
+			i = ce || rj || !fi ? pendnf : pendw != NULL;
+		else if (strcmp(&name[1], "lt") == 0)
+			i = lt;
+		else if (strcmp(&name[1], "pn") == 0)
+			i = npnflg ? npn : numtab[PN].val + 1;
+		else if (strcmp(&name[1], "psr") == 0) {
+			i = apts;
+#ifdef	NROFF
+			i *= INCH / 72;
+#endif	/* NROFF */
+		} else if (strcmp(&name[1], "sr") == 0) {
+			i = fl = u2pts(apts);
+			if (i != fl)
+				goto flt;
+		} else if (strcmp(&name[1], "kc") == 0)
+			i = wne - wsp;
 		else
 			goto s0;
 	} else {
@@ -1188,8 +1226,9 @@ a1:
 		i = dfactd;
 	}
 	if (!field) {
-		tchar	t = getch(), tp[2];
+		tchar	t, tp[2];
 		int	f, d, n;
+		t = getch();
 		if (cbits(t) != ';') {
 			tp[0] = t;
 			tp[1] = 0;

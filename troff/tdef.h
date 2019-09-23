@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)tdef.h	1.124 (gritter) 8/13/06
+ * Sccsid @(#)tdef.h	1.130 (gritter) 9/3/06
  */
 
 /*
@@ -422,8 +422,7 @@ endif NROFF
 	#define NBLIST 512
  * i.e., the product is 16 bits long.
 
- * If filep is an unsigned long (and if your
- * compiler will let you say that) then NBLIST
+ * If filep is a long then NBLIST
  * can be a lot bigger.  Of course that makes
  * the file or core image a lot bigger too,
  * and means you don't detect missing diversion
@@ -432,18 +431,18 @@ endif NROFF
  * on non-swapping systems, since the core image
  * will be over 1Mb.
 
- * Note: As of 8/14/05, NBLIST has gone, and filep is
- * grown dynamically as needed. XBLIST is an just an
- * uninteresting relict to pass a special value.
+ * Note: As of 8/14/05, NBLIST has gone, and corebuf is
+ * grown dynamically as needed.
+
+ * filep must be a signed integer since the value -1
+ * is special (it indicates that input is read from tty).
 
  * BLK must be a power of 2
  */
 
-typedef unsigned int filep;	/* this is good for 32 bit machines */
+typedef long filep;
 
 #define	BLK	128	/* alloc block in tchars */
-
-#define	XBLIST	077777777
 
 /* Other things are stored in the temp file or corebuf:
  *	a single block for .rd input, at offset RD_OFFSET
@@ -733,6 +732,7 @@ struct acc {
 #define	wdend	env._wdend
 #define	wdstart	env._wdstart
 #define	wne	env._wne
+#define	wsp	env._wsp
 #define	ne	env._ne
 #define	nc	env._nc
 #define	nb	env._nb
@@ -744,6 +744,8 @@ struct acc {
 #define	cu	env._cu
 #define	ce	env._ce
 #define	rj	env._rj
+#define	brnl	env._brnl
+#define	brpnl	env._brpnl
 #define	in	env._in
 #define	in1	env._in1
 #define	un	env._un
@@ -767,6 +769,8 @@ struct acc {
 #define	hcode	env._hcode
 #define	nhcode	env._nhcode
 #define	shc	env._shc
+#define	lpfx	env._lpfx
+#define	nlpfx	env._nlpfx
 #define	stopch	env._stopch
 #define	cht	env._cht
 #define	cdp	env._cdp
@@ -856,6 +860,7 @@ extern struct env {
 	tchar	*_wdend;
 	tchar	*_wdstart;
 	int	_wne;
+	int	_wsp;
 	int	_ne;
 	int	_nc;
 	int	_nb;
@@ -867,6 +872,8 @@ extern struct env {
 	int	_cu;
 	int	_ce;
 	int	_rj;
+	int	_brnl;
+	int	_brpnl;
 	int	_in;
 	int	_in1;
 	int	_un;
@@ -889,6 +896,8 @@ extern struct env {
 	int	_hyext;
 	int	*_hcode;
 	int	_nhcode;
+	tchar	*_lpfx;
+	int	_nlpfx;
 	int	_shc;
 	tchar	_stopch;
 	int	_cht;

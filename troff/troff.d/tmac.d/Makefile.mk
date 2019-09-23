@@ -1,7 +1,7 @@
 MACS = acm.me bib chars.me deltext.me e eqn.me \
 	float.me footnote.me index.me local.me m mmn mmt ms.acc \
 	ms.cov ms.eqn ms.ref ms.tbl ms.ths ms.toc null.me refer.me \
-	s sh.me tbl.me thesis.me tz.map v vgrind \
+	s sh.me tbl.me thesis.me v vgrind \
 	an andoc doc doc-common doc-ditroff doc-nroff doc-syms \
 	pictures color pm srefs ptx safe g
 
@@ -22,6 +22,6 @@ install: all
 	$(INSTALL) -c -m 644 mpictures.7b $(ROOT)$(MANDIR)/man7b/mpictures.7b
 
 clean:
-	rm -f andoc bib doc e m s pm
+	rm -f andoc bib doc e g m s pm
 
 mrproper: clean

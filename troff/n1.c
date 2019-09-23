@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n1.c	1.113 (gritter) 8/12/06
+ * Sccsid @(#)n1.c	1.120 (gritter) 9/5/06
  */
 
 /*
@@ -198,9 +198,9 @@ main(int argc, char **argv)
 			npn = ctoi(&argv[0][2]);
 			continue;
 		case 'u':	/* set emboldening amount */
-			bdtab[3] = ctoi(&argv[0][2]);
-			if (bdtab[3] < 0 || bdtab[3] > 50)
-				bdtab[3] = 0;
+			initbdtab[3] = ctoi(&argv[0][2]);
+			if (initbdtab[3] < 0 || initbdtab[3] > 50)
+				initbdtab[3] = 0;
 			continue;
 		case 's':
 			if (!(stop = ctoi(&argv[0][2])))
@@ -211,13 +211,25 @@ main(int argc, char **argv)
 			continue;
 		case 'r':
 		case 'd':
-			if (&argv[0][2] != '\0' && strlen(&argv[0][2]) >= 2 && &argv[0][3] != '\0')
-			eibuf = roff_sprintf(ibuf+strlen(ibuf), ".%s %c %s%s\n",
-				argv[0][1] == 'd' ? "ds" : "nr",
-				argv[0][2],
-				argv[0][1] == 'd' ? "\"" : "",
-				&argv[0][3]); 
-			else 
+			if (&argv[0][2] != '\0' && strlen(&argv[0][2]) >= 2 && &argv[0][3] != '\0') {
+			if ((p = strchr(&argv[0][3], '=')) != NULL) {
+				*p = 0;
+				eibuf = roff_sprintf(ibuf+strlen(ibuf),
+						".do %s %s %s%s\n",
+					argv[0][1] == 'd' ? "ds" : "nr",
+					&argv[0][2],
+					argv[0][1] == 'd' ? "\"" : "",
+					&p[1]);
+				*p = '=';
+			} else {
+				eibuf = roff_sprintf(ibuf+strlen(ibuf),
+						".%s %c %s%s\n",
+					argv[0][1] == 'd' ? "ds" : "nr",
+					argv[0][2],
+					argv[0][1] == 'd' ? "\"" : "",
+					&argv[0][3]); 
+			}
+			} else 
 				errprint("wrong options");
 			continue;
 		case 'c':
@@ -338,6 +350,8 @@ loop:
 		goto loop;
 	}
 	if (j == cc || j == c2 || isxfunc(i, CC)) {
+		if (gflag && isdi(i))
+			goto Lt;
 		if (j == c2)
 			nb++;
 		copyf++;
@@ -1325,7 +1339,9 @@ copy:
 		}
 		goto dfl;
 	case 'T':
-		if (xflag == 0 || (j = setlink()) == 0)
+		if (xflag == 0)
+			goto dfl;
+		if ((j = setlink()) == 0)
 			goto g0;
 		return(j);
 	case 'R':
@@ -1541,8 +1557,12 @@ g4:
 		if (i & MBMASK1)
 			i |= ZBIT;
 #endif /* EUC && NROFF */
-	if (cbits(i) == eschar && !raw)
-		setcbits(i, ESC);
+	if (cbits(i) == eschar && !raw) {
+		if (gflag && isdi(i))
+			setcbits(i, PRESC);
+		else
+			setcbits(i, ESC);
+	}
 	return(i);
 }
 
@@ -1895,6 +1915,8 @@ caseso(void)
 	if (!getname() || ((i = open(nextf, O_RDONLY)) < 0) ||
 			(ifi >= NSO)) {
 		errprint("can't open file %s", nextf);
+		if (gflag)
+			return;
 		done(02);
 	}
 	sopso(i, -1);
@@ -2251,6 +2273,7 @@ struct fmtchar {
 	int	savvflag;
 	int	savvpt;
 	int	savhp;
+	int	savnflush;
 	tchar	*csp;
 	int	charcount;
 };
@@ -2281,6 +2304,7 @@ prepchar(struct fmtchar *fp)
 	dip = &fp->newd;
 	offset = dip->op = startb;
 	charout[charcount].op = startb;
+	fp->savnflush = nflush;
 	fp->savvflag = vflag;
 	vflag = 0;
 	fp->savvpt = vpt;
@@ -2299,9 +2323,7 @@ restchar(struct fmtchar *fp, int keepf)
 	wbt(0);
 	dip = fp->savedip;
 	offset = dip->op;
-	free(env._line);
-	free(env._word);
-	free(env._hcode);
+	relsev(&env);
 	if (keepf) {
 		fp->saveev._apts = apts;
 		fp->saveev._apts1 = apts1;
@@ -2313,6 +2335,7 @@ restchar(struct fmtchar *fp, int keepf)
 		fp->saveev._spbits = spbits;
 	}
 	env = fp->saveev;
+	nflush = fp->savnflush;
 	vflag = fp->savvflag;
 	vpt = fp->savvpt;
 	numtab[HP].val = fp->savhp;
