@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n7.c	1.162 (gritter) 11/14/06
+ * Sccsid @(#)n7.c	1.165 (gritter) 11/21/06
  */
 
 /*
@@ -2006,7 +2006,8 @@ parword(void)
 #endif	/* !NROFF */
 		}
 		if (pghyphw[pgwords] || wp > word && maybreak(wp[-1])) {
-			pghyphw[pgwords] -= kernadjust(wp[-1], wp[0]);
+			if (pghyphw[pgwords])
+				pghyphw[pgwords] -= kernadjust(wp[-1], wp[0]);
 			pgne += pgwordw[pgwords];
 			pgwordp[++pgwords] = pgchars;
 			if (pgwords + 1 >= pgsize)
@@ -2062,12 +2063,10 @@ parword(void)
 }
 
 static void
-pbreak(int sprd)
+pbreak(int sprd, struct s *s)
 {
-	struct s	*s;
 	int	j;
 
-	s = frame;
 	if (sprd)
 		adflg |= 5;
 	if (pshapes) {
@@ -2086,13 +2085,11 @@ pbreak(int sprd)
 			mainloop();
 		}
 		memcpy(&sjbuf, &savsjbuf, sizeof sjbuf);
-		while (frame != s)
-			popi();
 	}
 }
 
 void
-parpr(void)
+parpr(struct s *s)
 {
 	int	i, j, k = 0, nw, w, stretches, _spread = spread, hc;
 	int	savll, savin, savcd, lastin, lastll, curin, curll, ignel = 0;
@@ -2137,7 +2134,9 @@ parpr(void)
 					if (letsps)
 						storelsp(c, 0);
 				}
-				pbreak(1);
+				pbreak(1, s);
+				if (i >= pgwords)
+					break;
 			}
 			if (pshapes) {
 				if (k == 1)
@@ -2168,7 +2167,7 @@ parpr(void)
 				minflg = minspsz && ad && !admod;
 				w = width(c);
 				adspc += minspc;
-				if (j == pgspacp[i] && i > 0 && nwd > 1)
+				if (j == pgspacp[i] && i > 0)
 					w += kernadjust(para[pgwordp[i]-1], c);
 				if (j == pgspacp[i+1]-1)
 					w += kernadjust(c, para[pgwordp[i]]);
@@ -2199,7 +2198,7 @@ parpr(void)
 		nwd += stretches;
 		nw++;
 	}
-	pbreak(nel - adspc < 0 && nwd > 1 || _spread);
+	pbreak(nel - adspc < 0 && nwd > 1 || _spread, s);
 	pgwords = pgchars = pgspacs = pglines = pgne = pglastw = 0;
 	ll = savll;
 	in = un = savin;
@@ -2211,15 +2210,18 @@ parfmt(void)
 {
 	int	_nlflg = nlflg;
 	int	_spread = spread;
+	struct s	*s;
 
 	if (pgchars == 0)
 		return;
 	setnel();
 	pglnout = 0;
+	s = frame;
 	nxf->jmp = malloc(sizeof *nxf->jmp);
 	pushi(-2, 0, FLAG_PARAGRAPH);
-	parpr();
-	ch = popi();
+	parpr(frame);
+	while (frame != s)
+		ch = popi();
 	nlflg = _nlflg;
 	if (_spread == 1 && pshapes > pglnout) {
 		memmove(&pgin[0], &pgin[pglnout],

@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n5.c	1.121 (gritter) 11/13/06
+ * Sccsid @(#)n5.c	1.123 (gritter) 11/26/06
  */
 
 /*
@@ -52,14 +52,10 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <limits.h>
-#if defined (EUC) && defined (NROFF)
+#if defined (EUC)
 #include <stddef.h>
-#ifdef	__sun
-#include <widec.h>
-#else
 #include <wchar.h>
-#endif
-#endif	/* EUC && NROFF */
+#endif	/* EUC */
 #include <string.h>
 #include <unistd.h>
 #include "tdef.h"
@@ -367,10 +363,20 @@ casehypp(void)
 	}
 }
 
+static void
+chkin(int indent, int linelength, const char *note)
+{
+	if (indent > linelength - INCH / 10) {
+		if (warn & WARN_RANGE)
+			errprint("excess of %sindent", note);
+	}
+}
+
 void
 casepshape(void)
 {
 	int	i, l;
+	int	lastin = in, lastll = ll;
 
 	pshapes = 0;
 	if (skip(0)) {
@@ -378,23 +384,24 @@ casepshape(void)
 		return;
 	}
 	do {
-		dfact = EM;
-		i = atoi();
+		i = max(hnumb(&lastin), 0);
 		if (nonumb)
 			break;
 		if (skip(0))
 			l = ll;
 		else {
-			dfact = EM;
-			l = atoi();
+			l = max(hnumb(&lastll), INCH / 10);
 			if (nonumb)
 				break;
 		}
 		if (pshapes >= pgsize)
 			growpgsize();
+		chkin(i, l, "");
 		pgin[pshapes] = i;
 		pgll[pshapes] = l;
 		pshapes++;
+		lastin = i;
+		lastll = l;
 	} while (!skip(0));
 }
 
@@ -532,6 +539,7 @@ casein(void)
 	tbreak();
 	in1 = in;
 	in = i;
+	chkin(in, ll, "");
 	if (!nc && !pgwords) {
 		un = in;
 		setnel();
@@ -550,6 +558,7 @@ casell(void)
 		i = max(hnumb(&ll), INCH / 10);
 	ll1 = ll;
 	ll = i;
+	chkin(in, ll, "");
 	setnel();
 }
 
@@ -578,6 +587,7 @@ caseti(void)
 	i = max(hnumb(&in), 0);
 	tbreak();
 	un1 = i;
+	chkin(i, ll, "temporary ");
 	setnel();
 }
 
@@ -1921,11 +1931,11 @@ int
 rdtty(void)
 {
 	char	onechar;
-#if defined (EUC) && defined (NROFF)
+#if defined (EUC)
 	int	i, n;
 
 loop:
-#endif /* EUC && NROFF */
+#endif /* EUC */
 
 	onechar = 0;
 	if (read(0, &onechar, 1) == 1) {
@@ -1933,10 +1943,10 @@ loop:
 			tty++;
 		else 
 			tty = 1;
-#if !defined (EUC) || !defined (NROFF)
+#if !defined (EUC)
 		if (tty != 3)
 			return(onechar);
-#else	/* EUC && NROFF */
+#else	/* EUC */
 		if (tty != 3) {
 			if (!multi_locale)
 				return(onechar);
@@ -1946,7 +1956,6 @@ loop:
 			if ((*mbbuf1&~(wchar_t)0177) == 0) {
 				twc = 0;
 				mbbuf1p = mbbuf1;
-				goto loop;
 			}
 			else if ((n = mbtowc(&twc, mbbuf1, mb_cur_max)) <= 0) {
 				if (mbbuf1p >= mbbuf1 + mb_cur_max) {
@@ -1959,14 +1968,13 @@ loop:
 					goto loop;
 				}
 			} else {
-				if (n > 1)
-					i = twc | COPYBIT;
+				i = twc | COPYBIT;
 				twc = 0;
 				mbbuf1p = mbbuf1;
 			}
 			return(i);
 		}
-#endif /* EUC && NROFF */
+#endif /* EUC */
 	}
 	popi();
 	tty = 0;

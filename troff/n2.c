@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n2.c	1.41 (gritter) 11/13/06
+ * Sccsid @(#)n2.c	1.44 (gritter) 11/14/06
  */
 
 /*
@@ -103,9 +103,17 @@ pchar(register tchar i)
 	case IMP:
 	case RIGHT:
 	case LEFT:
+		if (xflag) {
+			i = j = FILLER;	/* avoid kerning in output routine */
+			goto dfl;
+		}
 		return 1;
 	case HX:
 		hx = 1;
+		if (xflag) {
+			i = j = FILLER;	/* avoid kerning in output routine */
+			goto dfl;
+		}
 		return 1;
 	case XON:
 		xon = 1;
@@ -124,6 +132,10 @@ pchar(register tchar i)
 				setcbits(i, ftrans(fbits(i), cbits(i)));
 		}
 	}
+#ifdef	NROFF
+	if (xon && xflag)
+		return 1;
+#endif	/* NROFF */
 	pchar1(i);
 	return 1;
 }
@@ -133,7 +145,7 @@ void
 pchar1(register tchar i)
 {
 	static int	_olt;
-	static tchar	_olp[5];
+	tchar	_olp[1];
 	register int j;
 	filep	savip;
 	extern void ptout(tchar);
@@ -189,9 +201,7 @@ pchar1(register tchar i)
 	if (cbits(i) == 'x')
 		fmtchar = fmtchar;
 	if (_olt) {
-		_olp[_olt - 1] = i;
-		if (_olt++ < NSRQ)
-			return;
+		_olp[0] = i;
 		olt[nolt++] = fetchrq(_olp);
 		_olt = 0;
 	}
