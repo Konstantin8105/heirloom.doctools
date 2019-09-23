@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)dpost.c	1.7 (gritter) 8/13/05
+ * Sccsid @(#)dpost.c	1.80 (gritter) 9/13/05
  */
 
 /*
@@ -95,22 +95,6 @@
  * related output to separate routines. It makes dpost work harder, but changing
  * things is easy. For example adding stuff to support widthshow took less than
  * an hour.
- *
- * According to Adobe's structuring conventions, the output produced by dpost is
- * still nonconforming. Global definitions that are occasionally made in individual
- * pages are the primary problem. Among other things they handle downloading host
- * resident fonts and defining special characters not generally available on
- * PostScript printers. The approach used here works on a demand basis and violates
- * page independence. A definition is made once in the first page that needs it
- * and is bracketed by PostScript code that ensures the definition is exported to
- * the global environment where it will be available for use by all the pages that
- * follow.  Simple changes, like downloading definitions the first time they're
- * used in each page, restores page independence but wouldn't be an efficient
- * solution. Other approaches are also available, but every one I've considered
- * sacrifices much in efficiency - just to maintain page independence. I'll leave
- * things be for now. Global definitions made in individual pages are bracketed
- * by %%BeginGlobal and %%EndGlobal comments and can easily be pulled out of
- * individual pages and put in the prologue by utility programs like postreverse.
  *
  * I've also added code that handles the DOCUMENTFONTS comment, although it's
  * only produced for those fonts in directory /usr/lib/font/devpost that have an
@@ -263,9 +247,19 @@
  * 
  * 	Subcommands like "i" are often spelled out like "init".
  *
+ *
+ *
+ * To get dpost output conforming to Adobe's structuring conventions (DSC),
+ * all output is accumulated in temporary files first. When the document is
+ * completed, files that contain global data are output first, followed by
+ * regular commands, all surrounded by DSC comments. Speed problems, which
+ * were the reason why this was not done by previous versions of dpost, are
+ * no longer of concern in 2005 since several hundred pages of text are
+ * processed now in less than a second.
  */
 
-
+#include	<sys/types.h>
+#include	<sys/stat.h>
 #include	<stdio.h>
 #include	<fcntl.h>
 #include	<stdlib.h>
@@ -275,6 +269,8 @@
 #include	<math.h>
 #include	<ctype.h>
 #include	<time.h>
+#include	<limits.h>
+#include	<locale.h>
 
 #include	"comments.h"		/* PostScript file structuring comments */
 #include	"gen.h"			/* general purpose definitions */
@@ -282,6 +278,18 @@
 #include	"ext.h"			/* external variable definitions */
 #include	"dev.h"			/* typesetter and font descriptions */
 #include	"dpost.h"		/* a few definitions just used here */
+#include	"asciitype.h"
+#include	"afm.h"
+
+
+#if defined (__GLIBC__) && defined (_IO_getc_unlocked)
+#undef	getc
+#define	getc(f)		_IO_getc_unlocked(f)
+#endif
+#if defined (__GLIBC__) && defined (_IO_putc_unlocked)
+#undef	putc
+#define	putc(c, f)	_IO_putc_unlocked(c, f)
+#endif
 
 
 char		*prologue = DPOST;	/* the basic PostScript prologue */
@@ -306,12 +314,16 @@ int		picflag = ON;		/* enable/disable picture inclusion */
  * video, may temporarily change the encoding scheme and reset it to realencoding
  * when done.
  *
+ * Encoding 4 is new as of 9/8/05. It stores only the distances between words and
+ * thus saves a bit of output size. It is automatically enabled at high resolutions.
+ *
  */
 
 
 int		encoding = DFLTENCODING;
 int		realencoding = DFLTENCODING;
 int		maxencoding = MAXENCODING;
+int		eflag;
 
 
 /*
@@ -327,6 +339,8 @@ int		maxencoding = MAXENCODING;
 
 char		seenfonts[MAXINTERNAL+1];
 int		docfonts = 0;
+struct afmtab	*afmfonts[MAXINTERNAL+1];
+int		afmcount = 0;
 
 
 /*
@@ -354,9 +368,9 @@ char		*realdev = DEVNAME;	/* a good description of target printer */
  */
 
 
-struct dev	dev;			/* DESC.out starts this way */
-struct Font	*fontbase[NFONT+1];	/* FONT.out files begin this way */
-short		*pstab;			/* list of available sizes */
+struct dev	dev;			/* DESC starts this way */
+struct Font	*fontbase[NFONT+1];	/* FONT files begin this way */
+int		*pstab;			/* list of available sizes */
 int		nsizes = 1;		/* and the number of sizes in that list */
 int		smnt;			/* index of first special font */
 int		nchtab;			/* number of special character names */
@@ -364,9 +378,10 @@ int		fsize;			/* max size of a font files in bytes */
 int		unitwidth;		/* set to dev.unitwidth */
 char		*chname;		/* special character strings */
 short		*chtab;			/* used to locate character names */
-char		*fitab[NFONT+1];	/* locates char info on each font */
-char		*widthtab[NFONT+1];	/* character width data for each font */
-char		*codetab[NFONT+1];	/* and codes to get characters printed */
+short		**fitab;		/* locates char info on each font */
+int		**fontab;		/* character width data for each font */
+short		**codetab;		/* and codes to get characters printed */
+char		**kerntab;		/* for makefont() */
 
 
 /*
@@ -397,13 +412,18 @@ char		*downloaded;		/* nonzero means it's been downloaded */
 
 int		nfonts = 0;		/* number of font positions */
 int		size = 1;		/* current size - internal value */
+#define	FRACTSIZE	-23		/* if size == FRACTSIZE then ... */
+float		fractsize = 0;		/* fractional point size */
 int		font = 0;		/* font position we're using now */
 int		hpos = 0;		/* where troff wants to be - horizontally */
 int		vpos = 0;		/* same but vertically */
 float		lastw = 0;		/* width of the last input character */
+int		track = 0;		/* tracking hint from troff */
+int		lasttrack = 0;		/* previous tracking hint */
+int		tracked;		/* records need to flush track */
 int		lastc = 0;		/* and its name (or index) */
 
-int		fontheight = 0;		/* points from x H ... */
+float		fontheight = 0;		/* points from x H ... */
 int		fontslant = 0;		/* angle from x S ... */
 
 int		res;			/* resolution assumed in input file */
@@ -420,6 +440,7 @@ float		widthfac = 1.0;		/* for emulation = res/dev.res */
 
 
 int		lastsize = -1;		/* last internal size we used */
+float		lastfractsize = -1;	/* last fractional size */
 int		lastfont = -1;		/* last font we told printer about */
 float		lastx = -1;		/* printer's current position */
 int		lasty = -1;
@@ -431,11 +452,24 @@ int		lastend;		/* where last character on this line was */
  * fontname[] keeps track of the mounted fonts. Filled in (by t_fp()) from data
  * in the binary font files.
  *
+ * When font metrics are directly read from AFM files, all characters that
+ * are not ASCII are put into the remaining positions in a PostScript encoding
+ * vector. Their position in this vector in recorded in afmmap, and characters
+ * from troff are translated if necessary.
+ *
+ * Currently only one encoding vector per physical font is built, and thus at
+ * most 255 characters from it can be accessed. If access to more characters
+ * becomes required in the future, multiple virtual fonts, each with its own
+ * encoding vector, could be created for each physical font. dpost then had
+ * to change between them if necessary without an explicit request by troff.
+ *
  */
 
 
 struct  {
 
+	struct afmtab	*afm;		/* AFM data, if any */
+	char	*afmmap;		/* map of non-ASCII characters */
 	char	*name;			/* name of the font loaded here */
 	int	number;			/* its internal number */
 
@@ -451,7 +485,7 @@ struct  {
  * device. gotspecial keeps track of whether we've done it yet. seenpage is set
  * to TRUE after we've seen the first page command in the input file. It controls
  * what's done in t_font() and is needed because nfonts is no longer set when the
- * DESC.out file is read, but rather is updated from "x font" commands in the
+ * DESC file is read, but rather is updated from "x font" commands in the
  * input files.
  *
  */
@@ -475,6 +509,7 @@ int		seenpage = FALSE;
 
 
 float		pointslop = SLOP;	/* horizontal error in points */
+int		Sflag;			/* unless -S gives explicit slop */
 int		slop;			/* and machine units */
 int		rvslop;			/* to extend box in reverse video mode */
 
@@ -494,7 +529,9 @@ int		rvslop;			/* to extend box in reverse video mode */
 
 int		textcount = 0;		/* strings accumulated so far */
 int		stringstart = 0;	/* where the next one starts */
+int		laststrstart = INT_MIN;	/* save for optimization */
 int		spacecount = 0;		/* spaces seen so far on current line */
+int		charcount = 0;		/* characters on current line */
 
 
 /*
@@ -538,6 +575,29 @@ Fontmap		fontmap[] = FONTMAP;	/* and general mapping tables - emulation */
 
 /*
  *
+ * Variables and functions for the pdfmark operator.
+ *
+ */
+static char	*Author;		/* DOCINFO /Author */
+static char	*Title;			/* DOCINFO /Title */
+static char	*Subject;		/* DOCINFO /Subject */
+static char	*Keywords;		/* DOCINFO /Keywords */
+static struct Bookmark {
+	char	*Title;			/* OUT /Title */
+	char	*title;			/* unencoded title */
+	int	Count;			/* OUT /Count */
+	int	level;			/* used to generate count */
+	int	closed;			/* the bookmark is closed initially */
+} *Bookmarks;
+static size_t	nBookmarks;
+static int	pagelength = 792;	/* lenght of page in points */
+#define	MAXBOOKMARKLEVEL	20
+
+static void	orderbookmarks(void);
+
+
+/*
+ *
  * A few variables that are really only used if we're doing accounting. Designed
  * for our use at Murray Hill and probably won't suit your needs. Changes should
  * be easy and can be made in routine account().
@@ -558,18 +618,12 @@ int		printed = 0;		/* charge for this many pages */
 
 
 FILE		*tf = NULL;		/* PostScript output goes here */
+FILE		*gf = NULL;		/* global data goes here */
+FILE		*rf = NULL;		/* resource data goes here */
+FILE		*sf = NULL;		/* supplied resource comments go here */
+int		sfcount;		/* count of supplied resources */
+int		ostdout;		/* old standard output */
 FILE		*fp_acct = NULL;	/* accounting stuff written here */
-
-
-/*
- *
- * Need the list of valid options in header() and options(), so I've moved the
- * definition here.
- *
- */
-
-
-char		*optnames = "a:c:e:m:n:o:p:tw:x:y:A:C:J:F:H:L:OP:R:S:T:DI";
 
 
 /*
@@ -582,8 +636,16 @@ char		*optnames = "a:c:e:m:n:o:p:tw:x:y:A:C:J:F:H:L:OP:R:S:T:DI";
  */
 
 
-char		temp[150];
+char		temp[4096];
 
+/*****************************************************************************/
+
+static void	t_papersize(char *);
+static void	t_track(char *);
+static void	t_strack(void);
+static void	t_pdfmark(char *);
+
+static int	mb_cur_max;
 
 /*****************************************************************************/
 
@@ -593,6 +655,9 @@ main(int agc, char *agv[])
 
 
 {
+    const char	template[] = "/var/tmp/dpostXXXXXX";
+    char	*tp;
+    FILE	*fp;
 
 
 /*
@@ -603,6 +668,33 @@ main(int agc, char *agv[])
  *
  */
 
+    setlocale(LC_CTYPE, "");
+    mb_cur_max = MB_CUR_MAX;
+
+    ostdout = dup(1);
+    if (close(mkstemp(tp = strdup(template))) < 0 ||
+		    freopen(tp, "r+", stdout) == NULL) {
+	    perror(tp);
+	    return 2;
+    }
+    unlink(tp);
+    if (close(mkstemp(tp = strdup(template))) < 0 ||
+			    (gf = fopen(tp, "r+")) == NULL) {
+	    perror(tp);
+	    return 2;
+    }
+    if (close(mkstemp(tp = strdup(template))) < 0 ||
+			    (rf = fopen(tp, "r+")) == NULL) {
+	    perror(tp);
+	    return 2;
+    }
+    unlink(tp);
+    if (close(mkstemp(tp = strdup(template))) < 0 ||
+			    (sf = fopen(tp, "r+")) == NULL) {
+	    perror(tp);
+	    return 2;
+    }
+    unlink(tp);
 
     argc = agc;				/* global so everyone can use them */
     argv = agv;
@@ -610,17 +702,37 @@ main(int agc, char *agv[])
     prog_name = argv[0];		/* just for error messages */
 
     init_signals();			/* sets up interrupt handling */
-    header();				/* PostScript file structuring comments */
     options();				/* command line options */
     arguments();			/* translate all the input files */
     done();				/* add trailing comments etc. */
-    account();				/* job accounting data */
 
+    fp = fdopen(ostdout, "w");
+    header(fp);			/* PostScript file structuring comments */
+
+    account();				/* job accounting data */
     return(x_stat);			/* everything probably went OK */
 
 }   /* End of main */
 
 
+/*****************************************************************************/
+int
+sget(char *buf, size_t size, FILE *fp)
+{
+	int	c, n = 0;
+
+	do
+		c = getc(fp);
+	while (spacechar(c));
+	if (c != EOF) do {
+		if (n+1 < size)
+			buf[n++] = c;
+		c = getc(fp);
+	} while (c != EOF && !spacechar(c));
+	ungetc(c, fp);
+	buf[n] = 0;
+	return n > 1 ? 1 : c == EOF ? EOF : 0;
+}
 /*****************************************************************************/
 
 
@@ -656,55 +768,117 @@ init_signals(void)
 
 
 /*****************************************************************************/
+static char *
+pdfdate(time_t *tp, char *buf, size_t size)
+{
+	struct tm	*tmptr;
+	int	tzdiff, tzdiff_hour, tzdiff_min;
 
+	tzdiff = *tp - mktime(gmtime(tp));
+	tzdiff_hour = (int)(tzdiff / 60);
+	tzdiff_min = tzdiff_hour % 60;
+	tzdiff_hour /= 60;
+	tmptr = localtime(tp);
+	if (tmptr->tm_isdst > 0)
+		tzdiff_hour++;
+	snprintf(buf, size, "(D:%04d%02d%02d%02d%02d%02d%+03d'%02d')",
+			tmptr->tm_year + 1900,
+			tmptr->tm_mon + 1, tmptr->tm_mday,
+			tmptr->tm_hour, tmptr->tm_min, tmptr->tm_sec,
+			tzdiff_hour, tzdiff_min);
+	return buf;
+}
+/*****************************************************************************/
 
 void
-header(void)
+header(FILE *fp)
 
 
 {
 
-
-    int		ch;			/* return value from getopt() */
-    int		old_optind = optind;	/* for restoring optind - should be 1 */
-    time_t	now;
-
-
 /*
  *
- * Scans the option list looking for things, like the prologue file, that we need
- * right away but could be changed from the default. Doing things this way is an
- * attempt to conform to Adobe's latest file structuring conventions. In particular
- * they now say there should be nothing executed in the prologue, and they have
- * added two new comments that delimit global initialization calls. Once we know
- * where things really are we write out the job header, follow it by the prologue,
- * and then add the ENDPROLOG and BEGINSETUP comments.
+ * Print the DSC header, followed by the data generated so far. This function
+ * is now called after all input has been processed.
  *
  */
 
 
-    while ( (ch = getopt(argc, argv, optnames)) != EOF )
-	if ( ch == 'L' )
-	    setpaths(optarg);
-	else if ( ch == '?' )
-	    error(FATAL, "");
+    struct Bookmark	*bp;
+    time_t	now;
+    int		n;
+    char	buf[4096];
+    char	crdbuf[40];
 
-    optind = old_optind;		/* get ready for option scanning */
 
     time(&now);
-    fprintf(stdout, "%s", NONCONFORMING);
-    fprintf(stdout, "%s %s\n", CREATOR, creator);
-    fprintf(stdout, "%s %s", CREATIONDATE, ctime(&now));
-    fprintf(stdout, "%s %s\n", DOCUMENTFONTS, ATEND);
-    fprintf(stdout, "%s %s\n", PAGES, ATEND);
-    fprintf(stdout, "%s", ENDCOMMENTS);
+    fprintf(fp, "%s", CONFORMING);
+    fprintf(fp, "%s %s\n", CREATOR, creator);
+    fprintf(fp, "%s %s", CREATIONDATE, ctime(&now));
+    if ( temp_file != NULL )  {
+	if ( docfonts > 0 )  {
+	    cat(temp_file, fp);
+	    putc('\n', fp);
+	}   /* End if */
+	unlink(temp_file);
+    }	/* End if */
+    fprintf(fp, "%s %d\n", PAGES, printed);
 
-    if ( cat(prologue) == FALSE )
+    fflush(sf);
+    rewind(sf);
+    while ((n = fread(buf, 1, sizeof buf, sf)) > 0)
+	    fwrite(buf, 1, n, fp);
+    fprintf(fp, "%s", ENDCOMMENTS);
+
+    fprintf(fp, "%s\n", "%%BeginProlog");
+    if ( cat(prologue, fp) == FALSE )
 	error(FATAL, "can't read %s", prologue);
+    fflush(rf);
+    rewind(rf);
+    while ((n = fread(buf, 1, sizeof buf, rf)) > 0)
+	    fwrite(buf, 1, n, fp);
+    fprintf(fp, "%s", ENDPROLOG);
 
-    fprintf(stdout, "%s", ENDPROLOG);
-    fprintf(stdout, "%s", BEGINSETUP);
-    fprintf(stdout, "mark\n");
+    fprintf(fp, "%s", BEGINSETUP);
+    fprintf(fp, "\
+[ /CreationDate %s\n\
+  /Creator (%s)\n", pdfdate(&now, crdbuf, sizeof crdbuf), creator);
+    if (Author)
+	    fprintf(fp, "  /Author %s\n", Author);
+    if (Title)
+	    fprintf(fp, "  /Title %s\n", Title);
+    if (Subject)
+	    fprintf(fp, "  /Subject %s\n", Subject);
+    if (Keywords)
+	    fprintf(fp, "  /Keywords %s\n", Keywords);
+    fprintf(fp, "/DOCINFO pdfmark\n");
+    if (Bookmarks) {
+	    orderbookmarks();
+	    for (bp = &Bookmarks[0]; bp < &Bookmarks[nBookmarks]; bp++) {
+	    	fprintf(fp, "[ /Title %s\n", bp->Title);
+		if (bp->Count)
+			fprintf(fp, "  /Count %d\n", bp->closed ?
+					-bp->Count : bp->Count);
+		fprintf(fp, "  /Dest /Bookmark$%d\n"
+		            "/OUT pdfmark\n",
+			bp - &Bookmarks[0]);
+	    }
+    }
+
+
+    fflush(gf);
+    rewind(gf);
+    while ((n = fread(buf, 1, sizeof buf, gf)) > 0)
+	    fwrite(buf, 1, n, fp);
+
+    fprintf(fp, "mark\n");
+
+    fflush(stdout);
+    rewind(stdout);
+    while ((n = fread(buf, 1, sizeof buf, stdout)) > 0)
+    	fwrite(buf, 1, n, fp);
+
+    fprintf(fp, "%s", ENDOFFILE);
 
 }   /* End of header */
 
@@ -718,11 +892,9 @@ options(void)
 
 {
 
+    const char		optnames[] = "a:c:e:m:n:o:p:tw:x:y:A:C:J:F:H:L:OP:R:S:T:DI";
 
     int		ch;			/* name returned by getopt() */
-
-    extern char	*optarg;		/* option argument set by getopt() */
-    extern int	optind;
 
 
 /*
@@ -749,6 +921,8 @@ options(void)
 	    case 'e':			/* change the encoding scheme */
 		    if ( (encoding = atoi(optarg)) < 0 || encoding > MAXENCODING )
 			encoding = DFLTENCODING;
+		    else
+		        eflag = 1;
 		    realencoding = encoding;
 		    break;
 
@@ -794,7 +968,7 @@ options(void)
 		    break;
 
 	    case 'C':			/* copy file to straight to output */
-		    if ( cat(optarg) == FALSE )
+		    if ( cat(optarg, stdout) == FALSE )
 			error(FATAL, "can't read %s", optarg);
 		    break;
 
@@ -825,6 +999,7 @@ options(void)
 	    case 'S':			/* horizontal position error */
 		    if ( (pointslop = atof(optarg)) < 0 )
 			pointslop = 0;
+		    Sflag = 1;
 		    break;
 
 	    case 'T':			/* target printer */
@@ -931,10 +1106,11 @@ setup(void)
     writerequest(0, stdout);		/* global requests eg. manual feed */
     fprintf(stdout, "/resolution %d def\n", res);
     fprintf(stdout, "setup\n");
+    fprintf(stdout, "/Dsetup where { pop Dsetup } if\n");
     fprintf(stdout, "%d setdecoding\n", encoding);
 
     if ( formsperpage > 1 )  {		/* followed by stuff for multiple pages */
-	if ( cat(formfile) == FALSE )
+	if ( cat(formfile, stdout) == FALSE )
 	    error(FATAL, "can't read %s", formfile);
 	fprintf(stdout, "%d setupforms\n", formsperpage);
     }	/* End if */
@@ -993,7 +1169,6 @@ done(void)
 
 {
 
-
 /*
  *
  * Finished with all the input files, so mark the end of the pages with a TRAILER
@@ -1006,16 +1181,6 @@ done(void)
 
     fprintf(stdout, "%s", TRAILER);
     fprintf(stdout, "done\n");
-
-    if ( temp_file != NULL )  {
-	if ( docfonts > 0 )  {
-	    cat(temp_file);
-	    putc('\n', stdout);
-	}   /* End if */
-	unlink(temp_file);
-    }	/* End if */
-
-    fprintf(stdout, "%s %d\n", PAGES, printed);
 
 }   /* End of done */
 
@@ -1058,7 +1223,7 @@ conv(
 
     register int	c;		/* usually first char in next command */
     int			m, n, n1, m1;	/* when we need to read integers */
-    char		str[50];	/* for special chars and font numbers */
+    char		str[4096];	/* for special chars and font numbers */
     char		b;
 
 
@@ -1098,7 +1263,7 @@ conv(
 		    break;
 
 	    case 'C':			/* special character */
-		    fscanf(fp, "%s", str);
+		    sget(str, sizeof str, fp);
 		    put1s(str);
 		    break;
 
@@ -1106,12 +1271,14 @@ conv(
 		    fscanf(fp, "%d", &m);
 		    endtext();
 		    oput(m);
+		    endtext();
 		    break;
 
 	    case 'D':			/* drawing functions */
 		    endtext();
 		    getdraw();
-		    if ( size != lastsize )
+		    if ( size != lastsize || size == FRACTSIZE &&
+				    fractsize != lastfractsize)
 			t_sf();
 		    switch ((c=getc(fp))) {
 			case 'p':	/* draw a path */
@@ -1160,11 +1327,17 @@ conv(
 
 	    case 's':			/* use this point size */
 		    fscanf(fp, "%d", &n);	/* ignore fractional sizes */
-		    setsize(t_size(n));
+		    if (n != FRACTSIZE)
+		    	setsize(t_size(n), 0);
+		    else {
+			    float f;
+			    fscanf(fp, "%f", &f);
+			    setsize(FRACTSIZE, f);
+		    }
 		    break;
 
 	    case 'f':			/* use font mounted here */
-		    fscanf(fp, "%s", str);
+		    sget(str, sizeof str, fp);
 		    setfont(t_font(str));
 		    break;
 
@@ -1239,7 +1412,7 @@ devcntrl(
 {
 
 
-    char	str[50], buf[256], str1[50];
+    char	str[50], buf[4096], str1[4096];
     int		c, n;
 
 
@@ -1254,7 +1427,7 @@ devcntrl(
  */
 
 
-    fscanf(fp, "%s", str);		/* get the control function name */
+    sget(str, sizeof str, fp);		/* get the control function name */
 
     switch ( str[0] )  {		/* only the first character counts */
 
@@ -1263,9 +1436,14 @@ devcntrl(
 		break;
 
 	case 'T':			/* device name */
-		fscanf(fp, "%s", devname);
+		sget(devname, sizeof devname, fp);
 		getdevmap();
-		strcpy(devname, realdev);
+		/*
+		 * This used to be "strcpy(devname, realdev);" but
+		 * it does not work when DESC is a text file because
+		 * the fonts are in a different directory.
+		 */
+		realdev = devname;
 		break;
 
 	case 't':			/* trailer */
@@ -1285,18 +1463,25 @@ devcntrl(
 		break;
 
 	case 'f':			/* load font in a position */
-		fscanf(fp, "%d %s", &n, str);
+		fscanf(fp, "%d", &n);
+		sget(str, sizeof str, fp);
 		fgets(buf, sizeof buf, fp);	/* in case there's a filename */
 		ungetc('\n', fp);	/* fgets() goes too far */
 		str1[0] = '\0';		/* in case there's nothing to come in */
 		sscanf(buf, "%s", str1);
-		loadfont(n, mapdevfont(str), str1);
+		loadfont(n, mapdevfont(str), str1, 0);
 		break;
 
 	/* these don't belong here... */
 	case 'H':			/* char height */
 		fscanf(fp, "%d", &n);
-		t_charht(n);
+		if (n != FRACTSIZE)
+			t_charht(n, 0);
+		else {
+			float	f;
+			fscanf(fp, "%f", &f);
+			t_charht(FRACTSIZE, f);
+		}
 		break;
 
 	case 'S':			/* slant */
@@ -1305,13 +1490,32 @@ devcntrl(
 		break;
 
 	case 'X':			/* copy through - from troff */
-		fscanf(fp, " %[^: \n]:", str);
+		do
+			c = getc(fp);
+		while (spacechar(c));
+		n = 0;
+		if (c != EOF) do {
+			if (n + 1 < sizeof str)
+				str[n++] = c;
+			c = getc(fp);
+		} while (c != EOF && !spacechar(c) && c != ':');
+		str[n] = 0;
+		if (c != ':')
+			ungetc(c, fp);
 		fgets(buf, sizeof(buf), fp);
 		ungetc('\n', fp);
 		if ( strcmp(str, "PI") == 0 || strcmp(str, "PictureInclusion") == 0 )
 		    picture(buf);
 		else if ( strcmp(str, "InlinePicture") == 0 )
 		    inlinepic(fp, buf);
+		else if ( strcmp(str, "SupplyFont") == 0 )
+		    t_supply(buf);
+		else if ( strcmp(str, "PaperSize") == 0 )
+		    t_papersize(buf);
+		else if ( strcmp(str, "Track") == 0 )
+		    t_track(buf);
+		else if ( strcmp(str, "PDFMark") == 0 )
+		    t_pdfmark(buf);
 		else if ( strcmp(str, "BeginPath") == 0 )
 		    beginpath(buf, FALSE);
 		else if ( strcmp(str, "DrawPath") == 0 )
@@ -1329,6 +1533,11 @@ devcntrl(
 		else if ( strcmp(str, "SetColor") == 0 )  {
 		    newcolor(buf);
 		    setcolor();
+		} else if ( strcmp(str, "Sync") == 0 )  {
+		    if (tracked)
+			    tracked = -1;
+		    t_sf();
+		    xymove(hpos, vpos);
 		} else if ( strcmp(str, "PS") == 0 || strcmp(str, "PostScript") == 0 )  {
 		    endtext();
 		    /* xymove(hpos, vpos); ul90-22006 */
@@ -1352,21 +1561,21 @@ fontinit(void)
 {
 
 
-    int		fin;			/* for reading the DESC.out file */
+    char	*descp;			/* for reading the DESC file */
     char	*filebase;		/* the whole thing goes here */
     int		i;			/* loop index */
 
 
 /*
  *
- * Reads *realdev's DESC.out file and uses what's there to initialize things like
+ * Reads *realdev's DESC file and uses what's there to initialize things like
  * the list of available point sizes. Old versions of the program used *devname's
- * DESC.out file to initialize nfonts, but that meant we needed to have *devname's
+ * DESC file to initialize nfonts, but that meant we needed to have *devname's
  * binary font files available for emulation. That restriction has been removed
  * and we now set nfonts using the "x font" commands in the input file, so by the
  * time we get here all we really need is *realdev. In fact devcntrl() reads the
  * device name from the "x T ..." command, but almost immediately replaces it with
- * string *realdev so we end up using *realdev's DESC.out file. Later on (in
+ * string *realdev so we end up using *realdev's DESC file. Later on (in
  * t_font()) we mount all of *realdev's special fonts after the last legitimate
  * font position, just to be sure device emulation works reasonably well - there's
  * no guarantee *devname's special fonts match what's needed when *realdev's tables
@@ -1375,31 +1584,31 @@ fontinit(void)
  */
 
 
-    sprintf(temp, "%s/dev%s/DESC.out", fontdir, devname);
-    if ( (fin = open(temp, 0)) < 0 )
+    snprintf(temp, sizeof temp, "%s/dev%s/DESC", fontdir, devname);
+    if ( (descp = readdesc(temp)) == 0 )
 	error(FATAL, "can't open tables for %s", temp);
 
-    read(fin, &dev, sizeof(struct dev));
+    memcpy(&dev, descp, sizeof dev);
 
     nfonts = 0;				/* was dev.nfonts - now set in t_fp() */
     nsizes = dev.nsizes;
     nchtab = dev.nchtab;
     unitwidth = dev.unitwidth;
 
-    if ( (filebase = malloc(dev.filesize)) == NULL )
-	error(FATAL, "no memory for description file");
+    filebase = &descp[sizeof dev];
 
-    read(fin, filebase, dev.filesize);	/* all at once */
-    close(fin);
-
-    pstab = (short *) filebase;
-    chtab = pstab + nsizes + 1;
+    pstab = (int *) filebase;
+    chtab = (short *)(pstab + nsizes + 1);
     chname = (char *) (chtab + nchtab);
     fsize = 3 * 255 + nchtab + 128 - 32 + sizeof(struct Font);
 
+    fitab = calloc(NFONT+1, sizeof *fitab);
+    fontab = calloc(NFONT+1, sizeof *fontab);
+    codetab = calloc(NFONT+1, sizeof *codetab);
+    kerntab = calloc(NFONT+1, sizeof *kerntab);
+
     for ( i = 1; i <= NFONT; i++ )  {	/* so loadfont() knows nothing's there */
 	fontbase[i] = NULL;
-	widthtab[i] = codetab[i] = fitab[i] = NULL;
     }	/* End for */
 
     if ( (downloaded = (char *) calloc(nchtab + 128, sizeof(char))) == NULL )
@@ -1414,21 +1623,24 @@ fontinit(void)
 void
 loadfont (
     int n,			/* load this font position */
-    char *s,			/* with the .out file for this font */
-    char *s1			/* taken from here - possibly */
+    char *s,			/* with the file for this font */
+    char *s1,			/* taken from here - possibly */
+    int forcespecial		/* this is definitively a special font */
 )
 
 
 {
 
 
-    int		fin;			/* for reading *s.out file */
+    char	*fpout = NULL;		/* for reading *s file */
+    int		fin;			/* for reading *s.afm file */
     int		nw;			/* number of width table entries */
+    char	*p;
 
 
 /*
  *
- * Loads font position n with the binary font file for *s.out provided it's not
+ * Loads font position n with the binary font file for *s provided it's not
  * already there. If *s1 is NULL or points to the empty string we read files from
  * directory *fontdir/dev*devname, otherwise directory *s1 is used. If the first
  * open fails we try to map font *s into one we expect will be available, and then
@@ -1443,35 +1655,86 @@ loadfont (
     if ( fontbase[n] != NULL && strcmp(s, fontbase[n]->namefont) == 0 )
 	return;
 
-    if ( s1 == NULL || s1[0] == '\0' )
-	sprintf(temp, "%s/dev%s/%s.out", fontdir, devname, s);
-    else sprintf(temp, "%s/%s.out", s1, s);
+    if (strchr(s, '/') != NULL)
+	strcpy(temp, s);
+    else if (strstr(s, ".afm") != NULL)
+	snprintf(temp, sizeof temp, "%s/dev%s/%s", fontdir, devname, s);
+    else if ( s1 == NULL || s1[0] == '\0' )
+	snprintf(temp, sizeof temp, "%s/dev%s/%s.afm", fontdir, devname, s);
+    else snprintf(temp, sizeof temp, "%s/%s.afm", s1, s);
 
-    if ( (fin = open(temp, 0)) < 0 )  {
-	sprintf(temp, "%s/dev%s/%s.out", fontdir, devname, mapfont(s));
-	if ( (fin = open(temp, 0)) < 0 )
-	    error(FATAL, "can't open font table %s", temp);
-    }	/* End if */
+    if ( (fin = open(temp, O_RDONLY)) >= 0 )  {
+	struct afmtab	*a;
+	struct stat	st;
+	char	*contents;
+	int	i;
+	if ((p = strrchr(s, '/')) == NULL)
+		p = s;
+	else
+		p++;
+	if (p[0] == 'S' && (p[1] == '\0' || digitchar(p[1]&0377) &&
+				p[2] == '\0' || p[2] == '.'))
+		forcespecial = 1;
+	for (i = 0; i < afmcount; i++)
+		if (afmfonts[i] && strcmp(afmfonts[i]->path, temp) == 0) {
+			a = afmfonts[i];
+			close(fin);
+			goto have;
+		}
+	if ((a = calloc(1, sizeof *a)) == NULL ||
+			fstat(fin, &st) < 0 ||
+			(contents = malloc(st.st_size+1)) == NULL ||
+			read(fin, contents, st.st_size) != st.st_size) {
+		free(a);
+		close(fin);
+		goto fail;
+	}
+	close(fin);
+	a->path = malloc(strlen(temp) + 1);
+	strcpy(a->path, temp);
+	a->file = s;
+	if (afmget(a, contents, st.st_size) < 0) {
+		free(a);
+		free(contents);
+		goto fail;
+	}
+	free(contents);
+	afmfonts[afmcount] = a;
+	snprintf(a->Font.intname, sizeof a->Font.intname,
+			"%d", dev.nfonts + ++afmcount);
+	if (forcespecial)
+		a->Font.specfont = 1;
+have:   fontbase[n] = &a->Font;
+	fontab[n] = a->fontab;
+	codetab[n] = a->codetab;
+	fitab[n] = a->fitab;
+    	t_fp(n, a->fontname, fontbase[n]->intname, a);
+	goto done;
+    }
+    if ( s1 == NULL || s1[0] == '\0' )
+	snprintf(temp, sizeof temp, "%s/dev%s/%s", fontdir, devname, s);
+    else snprintf(temp, sizeof temp, "%s/%s", s1, s);
+
+    if ( access(temp, R_OK) < 0 ) 
+            snprintf(temp, sizeof temp, "%s/dev%s/%s",
+			    fontdir, devname, mapfont(s));
+    if ((fpout = readfont(temp, &dev)) == NULL)
+    fail:   error(FATAL, "can't open font table %s", temp);
 
     if ( fontbase[n] != NULL )		/* something's already there */
 	free(fontbase[n]);		/* so release the memory first */
 
-    fontbase[n] = (struct Font *) malloc(fsize);
-    if ( fontbase[n] == NULL )
-	error(FATAL, "Out of space in loadfont %s", s);
+    fontbase[n] = (struct Font *)fpout;
 
-    read(fin, fontbase[n], fsize);
-    close(fin);
-
-    if ( smnt == 0 && fontbase[n]->specfont == 1 )
-	smnt = n;
-
+    p = (char *) fontbase[n] + sizeof(struct Font);
     nw = fontbase[n]->nwfont & BMASK;
-    widthtab[n] = (char *) fontbase[n] + sizeof(struct Font);
-    codetab[n] = (char *) widthtab[n] + 2 * nw;
-    fitab[n] = (char *) widthtab[n] + 3 * nw;
+    makefont(n, p, NULL, p + 2 * nw, p + 3 * nw, nw);
 
-    t_fp(n, fontbase[n]->namefont, fontbase[n]->intname);
+    t_fp(n, fontbase[n]->namefont, fontbase[n]->intname, NULL);
+
+done:
+    if ( smnt == 0 && (fontbase[n]->specfont == 1 || forcespecial) )
+	smnt = n;
 
     if ( debug == ON )
 	fontprint(n);
@@ -1501,7 +1764,7 @@ loadspecial(void)
  * no consistency in special fonts across different devices, and relying on having
  * them mounted in the input file doesn't guarantee the whole collection will be
  * there. The special fonts are determined and mounted using the copy of the
- * DESC.out file that's been read into memory. Initially had this stuff at the
+ * DESC file that's been read into memory. Initially had this stuff at the
  * end of fontinit(), but we now don't know nfonts until much later.
  *
  */
@@ -1511,7 +1774,7 @@ loadspecial(void)
 	for ( i = 1, p = chname + dev.lchname; i <= dev.nfonts; i++ )  {
 	    nw = *p & BMASK;
 	    if ( ((struct Font *) p)->specfont == 1 )
-		loadfont(++nfonts, ((struct Font *)p)->namefont, NULL);
+		loadfont(++nfonts, ((struct Font *)p)->namefont, NULL, 1);
 	    p += 3 * nw + dev.nchtab + 128 - 32 + sizeof(struct Font);
 	}   /* End for */
 
@@ -1530,7 +1793,7 @@ loaddefault(void)
   int i;
 
   for (i = 0; defaultFonts[i] != NULL ; i++)
-    loadfont(++nfonts, defaultFonts[i], NULL);
+    loadfont(++nfonts, defaultFonts[i], NULL, defaultFonts[i][0] == 'S');
 }
 
 
@@ -1560,23 +1823,23 @@ fontprint (
     n = fontbase[i]->nwfont & BMASK;
 
     fprintf(tf, "base=0%lo, nchars=%d, spec=%d, name=%s, widtab=0%lo, fitab=0%lo\n",
-	    (long)p, n, fontbase[i]->specfont, fontbase[i]->namefont, (long)widthtab[i], (long)fitab[i]);
+	    (long)p, n, fontbase[i]->specfont, fontbase[i]->namefont, (long)fontab[i], (long)fitab[i]);
 
     fprintf(tf, "widths:\n");
     for ( j = 0; j <= n; j++ )  {
-	fprintf(tf, " %2d", widthtab[i][j] & BMASK);
+	fprintf(tf, " %2d", fontab[i][j]);
 	if ( j % 20 == 19 ) putc('\n', tf);
     }	/* End for */
 
     fprintf(tf, "\ncodetab:\n");
     for ( j = 0; j <= n; j++ )  {
-	fprintf(tf, " %2d", codetab[i][j] & BMASK);
+	fprintf(tf, " %2d", codetab[i][j]);
 	if ( j % 20 == 19 ) putc('\n', tf);
     }	/* End for */
 
     fprintf(tf, "\nfitab:\n");
     for ( j = 0; j <= dev.nchtab + 128-32; j++ )  {
-	fprintf(tf, " %2d", fitab[i][j] & BMASK);
+	fprintf(tf, " %2d", fitab[i][j]);
 	if ( j % 20 == 19 ) putc('\n', tf);
     }	/* End for */
 
@@ -1657,14 +1920,16 @@ getdevmap(void)
  */
 
 
-    sprintf(temp, "%s/dev%s/fontmaps/%s", fontdir, realdev, devname);
+    snprintf(temp, sizeof temp, "%s/dev%s/fontmaps/%s",
+		    fontdir, realdev, devname);
 
     if ( devfontmap == NULL && (fp = fopen(temp, "r")) != NULL )  {
 	devfontmap = (Devfontmap *) malloc(10 * sizeof(Devfontmap));
 
-	while ( fscanf(fp, "%s", temp) != EOF )  {
+	while ( sget(temp, sizeof temp, fp) == 1 ) {
 	    if ( temp[0] != '#' && strlen(temp) < 3 )
-		if ( fscanf(fp, "%s", &temp[3]) == 1 && strlen(&temp[3]) < 3 )  {
+		if ( sget(&temp[3], sizeof temp - 3, fp) == 1 &&
+				strlen(&temp[3]) < 3 )  {
 		    strcpy((devfontmap + i)->name, temp);
 		    strcpy((devfontmap + i)->use, &temp[3]);
 		    if ( ++i % 10 == 0 )
@@ -1736,6 +2001,8 @@ reset(void)
     lastx = -(slop + 1);
     lasty = -1;
     lastfont = lastsize = -1;
+    if (tracked)
+	    tracked = -1;
 
 }   /* End of reset */
 
@@ -1798,6 +2065,12 @@ t_init(void)
 	fontinit();
 	gotspecial = FALSE;
 	widthfac = (float) res /dev.res;
+	if (dev.afmfonts) {
+		if (Sflag == 0)
+			pointslop = 0;
+		if (eflag == 0)
+			realencoding = encoding = HIGHDFLTENCODING;
+	}
 	slop = pointslop * res / POINTS + .5;
 	rvslop = res * .025;
 	setup();
@@ -1805,7 +2078,7 @@ t_init(void)
     }	/* End if */
 
     hpos = vpos = 0;			/* upper left corner */
-    setsize(t_size(10));		/* start somewhere */
+    setsize(t_size(10), 0);		/* start somewhere */
     reset();				/* force position and font stuff - later */
 
 }   /* End of t_init */
@@ -1813,7 +2086,209 @@ t_init(void)
 
 /*****************************************************************************/
 
+static struct supplylist {
+	struct supplylist	*next;
+	char	*font;
+	char	*file;
+	char	*type;
+	int	done;
+} *supplylist;
 
+void
+t_supply(char *font)		/* supply a font */
+{
+	struct supplylist	*sp;
+	char	*np, *file, *type = NULL, c;
+
+	while (*font == ' ' || *font == '\t')
+		font++;
+	for (np = font; *np && *np != ' ' && *np != '\t' && *np != '\n'; np++);
+	if (*np == '\0' || *np == '\n')
+		return;
+	*np = '\0';
+	file = &np[1];
+	while (*file == ' ' || *file == '\t')
+		file++;
+	for (np = file; *np && *np != ' ' && *np != '\t' && *np != '\n'; np++);
+	c = *np;
+	*np = '\0';
+	if (c != '\0' && c != '\n') {
+		type = &np[1];
+		while (*type == ' ' || *type == '\t')
+			type++;
+		for (np = type; *np && *np != ' ' &&
+				*np != '\t' && *np != '\n'; np++);
+		*np = '\0';
+	}
+	for (sp = supplylist; sp; sp = sp->next)
+		if (strcmp(sp->font, font) == 0)
+			return;
+	sp = calloc(1, sizeof *sp);
+	sp->font = strdup(font);
+	sp->file = strdup(file);
+	sp->type = type && *type ? strdup(type) : NULL;
+	sp->next = supplylist;
+	supplylist = sp;
+}
+
+static unsigned long
+ple32(const char *cp)
+{
+	return (unsigned long)(cp[0]&0377) +
+		((unsigned long)(cp[1]&0377) << 8) +
+		((unsigned long)(cp[2]&0377) << 16) +
+		((unsigned long)(cp[3]&0377) << 24);
+}
+
+static const char ps_adobe_font_[] = "%!PS-AdobeFont-";
+static const char ps_truetypefont_[] = "%!PS-TrueTypeFont-";
+
+static void
+supplypfb(char *font, char *path, FILE *fp)
+{
+    char	buf[30];
+    long	length;
+    int	i, c = EOF, n, type = 0;
+
+    if (fread(buf, 1, 6, fp) != 6)
+	    error(FATAL, "no data in %s", path);
+    if ((buf[0]&0377) != 0200 || (type = buf[1]) != 1)
+	    error(FATAL, "invalid header in %s", path);
+    length = ple32(&buf[2]);
+    n = 0;
+    while (ps_adobe_font_[n] && --length > 0 && (c = getc(fp)) != EOF) {
+	    if (c != ps_adobe_font_[n++])
+		    error(FATAL, "file %s does not start with \"%s\"",
+				    path, ps_adobe_font_);
+    }
+    while (--length > 0 && (c = getc(fp)) != EOF && c != '\r' && c != '\n');
+    if (c != '\n') {
+    	if ((c = getc(fp)) != '\n')
+	    	ungetc(c, fp);
+    	else
+	    	length--;
+    }
+    if (sfcount++ == 0)
+        fprintf(sf, "%%%%DocumentSuppliedResources: font %s\n", font);
+    else
+        fprintf(sf, "%%%%+ font %s\n", font);
+    fprintf(rf, "%%%%BeginResource: Font %s\n", font);
+    for (;;) {
+    	switch (type) {
+    	case 1:
+	    	while (length > 0 && (c = getc(fp)) != EOF) {
+			length--;
+		    	switch (c) {
+		    	case '\r':
+    				if ((c = getc(fp)) != '\n')
+	    				ungetc(c, fp);
+    				else
+	    				length--;
+				putc('\n', rf);
+				break;
+		    	case 0:
+				continue;
+		    	default:
+				putc(c, rf);
+		    	}
+	    	}
+	    	if (c == EOF)
+		    	error(FATAL, "short text data in %s", path);
+	    	break;
+    	case 2:
+	    	while (length) {
+	    		n = length > sizeof buf ? sizeof buf : length;
+	    		if (fread(buf, 1, n, fp) != n)
+		    		error(FATAL, "short binary data in %s", path);
+	    		for (i = 0; i < n; i++)
+		    		fprintf(rf, "%02x", buf[i]&0377);
+	    		putc('\n', rf);
+			length -= n;
+	    	}
+	    	break;
+    	case 3:
+    		fprintf(rf, "%%%%EndResource\n");
+		fclose(fp);
+		return;
+	default:
+	        error(FATAL, "invalid header type %d in %s", path, type);
+    	}
+        if ((n = fread(buf, 1, 6, fp)) != 6 && (buf[1] != 3 || n < 2))
+	        error(FATAL, "missing header in %s", path);
+        if ((buf[0]&0377) != 0200)
+	        error(FATAL, "invalid header in %s", path);
+	if ((type = buf[1]) != 3)
+        	length = ple32(&buf[2]);
+    }
+}
+
+static void
+supply1(char *font, char *file, char *type)
+{
+    FILE *fp;
+    char line[4096], c;
+
+    if (strchr(file, '/') == 0) {
+    	snprintf(temp, sizeof temp, "%s/dev%s/%s.%s",
+			fontdir, devname, file, type);
+	file = temp;
+    }
+    if ((fp = fopen(file, "r")) == NULL)
+	    error(FATAL, "can't open %s", file);
+    if (type == NULL) {
+	c = getc(fp);
+	ungetc(c, fp);
+	type = c == '\200' ? "pfb" : "anything";
+    }
+    if (strcmp(type, "pfb") == 0) {
+	    supplypfb(font, file, fp);
+	    return;
+    }
+    if (fgets(line, sizeof line, fp) == NULL)
+            error(FATAL, "missing data in %s", file);
+    if (strncmp(line, ps_adobe_font_, strlen(ps_adobe_font_)) &&
+		    strncmp(line, ps_truetypefont_, strlen(ps_truetypefont_)))
+	    error(FATAL, "file %s does not start with \"%s\" or \"%s\"",
+			    file, ps_adobe_font_, ps_truetypefont_);
+    if (sfcount++ == 0)
+        fprintf(sf, "%%%%DocumentSuppliedResources: font %s\n", font);
+    else
+        fprintf(sf, "%%%%+ font %s\n", font);
+    fprintf(rf, "%%%%BeginResource: Font %s\n", font);
+    while (fgets(line, sizeof line, fp) != NULL)
+	    fputs(line, rf);
+    fclose(fp);
+    fprintf(rf, "%%%%EndResource\n");
+}
+
+static void
+t_dosupply(char *font)
+{
+	struct supplylist	*sp;
+
+	for (sp = supplylist; sp; sp = sp->next)
+		if (sp->done == 0 && strcmp(sp->font, font) == 0) {
+			supply1(sp->font, sp->file, sp->type);
+			sp->done = 1;
+		}
+}
+
+/*****************************************************************************/
+static void
+t_papersize(char *buf)
+{
+	int	x, y;
+
+	if (sscanf(buf, "%d %d", &x, &y) != 2)
+		return;
+	x = x * 72 / res;
+	y = y * 72 / res;
+	fprintf(gf, "/pagebbox [0 0 %d %d] def\n", x, y);
+	fprintf(gf, "userdict /gotpagebbox true put\n");
+	pagelength = y;
+}
+
+/*****************************************************************************/
 void
 t_page (
     int pg			/* troff's current page number */
@@ -1934,7 +2409,7 @@ t_size (
 
 void
 setsize (
-    int n			/* new internal size */
+    int n, float f			/* new internal size */
 )
 
 
@@ -1950,6 +2425,7 @@ setsize (
 
 
     size = n;
+    fractsize = f;
 
 }   /* End of setsize */
 
@@ -1961,7 +2437,8 @@ void
 t_fp (
     int n,			/* this position */
     char *s,			/* now has this font mounted */
-    char *si			/* its internal number */
+    char *si,			/* its internal number */
+    void *a
 )
 
 
@@ -1980,6 +2457,7 @@ t_fp (
 
     fontname[n].name = s;
     fontname[n].number = atoi(si);
+    fontname[n].afm = a;
 
     if ( n == lastfont )		/* force a call to t_sf() */
 	lastfont = -1;
@@ -2027,10 +2505,51 @@ t_font (
 	    loadspecial();
     }	/* End if */
 
+    if (tracked)
+        tracked = -1;
+    track = 0;
+
     return(n);
 
 }   /* End of t_font */
 
+
+/*****************************************************************************/
+static void
+t_track(char *buf)
+{
+	int	t;
+
+/*
+ * Handling of track kerning. troff provides this parameter as a hint
+ * only. dpost can use it in combination with the PostScript "ashow"
+ * operator. When the variable "track" is not zero, the printer is
+ * advised to perform tracking by the given amount. This relieves us
+ * of the need to adjust the character position explicitly after each
+ * character and thus greatly reduces the size of the output.
+ *
+ * Currently this is done in encodings 0 and 4 only.
+ */
+
+	if (encoding != 0 && encoding != 4)
+		return;
+	if (sscanf(buf, "%d", &t) != 1)
+		t = 0;
+	if (t != lasttrack) {
+		tracked = -1;
+	} else if (t)
+		tracked = 1;
+	track = t;
+}
+
+static void
+t_strack(void)
+{
+	endtext();
+	fprintf(tf, "/track %d def\n", track);
+	tracked = track != 0;
+	lasttrack = track;
+}
 
 /*****************************************************************************/
 
@@ -2069,6 +2588,110 @@ setfont (
 
 
 /*****************************************************************************/
+static void
+printencsep(int *colp)
+{
+	if (*colp >= 60) {
+		putc('\n', gf);
+		*colp = 0;
+	} else {
+		putc(' ', gf);
+		(*colp)++;
+	}
+}
+
+static char *
+printencvector(struct afmtab *a)
+{
+	int	i, j, k, col = 0, s, w;
+	char	*afmmap = NULL;
+
+	fprintf(gf, "/Encoding-@%s [\n", a->Font.intname);
+	col = 0;
+	/*
+	 * First, write excess entries into the positiongs from 1 to 31
+	 * for later squeezing of characters >= 0400.
+	 */
+	s = 128 - 32;
+	w = 128;
+	afmmap = calloc(256 + nchtab, sizeof *afmmap);
+	col += fprintf(gf, "/.notdef");
+	printencsep(&col);
+	for (j = 1; j < 32; j++) {
+		while (s < a->nchars + 128 - 32 + nchtab &&
+				((k = a->fitab[s]) == 0 ||
+				 a->nametab[k] == NULL))
+			s++;
+		if (s < a->nchars + 128 - 32 + nchtab &&
+				(k = a->fitab[s]) != 0 &&
+				k < a->nchars &&
+				a->nametab[k] != NULL) {
+			afmmap[s - 128 + 32] = j;
+			col += fprintf(gf, "/%s", a->nametab[k]);
+			printencsep(&col);
+			s++;
+		} else {
+			col += fprintf(gf, "/.notdef");
+			printencsep(&col);
+		}
+	}
+	col += fprintf(gf, "/space");
+	printencsep(&col);
+	for (i = 1; i < a->nchars + 128 - 32 + nchtab && i < 256 - 32; i++) {
+		if (i < 128 - 32 && (k = a->fitab[i]) != 0 && k < a->nchars &&
+				a->nametab[k] != NULL) {
+			col += fprintf(gf, "/%s", a->nametab[k]);
+			printencsep(&col);
+		} else {
+			while (s < a->nchars + 128 - 32 + nchtab &&
+					((k = a->fitab[s]) == 0 ||
+				 	a->nametab[k] == NULL))
+				s++;
+			if (s < a->nchars + 128 - 32 + nchtab &&
+				(k = a->fitab[s]) != 0 &&
+				k < a->nchars &&
+				a->nametab[k] != NULL) {
+				afmmap[s - 128 + 32] = i + 32;
+				col += fprintf(gf, "/%s", a->nametab[k]);
+				printencsep(&col);
+				s++;
+			} else {
+				col += fprintf(gf, "/.notdef");
+				printencsep(&col);
+			}
+		}
+	}
+	fprintf(gf, "] def\n");
+	fprintf(gf, "\
+/%s findfont\n\
+dup length dict begin\n\
+  {1 index /FID ne {def} {pop pop} ifelse} forall\n\
+  /Encoding Encoding-@%s def\n\
+  currentdict\n\
+end\n",
+		a->fontname, a->Font.intname);
+	if (strcmp(a->fontname, "Symbol") == 0) {
+		fprintf(gf, "/Symbol-tmp-@%s exch definefont pop\n",
+			a->Font.intname);
+		fprintf(gf, "/Symbol-tmp-@%s /Symbol-@%s Sdefs cf\n",
+			a->Font.intname, a->Font.intname);
+		fprintf(gf, "/Symbol-tmp-@%s undefinefont\n",
+			a->Font.intname);
+	} else if (strcmp(a->fontname, "Times-Roman") == 0) {
+		fprintf(gf, "/Times-Roman-tmp-@%s exch definefont pop\n",
+			a->Font.intname);
+		fprintf(gf, "/Times-Roman-tmp-@%s /Times-Roman-@%s S1defs cf\n",
+			a->Font.intname, a->Font.intname);
+		fprintf(gf, "/Times-Roman-tmp-@%s undefinefont\n",
+			a->Font.intname);
+	} else
+		fprintf(gf, "/%s-@%s exch definefont pop\n",
+			a->fontname, a->Font.intname);
+	fprintf(gf, "/@%s /%s-@%s def\n", a->Font.intname,
+			a->fontname, a->Font.intname);
+	return afmmap;
+}
+/*****************************************************************************/
 
 
 void
@@ -2101,7 +2724,7 @@ t_sf(void)
 	fnum = 0;
 
     if ( fnum > 0 && seenfonts[fnum] == 0 && hostfontdir != NULL )  {
-	sprintf(temp, "%s/%s", hostfontdir, fontname[font].name);
+	snprintf(temp, sizeof temp, "%s/%s", hostfontdir, fontname[font].name);
 	if ( access(temp, 04) == 0 )
 	    doglobal(temp);
     }	/* End if */
@@ -2109,15 +2732,35 @@ t_sf(void)
     if ( tf == stdout )  {
 	lastfont = font;
 	lastsize = size;
-	if ( seenfonts[fnum] == 0 )
+	lastfractsize = fractsize;
+	if ( seenfonts[fnum] == 0 ) {
 	    documentfonts();
+	    if (fontname[font].afm) {
+		t_dosupply(fontname[font].afm->fontname);
+		fontname[font].afmmap = printencvector(fontname[font].afm);
+	    }
+	}
 	seenfonts[fnum] = 1;
     }	/* End if */
 
-    fprintf(tf, "%d %s f\n", pstab[size-1], fontname[font].name);
+    if (size != FRACTSIZE)
+        fprintf(tf, "%d ", pstab[size-1]);
+    else
+	fprintf(tf, "%g ", (double)fractsize);
+    if (fontname[font].afm)
+    	fprintf(tf, "@%s f\n", fontname[font].afm->Font.intname);
+    else
+    	fprintf(tf, "%s f\n", fontname[font].name);
 
-    if ( fontheight != 0 || fontslant != 0 )
-	fprintf(tf, "%d %d changefont\n", fontslant, (fontheight != 0) ? fontheight : pstab[size-1]);
+    if ( fontheight != 0 || fontslant != 0 ) {
+	if (size != FRACTSIZE)
+	    fprintf(tf, "%d %g changefont\n", fontslant, (fontheight != 0) ? (double)fontheight : pstab[size-1]);
+	else
+	    fprintf(tf, "%d %g changefont\n", fontslant, (fontheight != 0) ? (double)fontheight : (double)fractsize);
+    }
+
+    if (tracked < 0)
+	    t_strack();
 
 }   /* End of t_sf */
 
@@ -2127,7 +2770,7 @@ t_sf(void)
 
 void
 t_charht (
-    int n			/* use this as the character height */
+    int n, float f		/* use this as the character height */
 )
 
 
@@ -2141,7 +2784,10 @@ t_charht (
  *
  */
 
-    fontheight = (n == pstab[size-1]) ? 0 : n;
+    if (n == FRACTSIZE)
+        fontheight = f;
+    else
+    	fontheight = (n == pstab[size-1]) ? 0 : n;
     lastfont = -1;
 
 }   /* End of t_charht */
@@ -2170,7 +2816,6 @@ t_slant (
     lastfont = -1;
 
 }   /* End of t_slant */
-
 
 /*****************************************************************************/
 
@@ -2403,8 +3048,8 @@ put1 (
     register int	i;		/* character code from fitab */
     register int	j;		/* number of fonts we've checked so far */
     register int	k;		/* font we're currently looking at */
-    char		*pw = NULL;	/* font widthtab and */
-    char		*p = NULL;	/* and codetab where c was found */
+    int			*pw = NULL;	/* font widthtab and */
+    short		*p = NULL;	/* and codetab where c was found */
     int			code;		/* code used to get c printed */
     int			ofont;		/* font when we started */
 
@@ -2423,7 +3068,7 @@ put1 (
  * that starts with the first special font and skips font position 0. If character
  * c is found somewhere besides the current font we change to that font and use
  * fitab[k][c] to locate missing data in the other two tables. The width of the
- * character can be found at widthtab[k][c] while codetab[k][c] is whatever we
+ * character can be found at fontab[k][c] while codetab[k][c] is whatever we
  * need to tell the printer to have character c printed. lastc records the real
  * name of the character because it's lost by the time oput() gets called but
  * charlib() may need it.
@@ -2440,23 +3085,29 @@ put1 (
 
     k = ofont = font;
 
-    if ( (i = fitab[k][c] & BMASK) != 0 )  {	/* it's on this font */
+    if ( (i = fitab[k][c]) != 0 )  {	/* it's on this font */
 	p = codetab[font];
-	pw = widthtab[font];
+	pw = fontab[font];
     } else if ( smnt > 0 )  {		/* on special (we hope) */
 	for ( k=smnt, j=0; j <= nfonts; j++, k = (k+1) % (nfonts+1) )  {
 	    if ( k == 0 )  continue;
-	    if ( (i = fitab[k][c] & BMASK) != 0 )  {
+	    if ( (i = fitab[k][c]) != 0 )  {
 		p = codetab[k];
-		pw = widthtab[k];
+		pw = fontab[k];
 		setfont(k);
 		break;
 	    }	/* End if */
 	}   /* End for */
     }	/* End else */
 
-    if ( i != 0 && (code = p[i] & BMASK) != 0 )  {
-	lastw = widthfac * (((pw[i] & BMASK) * pstab[size-1] + unitwidth/2) / unitwidth);
+    lastw = 0;
+    if ( i != 0 && (code = p[i]) != 0 )  {
+	if (size != FRACTSIZE)
+	    lastw = widthfac * ((pw[i] * pstab[size-1] + unitwidth/2) / unitwidth);
+	else
+	    lastw = widthfac * ((pw[i] * fractsize + unitwidth/2) / unitwidth);
+	if (track && (encoding == 0 || encoding == 4))
+		lastw += track;
 	oput(code);
     }	/* End if */
 
@@ -2489,7 +3140,8 @@ oput (
     if ( textcount > MAXSTACK )		/* don't put too much on the stack? */
 	endtext();
 
-    if ( font != lastfont || size != lastsize )
+    if ( font != lastfont || size != lastsize ||
+		    size == FRACTSIZE && fractsize != lastfractsize)
 	t_sf();
 
     if ( vpos != lasty )
@@ -2500,7 +3152,7 @@ oput (
     if ( ABS(hpos - lastx) > slop )
 	endstring();
 
-    if ( isascii(c) && isprint(c) )
+    if ( asciichar(c) && printchar(c) )
 	switch ( c )  {
 	    case '(':
 	    case ')':
@@ -2544,7 +3196,9 @@ starttext(void)
 	switch ( encoding )  {
 	    case 0:
 	    case 1:
+	    case 4:
 		putc('(', tf);
+		charcount = 1;
 		break;
 
 	    case 2:
@@ -2556,20 +3210,24 @@ starttext(void)
 		line[1].spaces = 0;
 		line[1].start = hpos;
 		line[1].width = 0;
+		charcount = 0;
 		break;
 
 	    case MAXENCODING+1:			/* reverse video */
 		if ( lastend == -1 )
 		    lastend = hpos;
 		putc('(', tf);
+		charcount = 1;
 		break;
 
 	    case MAXENCODING+2:			/* follow a funny baseline */
 		putc('(', tf);
+		charcount = 1;
 		break;
 	}   /* End switch */
 	textcount = 1;
 	lastx = stringstart = hpos;
+	laststrstart = INT_MIN;
     }	/* End if */
 
 }   /* End of starttext */
@@ -2600,6 +3258,14 @@ endtext(void)
 		fprintf(tf, ")%d t\n", stringstart);
 		break;
 
+	    case 4:
+		if (laststrstart != INT_MIN)
+			fprintf(tf, ")%d %d t\n",
+				stringstart - laststrstart, stringstart);
+		else
+			fprintf(tf, ")%d t\n", stringstart);
+		break;
+
 	    case 1:
 		fprintf(tf, ")%d %d t\n", stringstart, lasty);
 		break;
@@ -2609,7 +3275,7 @@ endtext(void)
 		line[textcount].width = lastx - line[textcount].start;
 		if ( spacecount != 0 || textcount != 1 )  {
 		    for ( i = textcount; i > 0; i-- )
-			fprintf(tf, "(%s)%d %d", line[i].str, line[i].spaces, line[i].width);
+			fprintf(tf, "(%s)%d %d\n", line[i].str, line[i].spaces, line[i].width);
 		    fprintf(tf, " %d %d %d t\n", textcount, stringstart, lasty);
 		} else fprintf(tf, "(%s)%d %d w\n", line[1].str, stringstart, lasty);
 		break;
@@ -2634,6 +3300,7 @@ endtext(void)
 		fprintf(tf, ")%d %d t\n", stringstart, lasty);
 		break;
 	}   /* End switch */
+	charcount = 0;
     }	/* End if */
 
     textcount = 0;
@@ -2664,9 +3331,25 @@ endstring(void)
 
 
     switch ( encoding )  {
+	case 4:
+	    if (laststrstart != INT_MIN)
+	        charcount += fprintf(tf, ")%d", stringstart - laststrstart);
+	    else {
+		    putc(')', tf);
+		    charcount++;
+	    }
+	    laststrstart = stringstart;
+	    goto nx;
 	case 0:
 	case 1:
-	    fprintf(tf, ")%d(", stringstart);
+	    charcount += fprintf(tf, ")%d", stringstart);
+         nx:
+	    if (charcount >= 60) {
+		    putc('\n', tf);
+		    charcount = 0;
+	    }
+	    putc('(', tf);
+	    charcount++;
 	    textcount++;
 	    lastx = stringstart = hpos;
 	    break;
@@ -2685,15 +3368,23 @@ endstring(void)
 		line[textcount].start = lastx;
 		line[textcount].width = 0;
 		line[textcount].spaces = 1;
+		charcount = 1;
 	    } else {
 		*strptr++ = ' ';
 		line[textcount].spaces++;
+		charcount++;
 	    }	/* End else */
 	    lastx += dx;
 	    break;
 
 	case MAXENCODING+1:
-	    fprintf(tf, ")%d(", stringstart);
+	    charcount += fprintf(tf, ")%d", stringstart);
+	    if (charcount >= 60) {
+		    putc('\n', tf);
+		    charcount = 0;
+	    }
+	    putc('(', tf);
+	    charcount++;
 	    textcount++;
 	    lastx = stringstart = hpos;
 	    break;
@@ -2728,7 +3419,7 @@ endline(void)
 
     endtext();
 
-    if ( encoding == 0 || encoding == MAXENCODING+1 )
+    if ( encoding == 0 || encoding == 4 || encoding == MAXENCODING+1 )
 	fprintf(tf, "%d %d m\n", hpos, vpos);
 
     lastx = stringstart = lastend = hpos;
@@ -2759,17 +3450,33 @@ addchar (
     switch ( encoding )  {
 	case 0:
 	case 1:
+	case 4:
 	    putc(c, tf);
+	    if (charcount++ >= 72 && c != '\\') {
+		    putc('\\', tf);
+		    putc('\n', tf);
+		    charcount = 0;
+	    }
 	    break;
 
 	case 2:
 	case 3:
 	    *strptr++ = c;
+	    if (charcount++ >= 72 && c != '\\') {
+		    *strptr++ = '\\';
+		    *strptr++ = '\n';
+		    charcount = 0;
+	    }
 	    break;
 
 	case MAXENCODING+1:
 	case MAXENCODING+2:
 	    putc(c, tf);
+	    if (charcount++ >= 72 && c != '\\') {
+		    putc('\\', tf);
+		    putc('\n', tf);
+		    charcount = 0;
+	    }
 	    break;
     }	/* End switch */
 
@@ -2787,29 +3494,57 @@ addoctal (
 
 {
 
+    int	n;
+
 
 /*
  *
  * Adds c to the current string as an octal escape \ddd.
  *
+ *
+ * If c is not a byte, try to squeeze it into the control area.
  */
 
 
+    if (c >= 128 && fontname[font].afmmap) {
+	    if (c < 128 + 256 + nchtab)
+	    	    c = fontname[font].afmmap[c - 128]&0377;
+	    else
+		    c = 32;
+    }
     switch ( encoding )  {
 	case 0:
 	case 1:
-	    fprintf(tf, "\\%o", c);
+	case 4:
+	    charcount += fprintf(tf, "\\%03o", c);
+	    if (charcount >= 72) {
+		    putc('\\', tf);
+		    putc('\n', tf);
+		    charcount = 0;
+	    }
 	    break;
 
 	case 2:
 	case 3:
-	    sprintf(strptr, "\\%o", c);
-	    strptr += strlen(strptr);
+	    snprintf(strptr, sizeof strings - (strptr - strings), "\\%03o", c);
+	    n = strlen(strptr);
+	    strptr += n;
+	    charcount += n;
+	    if (charcount >= 72) {
+		    *strptr++ = '\\';
+		    *strptr++ = '\n';
+		    charcount = 0;
+	    }
 	    break;
 
 	case MAXENCODING+1:
 	case MAXENCODING+2:
-	    fprintf(tf, "\\%o", c);
+	    charcount += fprintf(tf, "\\%03o", c);
+	    if (charcount >= 72) {
+		    putc('\\', tf);
+		    putc('\n', tf);
+		    charcount = 0;
+	    }
 	    break;
     }	/* End switch */
 
@@ -2853,12 +3588,13 @@ charlib (
     endtext();
 
     if ( lastc < 128 )  {		/* just a simple ASCII character */
-	sprintf(tname, "%.3o", lastc);
+	snprintf(tname, sizeof tname, "%.3o", lastc);
 	name = tname;
     } else name = &chname[chtab[lastc - 128]];
 
     if ( downloaded[lastc] == 0 )  {
-	sprintf(temp, "%s/dev%s/charlib/%s", fontdir, realdev, name);
+	snprintf(temp, sizeof temp, "%s/dev%s/charlib/%s",
+			fontdir, realdev, name);
 	if ( access(temp, 04) == 0 && doglobal(temp) == TRUE )  {
 	    downloaded[lastc] = 1;
 	    t_sf();
@@ -2869,9 +3605,10 @@ charlib (
 	xymove(hpos, vpos);
 	fprintf(tf, "%d build_%s\n", (int) lastw, name);
 	if ( code != 1 )  {		/* get the bitmap or whatever */
-	    sprintf(temp, "%s/dev%s/charlib/%s.map", fontdir, realdev, name);
+	    snprintf(temp, sizeof temp, "%s/dev%s/charlib/%s.map",
+			    fontdir, realdev, name);
 	    if ( access(temp, 04) == 0 && tf == stdout )
-		cat(temp);
+		cat(temp, tf);
 	}   /* End if */
 	fprintf(tf, "%d %d m\n", stringstart = hpos + lastw, vpos);
     }	/* End if */
@@ -2900,16 +3637,15 @@ doglobal (
  * needed to have it exported to the global environment. TRUE is returned if we
  * successfully add file *name to the output file.
  *
+ * Actually, all files included this way are procsets, so they go into
+ * the resource section of the PostScript output and not in the global
+ * setup file.
+ *
  */
 
 
     if ( tf == stdout )  {
-	endtext();
-	fprintf(tf, "cleartomark restore\n");
-	fprintf(tf, "%s", BEGINGLOBAL);
-	val = cat(name);
-	fprintf(tf, "%s", ENDGLOBAL);
-	fprintf(tf, "save mark\n");
+	val = cat(name, rf);
 	reset();
     }	/* End if */
 
@@ -2928,7 +3664,7 @@ documentfonts(void)
 {
 
 
-    FILE	*fp_in;			/* PostScript font name read from here */
+    FILE	*fp_in = NULL;		/* PostScript font name read from here */
     FILE	*fp_out;		/* and added to this file */
 
 
@@ -2947,20 +3683,25 @@ documentfonts(void)
 	if ( (temp_file = tempname("dpost")) == NULL )
 	    return;
 
-    sprintf(temp, "%s/dev%s/%s.name", fontdir, realdev, fontname[font].name);
+    snprintf(temp, sizeof temp, "%s/dev%s/%s.name",
+		    fontdir, realdev, fontname[font].name);
 
-    if ( (fp_in = fopen(temp, "r")) != NULL )  {
-	if ( (fp_out = fopen(temp_file, "a")) != NULL )  {
-	    if ( fscanf(fp_in, "%s", temp) == 1 )  {
+    if (fontname[font].afm == NULL && (fp_in = fopen(temp, "r")) != NULL )  {
+	if ( sget(temp, sizeof temp, fp_in) == 1 )  {
+    print:  if ( (fp_out = fopen(temp_file, "a")) != NULL )  {
 		if ( docfonts++ == 0 )
 		    fprintf(fp_out, "%s", DOCUMENTFONTS);
-		else if ( (docfonts - 1) % 8  == 0 )
+		else if ( (docfonts - 1) % 4  == 0 )
 		    fprintf(fp_out, "\n%s", CONTINUECOMMENT);
 		fprintf(fp_out, " %s", temp);
 	    }	/* End if */
 	    fclose(fp_out);
 	}   /* End if */
-	fclose(fp_in);
+	if (fp_in != NULL)
+	    fclose(fp_in);
+    } else if (fontname[font].afm != NULL){
+	strcpy(temp, fontname[font].afm->fontname);
+	goto print;
     }	/* End if */
 
 }   /* End of documentfonts */
@@ -2999,3 +3740,171 @@ redirect (
 
 /*****************************************************************************/
 
+static char *
+mbs2pdf(char *mp)
+{
+	char	*ustr, *tp;
+	int	c, i, sz;
+#ifdef	EUC
+	int	n = 0, w;
+	wchar_t	wc;
+#endif
+
+	for (tp = mp; *tp && (*tp&~0177) == 0 && *tp&~037; tp++);
+	if (*tp == 0) {
+		ustr = malloc(sz = 16);
+		*ustr = '(';
+		c = i = 1;
+		while (*mp) {
+			switch (*mp) {
+			case '(':
+			case ')':
+			case '\\':
+				ustr[i++] = '\\';
+				c++;
+				/*FALLTHRU*/
+			default:
+				ustr[i++] = *mp++;
+				c++;
+			}
+			if (i + 4 >= sz)
+				ustr = realloc(ustr, sz += 16);
+			if (c >= 60) {
+				ustr[i++] = '\\';
+				ustr[i++] = '\n';
+				c = 0;
+			}
+		}
+		ustr[i++] = ')';
+		ustr[i++] = 0;
+		return ustr;
+	}
+#ifdef	EUC
+	ustr = malloc(sz = 16);
+	c = i = sprintf(ustr, "<FEFF");
+	while (mp += n, *mp) {
+		if ((n = mbtowc(&wc, mp, mb_cur_max)) <= 0) {
+			error(NON_FATAL,
+				"illegal byte sequence %d in PDFMark operand",
+				*mp&0377);
+			n = 1;
+			continue;
+		}
+		if (wc < 0 || wc > 0xFFFF) {
+			error(NON_FATAL, "only BMP values allowed for PDFMark");
+			continue;
+		}
+		if (i + 8 >= sz)
+			ustr = realloc(ustr, sz += 16);
+		w = sprintf(&ustr[i], "%04X", (int)wc);
+		i += w;
+		c += w;
+		if (c >= 60) {
+			ustr[i++] = '\n';
+			c = 0;
+		}
+	}
+	ustr[i++] = '>';
+	ustr[i] = 0;
+	return ustr;
+#else	/* !EUC */
+	error(NON_FATAL,
+		"this instance of dpost only supports ASCII with PDFMark");
+	return NULL;
+#endif	/* !EUC */
+}
+
+static void
+t_pdfmark(char *buf)
+{
+	char	*bp, *tp;
+	int	n;
+
+	while (spacechar(*buf&0377))
+		buf++;
+	for (bp = buf; *bp && !spacechar(*bp&0377); bp++);
+	*bp++ = '\0';
+	while (spacechar(*bp&0377))
+		bp++;
+	for (tp = bp; *tp; tp++)
+		if (*tp == '\n') {
+			*tp = '\0';
+			break;
+		}
+	if (strcmp(buf, "Author") == 0)
+		Author = mbs2pdf(bp);
+	else if (strcmp(buf, "Title") == 0)
+		Title = mbs2pdf(bp);
+	else if (strcmp(buf, "Subject") == 0)
+		Subject = mbs2pdf(bp);
+	else if (strcmp(buf, "Keywords") == 0)
+		Keywords = mbs2pdf(bp);
+	else if (strcmp(buf, "Bookmark") == 0 ||
+			strcmp(buf, "BookmarkClosed") == 0) {
+		n = strtol(bp, &bp, 10);
+		while (spacechar(*bp&0377))
+			bp++;
+		if (n < 0 || n > MAXBOOKMARKLEVEL) {
+			error(NON_FATAL, "invalid PDFMark Bookmark level %d,"
+			                 "maximum is %d\n",
+				n, MAXBOOKMARKLEVEL);
+			return;
+		}
+		Bookmarks = realloc(Bookmarks, ++nBookmarks*sizeof *Bookmarks);
+		Bookmarks[nBookmarks-1].level = n;
+		Bookmarks[nBookmarks-1].Title = mbs2pdf(bp);
+		Bookmarks[nBookmarks-1].title = strdup(bp);
+		Bookmarks[nBookmarks-1].Count = 0;
+		Bookmarks[nBookmarks-1].closed =
+			strcmp(buf, "BookmarkClosed") == 0;
+		endtext();
+		fprintf(tf, "[ /Dest /Bookmark$%d\n"
+			    "  /View [/FitH %d]\n"
+			    "/DEST pdfmark\n",
+			nBookmarks - 1,
+			pagelength - (lasty >= 0 ? vpos * 72 / res : 0));
+	} else
+		error(NON_FATAL, "unknown PDFMark attribute %s", buf);
+}
+
+static void
+orderbookmarks(void)
+{
+
+	int	counts[MAXBOOKMARKLEVEL+1];
+	int	refs[MAXBOOKMARKLEVEL+1];
+	int	i, j, k, t;
+	int	lvl = 0;
+
+/*
+ * Generate the Count parameter from the given levels.
+ */
+
+	memset(&counts, 0, sizeof counts);
+	for (i = 0; i <= MAXBOOKMARKLEVEL; i++)
+		refs[i] = -1;
+	for (i = 0; i <= nBookmarks; i++) {
+		k = i < nBookmarks ? Bookmarks[i].level : 0;
+		if (i == nBookmarks || k <= lvl) {
+			for (j = k+1; j <= MAXBOOKMARKLEVEL; j++) {
+				t = j - 1;
+				if (refs[t] >= 0) {
+					Bookmarks[refs[t]].Count += counts[j];
+					refs[t] = -1;
+				}
+				counts[j] = 0;
+			}
+		}
+		if (k > 0 && refs[k-1] < 0) {
+			while (k > 0 && refs[k-1] < 0)
+				k--;
+			error(NON_FATAL, "PDFMark Bookmark \"%s\" at level %d "
+			                 "has no direct parent, "
+					 "using level %d\n",
+				Bookmarks[i].title, Bookmarks[i].level, k);
+		}
+		counts[k]++;
+		refs[k] = i;
+		lvl = k;
+	}
+}

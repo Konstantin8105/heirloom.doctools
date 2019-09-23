@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)nii.c	1.6 (gritter) 8/15/05
+ * Sccsid @(#)nii.c	1.16 (gritter) 9/11/05
  */
 
 /*
@@ -81,9 +81,10 @@ char	*ibufp;
 char	*xbufp;
 char	*eibuf;
 char	*xeibuf;
-tchar	pbbuf[NC];	/* pushback buffer for arguments, \n, etc. */
-tchar	*pbp = pbbuf;	/* next free slot in pbbuf */
-tchar	*lastpbp = pbbuf;	/* pbp in previous stack frame */
+tchar	*pbbuf;		/* pushback buffer for arguments, \n, etc. */
+int	pbsize;		/* number of members allocated for pbbuf */
+int	pbp;		/* next free slot in pbbuf */
+int	lastpbp;	/* pbp in previous stack frame */
 int	nx;
 int	mflg;
 tchar	ch = 0;
@@ -93,7 +94,7 @@ int	iflg;
 char	*enda;
 int	rargc;
 char	**argp;
-int	trtab[NTRTAB];
+int	*trtab;
 int	lgf;
 int	copyf;
 filep	ip;
@@ -131,20 +132,18 @@ filep	apptr;
 int	diflg;
 filep	roff;
 int	wbfi;
-int	evi;
 int	vflag;
 int	noscale;
 int	po1;
 int	nlist[NTRAP];
 int	mlist[NTRAP];
-int	evlist[EVLSZ];
 int	ev;
 int	tty;
 int	sfont	= FT;	/* appears to be "standard" font; used by .ul */
 int	sv;
 int	esc;
 int	widthp;
-int	xflag;
+int	xflag = 1;
 int	xfont;
 int	setwdf;
 int	over;
@@ -154,7 +153,12 @@ tchar	*olinep;
 int	dotT;
 char	*unlkp;
 int	no_out;
-struct	widcache widcache[NWIDCACHE];
+struct	widcache *widcache;
 struct	d d[NDI];
 struct	d *dip;
 int	mb_cur_max;
+struct env	initenv;
+int	lastkern;
+int	lasttrack;
+int	defaultpl;
+int	NCHARS;

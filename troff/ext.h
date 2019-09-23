@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)ext.h	1.8 (gritter) 8/15/05
+ * Sccsid @(#)ext.h	1.26 (gritter) 9/13/05
  */
 
 /*
@@ -50,9 +50,6 @@ extern	char	**argp;
 extern	char	*chname;
 extern	char	*eibuf;
 extern	char	*enda;
-extern	char	*fitab[];
-extern	char	*fontab[];
-extern	char	*kerntab[];
 extern	char	*ibufp;
 extern	char	*obufp;
 extern	char	*unlkp;
@@ -62,7 +59,7 @@ extern	char	cfname[NSO+1][NS];
 extern	char	devname[];
 extern	char	fontfile[];
 extern	char	ibuf[IBUFSZ];
-extern	char	mfiles[NMF][NS];
+extern	char	**mfiles;
 extern	char	nextf[];
 extern	char	obuf[],	*obufp;
 extern	char	termtab[],	fontfile[];
@@ -76,14 +73,15 @@ extern	filep	roff;
 extern	filep	woff;
 extern	short	*chtab;
 extern	int	*pnp;
-extern	short	*pstab;
+extern	int	*pstab;
 extern	int	app;
 extern	int	ascii;
 extern	int	bd;
-extern	int	bdtab[];
+extern	int	*bdtab;
 extern	int	ccs;
 extern	int	copyf;
 extern	int	cs;
+extern	int	defaultpl;
 extern	int	dfact;
 extern	int	dfactd;
 extern	int	diflg;
@@ -99,11 +97,9 @@ extern	int	error;
 extern	int	esc;
 extern	int	eschar;
 extern	int	ev;
-extern	int	evi;
-extern	int	evlist[EVLSZ];
 extern	int	fc;
 extern	int	flss;
-extern	int	fontlab[];
+extern	int	*fontlab;
 extern	int	gflag;
 extern	int	hflg;
 extern	int	ibf;
@@ -112,6 +108,8 @@ extern	int	ifile;
 extern	int	ifl[NSO];
 extern	int	iflg;
 extern	int	init;
+extern	int	lastkern;
+extern	int	lasttrack;
 extern	int	lead;
 extern	int	lg;
 extern	int	lgf;
@@ -168,7 +166,7 @@ extern	int	tabch,	ldrch;
 extern	int	tflg;
 extern	int	totout;
 extern	int	trap;
-extern	int	trtab[];
+extern	int	*trtab;
 extern	int	tty;
 extern	int	ttyod;
 extern	int	ulfont;
@@ -183,22 +181,22 @@ extern	struct	s	*ejl;
 extern	struct	s	*frame,	*stk,	*nxf;
 extern	tchar	**hyp;
 extern	tchar	*olinep;
-extern	tchar	pbbuf[NC];
-extern	tchar	*pbp;
-extern	tchar	*lastpbp;
+extern	tchar	*pbbuf;
+extern	int	pbsize;
+extern	int	pbp;
+extern	int	lastpbp;
 extern	tchar	ch;
 extern	tchar	nrbits;
 extern	tchar	oline[];
 extern	struct widcache {	/* width cache, indexed by character */
-	short	fontpts;
-	short	width;
-} widcache[NWIDCACHE];
+	int	fontpts;
+	int	width;
+} *widcache;
 extern	char gchtab[];
 extern	struct	d	d[NDI];
 extern	struct	d	*dip;
 
 #ifdef	EUC
-#ifdef	NROFF
 #include <stddef.h>
 extern	int	multi_locale;
 extern  int	csi_width[];
@@ -207,5 +205,8 @@ extern	char	*mbbuf1p;
 extern	wchar_t	twc;
 extern	int	(*wdbdg)(wchar_t, wchar_t, int);
 extern	wchar_t	*(*wddlm)(wchar_t, wchar_t, int);
-#endif	/* NROFF */
 #endif	/* EUC */
+extern	int	**lhangtab;
+extern	int	**rhangtab;
+extern	int	**kernafter;
+extern	int	**kernbefore;

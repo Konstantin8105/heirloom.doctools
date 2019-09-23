@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n5.c	1.10 (gritter) 8/15/05
+ * Sccsid @(#)n5.c	1.21 (gritter) 9/2/05
  */
 
 /*
@@ -46,10 +46,11 @@
  * contributors.
  */
 
+#include <stdlib.h>
+#include <ctype.h>
 #ifdef 	EUC
 #ifdef	NROFF
 #include <stddef.h>
-#include <stdlib.h>
 #ifdef	__sun
 #include <widec.h>
 #else
@@ -357,7 +358,7 @@ casepl(void)
 
 	skip();
 	if ((i = vnumb(&pl)) == 0)
-		pl = 11 * INCH; /*11in*/
+		pl = defaultpl ? defaultpl : 11 * INCH; /*11in*/
 	else 
 		pl = i;
 	if (numtab[NL].val > pl)
@@ -569,27 +570,117 @@ casefl(void)
 }
 
 
+static struct evnames {
+	int	number;
+	char	*name;
+} *evnames;
+static struct env	*evp;
+static int	*evlist;
+static int	evi;
+static int	evlsz;
+static int	Nev = NEV;
+
+static struct env *
+findev(int *number, char *name)
+{
+	int	i;
+
+	if (*number < 0)
+		return &evp[-1 - (*number)];
+	else if (name) {
+		for (i = 0; i < Nev-NEV; i++)
+			if (evnames[i].name != NULL &&
+					strcmp(evnames[i].name, name) == 0) {
+				*number = -1 - i;
+				return &evp[i];
+			}
+		*number = -1 - i;
+		return NULL;
+	} else if (*number >= NEV) {
+		for (i = 0; i < Nev-NEV; i++)
+			if (evnames[i].name == NULL &&
+					evnames[i].number == *number)
+				return &evp[i];
+		*number = -1 - i;
+		return NULL;
+	} else {
+#ifdef	INCORE
+		extern tchar *corebuf;
+		return &((struct env *)corebuf)[*number];
+#else
+		return (struct env *)-1;
+#endif
+	}
+}
+
+static int
+getev(int *nxevp, char **namep)
+{
+	char	*name = NULL;
+	int nxev = 0;
+	char	c;
+	int	i = 0, sz = 0;
+
+	*namep = NULL;
+	*nxevp = 0;
+	if (skip())
+		return 0;
+	c = cbits(ch);
+	if (xflag == 0 || isdigit(c) || c == '(') {
+		noscale++;
+		nxev = atoi();
+		noscale = 0;
+		if (nonumb) {
+			flushi();
+			return 0;
+		}
+	} else {
+		do {
+			c = getach();
+			if (i >= sz)
+				name = realloc(name, (sz += 8) * sizeof *name);
+			name[i++] = c;
+		} while (c);
+	}
+	flushi();
+	*namep = name;
+	*nxevp = nxev;
+	return 1;
+}
+
 void
 caseev(void)
 {
-	register int nxev;
+	char	*name;
+	int nxev;
+	struct env	*np, *op;
 
-	if (skip()) {
-e0:
+	if (getev(&nxev, &name) == 0) {
 		if (evi == 0)
 			return;
 		nxev =  evlist[--evi];
 		goto e1;
 	}
-	noscale++;
-	nxev = atoi();
-	noscale = 0;
-	if (nonumb)
-		goto e0;
-	flushi();
-	if ((nxev >= NEV) || (nxev < 0) || (evi >= EVLSZ)) {
+	if (xflag == 0 && ((nxev >= NEV) || (nxev < 0) || (evi >= EVLSZ)))
+		goto cannot;
+	if (evi >= evlsz) {
+		evlsz = evi + 1;
+		if ((evlist = realloc(evlist, evlsz * sizeof *evlist)) == NULL)
+			goto cannot;
+	}
+	if (name && findev(&nxev, name) == NULL || nxev >= Nev) {
+		if ((evp = realloc(evp, (Nev-NEV+1) * sizeof *evp)) == NULL ||
+				(evnames = realloc(evnames,
+				   (Nev-NEV+1) * sizeof *evnames)) == NULL)
+			goto cannot;
+		evnames[Nev-NEV].number = nxev;
+		evnames[Nev-NEV].name = name;
+		evp[Nev-NEV] = initenv;
+		Nev++;
+	}
+	if (name == NULL && nxev < 0) {
 		flusho();
-		errprint("cannot do ev.");
+	cannot:	errprint("cannot do ev.");
 		if (error)
 			done2(040);
 		else 
@@ -600,19 +691,64 @@ e0:
 e1:
 	if (ev == nxev)
 		return;
+	if ((np = findev(&nxev, name)) == NULL ||
+			(op = findev(&ev, NULL)) == NULL)
+		goto cannot;
 #ifdef INCORE
-	{
-		extern tchar *corebuf;
-		((struct env *)corebuf)[ev] = env;
-		env = ((struct env *)corebuf)[nxev];
-	}
+	*op = env;
+	env = *np;
 #else
-	lseek(ibf, ev * (long)sizeof(env), 0);
-	write(ibf, (char *) & env, sizeof(env));
-	lseek(ibf, nxev * (long)sizeof(env), 0);
-	read(ibf, (char *) & env, sizeof(env));
+	if (ev >= 0 && ev < NEV) {
+		lseek(ibf, ev * sizeof(env), 0);
+		write(ibf, (char *) & env, sizeof(env));
+	} else
+		*op = env;
+	if (nxev >= 0 && nxev < NEV) {
+		lseek(ibf, nxev * sizeof(env), 0);
+		read(ibf, (char *) & env, sizeof(env));
+	} else
+		env = *np;
 #endif
 	ev = nxev;
+}
+
+void
+caseevc(void)
+{
+	char	*name;
+	int	nxev;
+	struct env	tmpenv, *ep;
+
+	if (getev(&nxev, &name) == 0 || (ep = findev(&nxev, name)) == NULL)
+		return;
+	tmpenv = env;
+#ifndef	INCORE
+	if (nxev >= 0 && nxev < NEV) {
+		lseek(ibuf, nxev * sizeof(env), 0);
+		read(ibf, (char *) & env, sizeof(env));
+	} else
+#endif
+	env = *ep;
+	env._pendnf = 0;
+	env._pendw = 0;
+	env._pendt = 0;
+	env._wch = 0;
+	env._wne = 0;
+	env._wdstart = 0;
+	env._wdend = 0;
+	env._linep = line;
+	env._wordp = 0;
+	env._spflg = 0;
+	env._ce = 0;
+	env._nn = 0;
+	env._ndf = 0;
+	env._nms = 0;
+	env._ni = 0;
+	env._ul = 0;
+	env._cu = 0;
+	env._it = 0;
+	env._itmac = 0;
+	env._pendnf = 0;
 }
 
 void
@@ -709,6 +845,12 @@ i2:
 		copyf--;
 		falsef--;
 	}
+}
+
+void
+casereturn(void)
+{
+	popi();
 }
 
 void

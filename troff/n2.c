@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n2.c	1.6 (gritter) 8/8/05
+ * Sccsid @(#)n2.c	1.10 (gritter) 9/11/05
  */
 
 /*
@@ -63,6 +63,7 @@
 #include <setjmp.h>
 #include "ext.h"
 #ifdef EUC
+#include <limits.h>
 #ifdef NROFF
 #include <stddef.h>
 #ifdef	__sun
@@ -70,7 +71,6 @@
 #else
 #include <wchar.h>
 #endif
-#include <limits.h>
 #include <ctype.h>
 #include <unistd.h>
 
@@ -84,7 +84,7 @@ extern	jmp_buf	sjbuf;
 int	toolate;
 int	error;
 
-void
+int
 pchar(register tchar i)
 {
 	register int j;
@@ -101,21 +101,21 @@ pchar(register tchar i)
 				dip->alss = j;
 			ralss = dip->alss;
 		}
-		return;
+		return 1;
 	}
 	if (ismot(i)) {
 		pchar1(i); 
-		return;
+		return 1;
 	}
 	switch (j = cbits(i)) {
 	case 0:
 	case IMP:
 	case RIGHT:
 	case LEFT:
-		return;
+		return 1;
 	case HX:
 		hx = 1;
-		return;
+		return 1;
 	case PRESC:
 		if (dip == &d[0])
 			j = eschar;	/* fall through */
@@ -132,6 +132,7 @@ pchar(register tchar i)
 #endif /* EUC */
 	}
 	pchar1(i);
+	return 1;
 }
 
 
@@ -152,7 +153,7 @@ pchar1(register tchar i)
 			dip->alss = dip->blss = 0;
 		return;
 	}
-	if (no_out || j == FILLER)
+	if (no_out)
 		return;
 	if (tflg) {	/* transparent mode, undiverted */
 		fdprintf(ptid, "%c", j);
@@ -166,6 +167,7 @@ pchar1(register tchar i)
 		ptout(i);
 }
 
+#ifndef	NROFF
 void
 outascii (	/* print i in best-guess ascii */
     tchar i
@@ -173,6 +175,8 @@ outascii (	/* print i in best-guess ascii */
 {
 	int j = cbits(i);
 
+	if (j == FILLER)
+		return;
 	if (ismot(i)) {
 		oput(' ');
 		return;
@@ -200,12 +204,26 @@ outascii (	/* print i in best-guess ascii */
 	else if (j == WORDSP)
 		;	/* nothing at all */
 	else if (j > 0177) {
-		oput('\\');
-		oput('(');
-		oput(chname[chtab[j-128]]);
-		oput(chname[chtab[j-128]+1]);
+		extern int nchtab;
+#ifdef	EUC
+		wchar_t	wc;
+		char	mb[MB_LEN_MAX+1];
+		int	n;
+		wc = tr2un(j, fbits(i));
+		if (wc != -1 && (n = wctomb(mb, wc)) > 0) {
+			mb[n] = 0;
+			oputs(mb);
+		} else
+#endif	/* EUC */
+		if (j < 128 + nchtab) {
+			oput('\\');
+			oput('(');
+			oput(chname[chtab[j-128]]);
+			oput(chname[chtab[j-128]+1]);
+		}
 	}
 }
+#endif
 
 
 /*
@@ -223,7 +241,7 @@ void
 oputs(register char *i)
 {
 	while (*i != 0)
-		oput(*i++);
+		oput(*i++&0377);
 }
 
 

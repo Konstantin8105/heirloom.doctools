@@ -1,9 +1,9 @@
 #
-# Sccsid @(#)heirloom-doctools.spec	1.7 (gritter) 8/13/05
+# Sccsid @(#)heirloom-doctools.spec	1.11 (gritter) 9/10/05
 #
 Summary: The Heirloom Documentation Tools.
 Name: heirloom-doctools
-Version: 050816
+Version: 050915
 Release: 1
 License: Other
 Source: %{name}-%{version}.tar.bz2
@@ -18,6 +18,7 @@ BuildRoot: %{_tmppath}/%{name}-root
 %define	macdir		%{docdir}/tmac
 %define	fntdir		%{docdir}/font
 %define	tabdir		%{docdir}/nterm
+%define	hypdir		%{docdir}/hyphen
 %define	pstdir		%{docdir}/font/devpost/postscript
 %define	pubdir		/usr/pub
 
@@ -29,7 +30,7 @@ BuildRoot: %{_tmppath}/%{name}-root
 #
 # Combine the settings defined above.
 #
-%define	makeflags	ROOT=%{buildroot} INSTALL=install YACC=%{yacc} MACDIR=%{macdir} FNTDIR=%{fntdir} TABDIR=%{tabdir} PUBDIR=%{pubdir} BINDIR=%{bindir} PSTDIR=%{pstdir} MANDIR=%{mandir} CC=%{xcc} CFLAGS=%{cflags} CPPFLAGS=%{cppflags}
+%define	makeflags	ROOT=%{buildroot} INSTALL=install YACC=%{yacc} MACDIR=%{macdir} FNTDIR=%{fntdir} TABDIR=%{tabdir} HYPDIR=%{hypdir} PUBDIR=%{pubdir} BINDIR=%{bindir} PSTDIR=%{pstdir} MANDIR=%{mandir} CC=%{xcc} CFLAGS=%{cflags} CPPFLAGS=%{cppflags}
 
 %description
 The Heirloom Documentation Tools provide troff, nroff, and related
@@ -47,7 +48,7 @@ make %{makeflags}
 make %{makeflags} install
 
 rm -f filelist.rpm
-for f in %{bindir} %{macdir} %{fntdir} %{tabdir} %{pstdir} %{pubdir}
+for f in %{bindir} %{macdir} %{fntdir} %{tabdir} %{hypdir} %{pstdir} %{pubdir}
 do
 	if test -d %{buildroot}/$f
 	then
@@ -59,7 +60,7 @@ done | sort -u | sed '
 	1i\
 %defattr(-,root,root)\
 %{mandir}\
-%doc README CHANGES LICENSE/*
+%doc README CHANGES FONTS NEWS PDFS LICENSE/*
 ' >filelist.rpm
 
 %clean

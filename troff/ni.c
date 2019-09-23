@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)ni.c	1.11 (gritter) 8/16/05
+ * Sccsid @(#)ni.c	1.15 (gritter) 9/6/05
  */
 
 /*
@@ -60,7 +60,7 @@ char	devname[20] = "37";
 
 char	termtab[NS] = FNTDIR;           /* rest added in ptinit() */
 char	fontfile[NS] = FNTDIR;          /* rest added in casefp() */
-char	devname[20]	 = "post";	/* default typesetter */
+char	devname[20]	 = "ps";	/* default typesetter */
 
 #endif
 char	tmp_name[] = "/var/tmp/trtmpXXXXXX";
@@ -84,6 +84,7 @@ const struct numtab initnumtab[] = {
 	{ PAIR('s', 'b') },
 	{ PAIR('c', '.') },
 	{ PAIR('$', '$') },
+	{ 0 }
 };
 
 
@@ -91,8 +92,9 @@ int	pto = 10000;
 int	pfrom = 1;
 int	print = 1;
 char	nextf[NS] = MACDIR "/";
-char	mfiles[NMF][NS];
+char	**mfiles;
 int	nmfi = 0;
+int	NMF;
 #ifndef NROFF
 int	oldbits = -1;
 #endif

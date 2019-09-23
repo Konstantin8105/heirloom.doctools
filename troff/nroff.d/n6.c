@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n6.c	1.5 (gritter) 8/16/05
+ * Sccsid @(#)n6.c	1.20 (gritter) 9/11/05
  */
 
 /*
@@ -56,9 +56,9 @@
  * n6.c -- width functions, sizes and fonts
 */
 
-int	bdtab[NFONT+1] ={ 0, 0, 0, 3, 3, 0, };
+int	initbdtab[NFONT+1] ={ 0, 0, 0, 3, 3, 0, };
 int	sbold = 0;
-int	fontlab[NFONT+1] = { 0, 'R', 'I', 'B', PAIR('B','I'), 'S', 0 };
+int	initfontlab[NFONT+1] = { 0, 'R', 'I', 'B', PAIR('B','I'), 'S', 0 };
 
 extern	int	nchtab;
 
@@ -383,7 +383,7 @@ makem(int i)
 
 	if ((j = i) < 0)
 		j = -j;
-	j |= MOT;
+	j = sabsmot(j) | MOT;
 	if (i < 0)
 		j |= NMOT;
 	if (vflag)
@@ -404,6 +404,10 @@ caselg(void)
 {
 }
 
+void
+caseflig(void)
+{
+}
 
 void
 casefp(void)
@@ -499,8 +503,11 @@ xlss(void)
 	dfact = 1;
 	getch();
 	if (i >= 0)
-		*pbp++ = MOT | VMOT | i;
+		pbbuf[pbp++] = MOT | VMOT | sabsmot(i);
 	else
-		*pbp++ = MOT | VMOT | NMOT | -i;
+		pbbuf[pbp++] = MOT | VMOT | NMOT | sabsmot(-i);
 	return(HX);
 }
+
+void
+casedummy(void){;}

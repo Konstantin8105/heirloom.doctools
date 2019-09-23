@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n3.c	1.15 (gritter) 8/15/05
+ * Sccsid @(#)n3.c	1.48 (gritter) 9/13/05
  */
 
 /*
@@ -80,12 +80,14 @@ int	strflg;
 	tchar rbuf[BLK];
 #endif
 
+static void	caseshift(void);
 static int	getls(int);
+static void	addcon(int, char *, void(*)(int));
 
 void *
 growcontab(void)
 {
-	int	i, inc = 130;
+	int	i, inc = 256;
 	struct contab	*onc;
 
 	onc = contab;
@@ -95,6 +97,25 @@ growcontab(void)
 	if (NM == 0) {
 		for (i = 0; initcontab[i].f; i++)
 			contab[i] = initcontab[i];
+		addcon(i++, "track", (void(*)(int))casetrack);
+		addcon(i++, "lc_ctype", (void(*)(int))caselc_ctype);
+		addcon(i++, "fallback", (void(*)(int))casefallback);
+		addcon(i++, "hidechar", (void(*)(int))casehidechar);
+		addcon(i++, "evc", (void(*)(int))caseevc);
+		addcon(i++, "return", (void(*)(int))casereturn);
+		addcon(i++, "chop", (void(*)(int))casechop);
+		addcon(i++, "fzoom", (void(*)(int))casefzoom);
+		addcon(i++, "kern", (void(*)(int))casekern);
+		addcon(i++, "hylang", (void(*)(int))casehylang);
+		addcon(i++, "flig", (void(*)(int))caseflig);
+		addcon(i++, "papersize", (void(*)(int))casepapersize);
+		addcon(i++, "shift", (void(*)(int))caseshift);
+		addcon(i++, "xflag", (void(*)(int))casexflag);
+		addcon(i++, "lhang", (void(*)(int))caselhang);
+		addcon(i++, "rhang", (void(*)(int))caserhang);
+		addcon(i++, "kernpair", (void(*)(int))casekernpair);
+		addcon(i++, "kernbefore", (void(*)(int))casekernbefore);
+		addcon(i++, "kernafter", (void(*)(int))casekernafter);
 	} else {
 		for (i = 0; i < sizeof mhash / sizeof *mhash; i++)
 			if (mhash[i])
@@ -587,7 +608,7 @@ wbfl (void)			/*flush current blist[] block*/
 	if (woff == 0)
 		return;
 #ifndef INCORE
-	lseek(ibf, ((long)woff) * sizeof(tchar), 0);
+	lseek(ibf, woff * sizeof(tchar), 0);
 	write(ibf, (char *)wbuf, wbfi * sizeof(tchar));
 #endif
 	if ((woff & (~(BLK - 1))) == (roff & (~(BLK - 1))))
@@ -613,7 +634,7 @@ rbf (void)		/*return next char from blist[] block*/
 	j = ip & ~(BLK - 1);
 	if (j != roff) {
 		roff = j;
-		lseek(ibf, (long)j * sizeof(tchar), 0);
+		lseek(ibf, j * sizeof(tchar), 0);
 		if (read(ibf, (char *)rbuf, BLK * sizeof(tchar)) <= 0)
 			i = 0;
 		else
@@ -658,7 +679,7 @@ rbf0(register filep p)
 
 	if ((i = p & ~(BLK - 1)) != roff) {
 		roff = i;
-		lseek(ibf, (long)roff * sizeof(tchar), 0);
+		lseek(ibf, roff * sizeof(tchar), 0);
 		if (read(ibf, (char *)rbuf, BLK * sizeof(tchar)) == 0)
 			return(0);
 	}
@@ -770,7 +791,7 @@ getsn(void)
 		return(0);
 	if (i == '(')
 		return(getrq());
-	else if (i == '[')
+	else if (i == '[' && xflag != 0)
 		return(getls(']'));
 	else 
 		return(i);
@@ -795,7 +816,7 @@ setstr(void)
 	}
 }
 
-
+static int	APERMAC = 9;
 
 void
 collect(void)
@@ -825,11 +846,11 @@ collect(void)
 		memp += sizeof(struct s);
 		/*
 		 *	CPERMAC (the total # of characters for ALL arguments)
-		 *	to a macros, has been carefully chosen
-		 *	so that the distance between stack frames is < DELTA 
+		 *	to a macro
 		 */
 #define	CPERMAC	200
-#define	APERMAC	9
+		if (xflag)
+			APERMAC = 200;
 		memp += APERMAC * sizeof(tchar *);
 		memp += CPERMAC * sizeof(tchar);
 		nxf = (struct s*)memp;
@@ -912,13 +933,46 @@ seta(void)
 				cpushback(" ");
 		}
 		break;
+	case '(':
+		if (xflag == 0)
+			goto dfl;
+		c = cbits(getch());
+		i = 10 * (c - '0');
+		c = cbits(getch());
+		i += c - '0';
+		goto assign;
+	case '[':
+		if (xflag == 0)
+			goto dfl;
+		i = 0;
+		while ((c = cbits(getch())) != ']' && c != '\n' && c != 0)
+			i = 10 * i + (c - '0');
+		goto assign;
 	default:
 	dfl:	i = c - '0';
-		if (i > 0 && i <= APERMAC && i <= frame->nargs)
+	assign:	if (i > 0 && i <= APERMAC && i <= frame->nargs)
 			pushback(*(((tchar **)(frame + 1)) + i - 1));
 	}
 }
 
+void
+caseshift(void)
+{
+	int	i, j;
+
+	if (skip())
+		i = 1;
+	else
+		i = atoi();
+	if (nonumb)
+		return;
+	if (i > 0 && i <= APERMAC && i <= frame->nargs) {
+		frame->nargs -= i;
+		for (j = 1; j <= frame->nargs; j++)
+			*(((tchar **)(frame + 1)) + j - 1) =
+				*(((tchar **)(frame + 1)) + j + i - 1);
+	}
+}
 
 void
 caseda(void)
@@ -992,7 +1046,8 @@ casetl(void)
 	int w[3];
 	tchar buf[LNSIZE];
 	register tchar *tp;
-	tchar i, delim;
+	tchar i, delim, nexti;
+	int oev;
 
 	dip->nls = 0;
 	skip();
@@ -1005,20 +1060,27 @@ casetl(void)
 	numtab[HP].val = 0;
 	w[0] = w[1] = w[2] = 0;
 	j = 0;
-	while (cbits(i = getch()) != '\n') {
+	nexti = getch();
+	while (cbits(i = nexti) != '\n') {
 		if (cbits(i) == cbits(delim)) {
 			if (j < 3)
 				w[j] = numtab[HP].val;
 			numtab[HP].val = 0;
 			j++;
 			*tp++ = 0;
+			nexti = getch();
 		} else {
 			if (cbits(i) == pagech) {
 				setn1(numtab[PN].val, numtab[findr('%')].fmt,
 				      i&SFMASK);
+				nexti = getch();
 				continue;
 			}
 			numtab[HP].val += width(i);
+			oev = ev;
+			nexti = getch();
+			if (ev == oev)
+				numtab[HP].val += kernadjust(i, nexti);
 			if (tp < &buf[LNSIZE-10])
 				*tp++ = i;
 		}
@@ -1053,22 +1115,59 @@ casetl(void)
 	}
 }
 
-
 void
 casepc(void)
 {
 	pagech = chget(IMP);
 }
 
+void
+casechop(void)
+{
+	int	a = app;
+	int	i, j;
+	filep	savip, savoffset;
+
+	skip();
+	if ((i = getrq()) == 0)
+		return;
+	if (i >= 256)
+		i = maybemore(i, 0);
+	if ((j = findmn(i)) < 0)
+		return;
+	savip = ip;
+	ip = (filep)contab[j].mx;
+	app = 1;
+	while ((i = rbf()) != 0)
+		i = 1;
+	app = a;
+	savoffset = offset;
+	if (ip > (filep)contab[j].mx) {
+		offset = ip - 1;
+		wbf(0);
+	}
+	ip = savip;
+	offset = savoffset;
+}
+
+
+/*
+ * Tables for names with more than two characters. Any number in
+ * contab.rq or numtab.rq that is greater or equal to MAXRQ2 refers
+ * to a long name.
+ */
+#define	MAXRQ2	0200000
+
+static char	**had;
+static int	hadn;
+static int	alcd;
 
 void
 casepm(void)
 {
 	register int i, k;
-	register char	*p;
 	int	xx, cnt, tcnt, kk, tot;
 	filep j;
-	char	pmline[10];
 
 	kk = cnt = tcnt = 0;
 	tot = !skip();
@@ -1076,7 +1175,6 @@ casepm(void)
 		if ((xx = contab[i].rq) == 0 || contab[i].mx == 0)
 			continue;
 		tcnt++;
-		p = pmline;
 		j = (filep) contab[i].mx;
 		k = 1;
 		while ((j = blist[blisti(j)]) != (unsigned) ~0) {
@@ -1084,13 +1182,8 @@ casepm(void)
 		}
 		cnt++;
 		kk += k;
-		if (!tot) {
-			*p++ = xx & 0177;
-			if (!(*p++ = (xx >> BYTE) & 0177))
-				*(p - 1) = ' ';
-			*p++ = 0;
-			fdprintf(stderr, "%s %d\n", pmline, k);
-		}
+		if (!tot)
+			fdprintf(stderr, "%s %d\n", macname(xx), k);
 	}
 	fdprintf(stderr, "pm: total %d, macros %d, space %d\n", tcnt, cnt, kk);
 }
@@ -1102,14 +1195,29 @@ stackdump (void)	/* dumps stack of macros in process */
 
 	if (frame != stk) {
 		for (p = frame; p != stk; p = p->pframe)
-			fdprintf(stderr, "%c%c ", p->mname&0177, (p->mname>>BYTE)&0177);
+			fdprintf(stderr, "%s ", macname(p->mname));
 		fdprintf(stderr, "\n");
 	}
 }
 
-static char	**had;
-static int	hadn;
-static int	alcd;
+static char	laststr[NC+1];
+
+char *
+macname(int rq)
+{
+	static char	buf[3];
+	if (rq < 0) {
+		return laststr;
+	} else if (rq < MAXRQ2) {
+		buf[0] = rq&0177;
+		buf[1] = (rq>>BYTE)&0177;
+		buf[2] = 0;
+		return buf;
+	} else if (rq - MAXRQ2 < hadn)
+		return had[rq - MAXRQ2];
+	else
+		return "???";
+}
 
 /*
  * To handle requests with more than two characters, an additional
@@ -1121,21 +1229,22 @@ static int	alcd;
 int
 maybemore(int sofar, int create)
 {
-	char	c, *buf, pb[] = { '\n', 0 };
-	int	i = 2, n, sz, r = raw;
+	char	c, buf[NC+1], pb[] = { '\n', 0 };
+	int	i = 2, n, r = raw;
 
-	if (xflag == 0)
+	if (xflag < 2)
 		return sofar;
 	raw = 1;
-	buf = malloc((sz = 2) * sizeof *buf);
-	buf[0] = sofar&0377;
-	buf[1] = (sofar>>8)&0377;
+	buf[0] = sofar&BYTEMASK;
+	buf[1] = (sofar>>BYTE)&BYTEMASK;
 	do {
-		c = getch0() & 0377;
-		if (i+1 >= sz)
-			buf = realloc(buf, (sz += 8) * sizeof *buf);
+		c = getch0();
+		if (i+1 >= sizeof buf) {
+			buf[i] = 0;
+			goto retn;
+		}
 		buf[i++] = c;
-	} while (c && c != ' ' && c != '\n');
+	} while (c && c != ' ' && c != '\t' && c != '\n');
 	buf[i-1] = 0;
 	buf[i] = 0;
 	if (i == 3)
@@ -1147,41 +1256,56 @@ maybemore(int sofar, int create)
 		if (create == 0) {
 		retn:	buf[i-1] = c;
 			cpushback(&buf[2]);
-			free(buf);
 			raw = r;
 			return sofar;
 		}
 		if (n >= alcd)
 			had = realloc(had, (alcd += 20) * sizeof *had);
-		had[n] = buf;
+		had[n] = malloc(strlen(buf) + 1);
+		strcpy(had[n], buf);
 		hadn = n+1;
 	}
 	pb[0] = c;
 	cpushback(pb);
 	raw = r;
-	return 0200000 + n;
+	return MAXRQ2 + n;
 }
 
 static int
 getls(int termc)
 {
-	char	c, *buf = NULL;
-	int	i = 0, n, sz = 0;
+	char	c;
+	int	i = 0, j = -1, n = -1;
 
 	do {
-		c = getch0() & 0377;
-		if (i >= sz)
-			buf = realloc(buf, (sz += 8) * sizeof *buf);
-		buf[i++] = c;
-	} while (c != termc);
-	buf[i-1] = 0;
-	if (i == 1)
-		goto not;
-	for (n = 0; n < hadn; n++)
-		if (strcmp(had[n], buf) == 0)
-			break;
-	if (n == hadn)
-	not:	n = -1;
-	free(buf);
-	return n >= 0 ? 0200000 + n : 0;
+		c = getach();
+		if (i >= sizeof laststr)
+			return -1;
+		laststr[i++] = c;
+	} while (c && c != termc);
+	laststr[--i] = 0;
+	if (i == 0 || c != termc)
+		j = 0;
+	else if (i <= 2) {
+		j = PAIR(laststr[0], laststr[1]);
+	} else {
+		for (n = 0; n < hadn; n++)
+			if (strcmp(had[n], laststr) == 0)
+				break;
+		if (n == hadn)
+			n = -1;
+	}
+	return n >= 0 ? MAXRQ2 + n : j;
+}
+
+static void
+addcon(int t, char *rs, void(*f)(int))
+{
+	int	n = hadn;
+
+	if (hadn++ >= alcd)
+		had = realloc(had, (alcd += 20) * sizeof *had);
+	had[n] = rs;
+	contab[t].rq = MAXRQ2 + n;
+	contab[t].f = f;
 }

@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n9.c	1.8 (gritter) 8/14/05
+ * Sccsid @(#)n9.c	1.21 (gritter) 9/13/05
  */
 
 /*
@@ -85,7 +85,7 @@ setz(void)
 {
 	tchar i;
 
-	if (!ismot(i = getch()))
+	if (!ismot(i = getch()) && cbits(i) != ohc)
 		i |= ZBIT;
 	return(i);
 }
@@ -188,13 +188,18 @@ setov(void)
 		}
 	else 
 		return;
-	*pbp++ = makem(w[0] / 2);
+	pbbuf[pbp++] = makem(w[0] / 2);
 	for (k = 0; o[k]; k++)
 		;
 	while (k>0) {
 		k--;
-		*pbp++ = makem(-((w[k] + w[k+1]) / 2));
-		*pbp++ = o[k];
+		if (pbp >= pbsize-4)
+			if (growpbbuf() == NULL) {
+				errprint("no space for .ov");
+				done(2);
+			}
+		pbbuf[pbp++] = makem(-((w[k] + w[k+1]) / 2));
+		pbbuf[pbp++] = o[k];
 	}
 }
 
@@ -213,10 +218,10 @@ setbra(void)
 	j = brabuf + 1;
 	cnt = 0;
 #ifdef NROFF
-	dwn = (2 * t.Halfline) | MOT | VMOT;
+	dwn = sabsmot(2 * t.Halfline) | MOT | VMOT;
 #endif
 #ifndef NROFF
-	dwn = EM | MOT | VMOT;
+	dwn = sabsmot((int)EM) | MOT | VMOT;
 #endif
 	while (((k = cbits(i = getch())) != delim) && (k != '\n') &&  (j <= (brabuf + NC - 4))) {
 		*j++ = i | ZBIT;
@@ -231,10 +236,10 @@ setbra(void)
 	}
 	*j = 0;
 #ifdef NROFF
-	*--j = *brabuf = (cnt * t.Halfline) | MOT | NMOT | VMOT;
+	*--j = *brabuf = sabsmot(cnt * t.Halfline) | MOT | NMOT | VMOT;
 #endif
 #ifndef NROFF
-	*--j = *brabuf = (cnt * EM) / 2 | MOT | NMOT | VMOT;
+	*--j = *brabuf = sabsmot((cnt * (int)EM) / 2) | MOT | NMOT | VMOT;
 #endif
 	*--j &= ~ZBIT;
 	pushback(brabuf);
@@ -363,8 +368,10 @@ setdraw (void)	/* generate internal cookies for a drawing function */
 	drawbuf[1] = type | chbits | ZBIT;
 	drawbuf[2] = '.' | chbits | ZBIT;	/* use default drawing character */
 	for (k = 0, j = 3; k < i; k++) {
-		drawbuf[j++] = MOT | ((dx[k] >= 0) ? dx[k] : (NMOT | -dx[k]));
-		drawbuf[j++] = MOT | VMOT | ((dy[k] >= 0) ? dy[k] : (NMOT | -dy[k]));
+		drawbuf[j++] = MOT | ((dx[k] >= 0) ?
+				sabsmot(dx[k]) : (NMOT | sabsmot(-dx[k])));
+		drawbuf[j++] = MOT | VMOT | ((dy[k] >= 0) ?
+				sabsmot(dy[k]) : (NMOT | sabsmot(-dy[k])));
 	}
 	if (type == DRAWELLIPSE) {
 		drawbuf[5] = drawbuf[4] | NMOT;	/* so the net vertical is zero */
@@ -487,15 +494,18 @@ s1:
 		/*plain tab or leader*/
 		if ((j = width(rchar)) > 0) {
 			int nchar = length / j;
-			while (nchar-->0 && pbp < &pbbuf[NC-3]) {
+			while (nchar-->0) {
+				if (pbp >= pbsize-3)
+					if (growpbbuf() == NULL)
+						break;
 				numtab[HP].val += j;
 				widthp = j;
-				*pbp++ = rchar;
+				pbbuf[pbp++] = rchar;
 			}
 			length %= j;
 		}
 		if (length)
-			jj = length | MOT;
+			jj = sabsmot(length) | MOT;
 		else 
 			jj = getch0();
 	} else {
@@ -519,8 +529,12 @@ s1:
 		pushback(fbuf);
 		if ((j = width(rchar)) != 0 && length > 0) {
 			int nchar = length / j;
-			while (nchar-- > 0 && pbp < &pbbuf[NC-3])
-				*pbp++ = rchar;
+			while (nchar-- > 0) {
+				if (pbp >= pbsize-3)
+					if (growpbbuf() == NULL)
+						break;
+				pbbuf[pbp++] = rchar;
+			}
 			length %= j;
 		}
 		length = (length / HOR) * HOR;
@@ -543,7 +557,6 @@ rtn:
 
 
 #ifdef EUC
-#ifdef NROFF
 /* locale specific initialization */
 void
 localize(void)
@@ -576,8 +589,6 @@ localize(void)
 	wdbdg = wdbindf;
 	wddlm = wddelim;
 }
-#endif /* EUC */
-#endif /* NROFF */
 
 #ifndef	__sun
 int
@@ -592,3 +603,70 @@ wddelim(wchar_t wc1, wchar_t wc2, int type)
 	return L" ";
 }
 #endif	/* !__sun */
+#endif /* EUC */
+
+void
+caselc_ctype(void)
+{
+#ifdef	EUC
+	char	c, *buf = NULL;
+	int	i = 0, sz = 0;
+
+	skip();
+	do {
+		c = getach()&0377;
+		if (i >= sz)
+			buf = realloc(buf, (sz += 8) * sizeof *buf);
+		buf[i++] = c;
+	} while (c && c != ' ' && c != '\n');
+	buf[i-1] = 0;
+	setlocale(LC_CTYPE, buf);
+	mb_cur_max = MB_CUR_MAX;
+	localize();
+	free(buf);
+#endif
+}
+
+void
+morechars(int n)
+{
+	int	i, nnc;
+
+	if (n <= NCHARS)
+		return;
+	for (nnc = 1024; nnc <= n; nnc <<= 1);
+	widcache = realloc(widcache, nnc * sizeof *widcache);
+	memset(&widcache[NCHARS], 0, (nnc-NCHARS) * sizeof *widcache);
+	trtab = realloc(trtab, nnc * sizeof *trtab);
+	for (i = NCHARS; i < nnc; i++)
+		trtab[i] = i;
+#ifndef	NROFF
+	for (i = 0; i <= nfonts; i++) {
+		if (lhangtab != NULL && lhangtab[i] != NULL) {
+			lhangtab[i] = realloc(lhangtab[i],
+					nnc * sizeof **lhangtab);
+			memset(&lhangtab[i][NCHARS], 0,
+					(nnc-NCHARS) * sizeof **lhangtab);
+		}
+		if (lhangtab != NULL && rhangtab[i] != NULL) {
+			rhangtab[i] = realloc(rhangtab[i],
+					nnc * sizeof **rhangtab);
+			memset(&rhangtab[i][NCHARS], 0,
+					(nnc-NCHARS) * sizeof **rhangtab);
+		}
+		if (kernafter != NULL && kernafter[i] != NULL) {
+			kernafter[i] = realloc(kernafter[i],
+					nnc * sizeof **kernafter);
+			memset(&kernafter[i][NCHARS], 0,
+					(nnc-NCHARS) * sizeof **kernafter);
+		}
+		if (kernbefore != NULL && kernbefore[i] != NULL) {
+			kernbefore[i] = realloc(kernbefore[i],
+					nnc * sizeof **kernbefore);
+			memset(&kernbefore[i][NCHARS], 0,
+					(nnc-NCHARS) * sizeof **kernbefore);
+		}
+	}
+#endif	/* !NROFF */
+	NCHARS = nnc;
+}

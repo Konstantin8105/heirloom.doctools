@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)misc.c	1.3 (gritter) 8/9/05
+ * Sccsid @(#)misc.c	1.5 (gritter) 8/23/05
  */
 
 /*
@@ -98,6 +98,18 @@ error(int kind, char *mesg, ...)
 
 
 /*****************************************************************************/
+/* for the AFM handling functions from troff */
+void
+errprint(char *fmt, ...)
+{
+	va_list	ap;
+
+	fprintf(stderr, "%s: ", prog_name);
+	va_start(ap, fmt);
+	vfprintf(stderr, fmt, ap);
+	va_end(ap);
+	putc('\n', stderr);
+}
 
 /*****************************************************************************/
 
@@ -183,7 +195,8 @@ in_olist (
 
 int 
 cat (
-    char *file			/* copy this file to stdout */
+    char *file,			/* copy this file to out */
+    FILE *out
 )
 
 
@@ -204,12 +217,12 @@ cat (
  */
 
 
-    fflush(stdout);
+    fflush(out);
 
     if ( (fd_in = open(file, O_RDONLY)) == -1 )
 	return(FALSE);
 
-    fd_out = fileno(stdout);
+    fd_out = fileno(out);
     while ( (count = read(fd_in, buf, sizeof(buf))) > 0 )
 	write(fd_out, buf, count);
 

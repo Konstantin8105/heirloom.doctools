@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n10.c	1.16 (gritter) 8/16/05
+ * Sccsid @(#)n10.c	1.19 (gritter) 9/11/05
  */
 
 /*
@@ -74,13 +74,15 @@ int	dtab;
 int	plotmode;
 int	esct;
 
-char	xchname[4 * (NROFFCHARS-_SPECCHAR_ST)];	/* hy, em, etc. */
-short	xchtab[NROFFCHARS-_SPECCHAR_ST];		/* indexes into chname[] */
+char	*xchname;		/* hy, em, etc. */
+short	*xchtab;		/* indexes into chname[] */
 char	*codestr;
-char	*chname = xchname;
-short	*chtab = xchtab;
+char	*chname;
+short	*chtab;
 int	nchtab = 0;
 
+int	*bdtab;
+int	*fontlab;
 
 int	Inch;
 int	Hor;
@@ -443,7 +445,16 @@ ptinit(void)
 	int nread, fd;
 	struct stat stbuf;
 	char check[50];
+	extern int initbdtab[], initfontlab[];
 
+	t.codetab = calloc(NROFFCHARS-_SPECCHAR_ST, sizeof *t.codetab);
+	t.width = calloc(NROFFCHARS, sizeof *t.width);
+	xchname = calloc(4 * (NROFFCHARS-_SPECCHAR_ST), sizeof *xchname);
+	xchtab = calloc(NROFFCHARS-_SPECCHAR_ST, sizeof *xchtab);
+	chname = xchname;
+	chtab = xchtab;
+	bdtab = initbdtab;
+	fontlab = initfontlab;
 	strcat(termtab, devname);
 	if (strcmp(devname, "locale") == 0) {
 #ifdef	EUC
@@ -704,6 +715,8 @@ twdone(void)
 void
 ptout(tchar i)
 {
+	if (cbits(i) == FILLER)
+		return;
 	*olinep++ = i;
 	if (olinep >= &oline[LNSIZE])
 		olinep--;

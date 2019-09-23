@@ -1,3 +1,99 @@
+Release 050915
+* troff: Can now directly handle .afm/.pfb/.pfa files (i.e. PostScript
+  Type 1 fonts) to select fonts. The ".fp" request has been extended
+  for this, and the "TROFFONTS" environment variable specifies path
+  names to search for font files. See the file "FONTS" for details.
+* troff: Can now handle Type 42 fonts (i.e. TrueType fonts that have been
+  converted for use by PostScript interpreters).
+* troff: Handles input characters according to LC_CTYPE now in combination
+  with the new font setup. In a UTF-8 locale, most characters that are
+  present in standard, Expert, and Symbol PostScript fonts are supported;
+  otherwise, a locale-specific subset of them is available.
+* troff: A PostScript device with a resolution of 72000 dpi, named "ps",
+  is available, and is used by default.
+* troff: Support for pairwise kerning has been added. The default tables
+  are read from the AFM files. In addition, a ".kernpair" request has been
+  introduced to add or replace kerning pairs; it can construct kerning
+  pairs for characters from different fonts. The ".kernafter" and
+  ".kernbefore" requests add a constant amount of space to specific
+  characters.
+* dpost: The PostScript output is now expected to conform to Adobe's
+  Document Structuring Conventions, version 3.0.
+* dpost: PDF Bookmarks, titles and authorship information can be included
+  into the generated PostScript for further processing by the distiller
+  utility. See the file "PDFS" for details.
+* [nt]roff: Hyphenation for languages other than English has been added
+  using the "libhnj" variant from the OpenOffice project. The ".hylang"
+  request has been introduced to select between languages. Hyphenation
+  files have been derived from TeX sources.
+* troff: The paper size can be selected with the ".papersize" request.
+  This is important for correct placement of pages on PostScript printers.
+* troff: Any point size can now be used with PostScript devices, including
+  fractional sizes.
+* troff: The ".fzoom" request allows to zoom the characters of a font.
+* troff: Hanging characters are supported.
+* [nt]roff: The ".lc_ctype" request can be used to set the LC_CTYPE
+  localization setting from within a document.
+* troff: It is now possible to use "\[name]", where name is a character
+  defined in the .afm file for the current font.
+* troff: The ".track" request for tracking letter space has been added.
+* troff: The ".fallback" request for selecting the order in which fonts
+  are searched for missing characters in the current font has been added.
+* troff: The ".hidechar" request hides characters from a font which are
+  then searched using the fallback sequence.
+* troff: Ligatures from expert fonts can be used transparently with the
+  ".flig" request.
+* [nt]roff: Environments selected with the ".ev" command can be given
+  names, and their number is no longer statically limited.
+* [nt]roff: The ".evc" request copies another environment to the current
+  one.
+* [nt]roff: The ".chop" request deletes the last character from a macro,
+  string, or diversion.
+* [nt]roff: The ".return" request returns immediately from a macro.
+* [nt]roff: The "\:" escape inserts an optional line break but generates
+  no hyphen if the line is split.
+* [nt]roff: The "\~" escape is similar to "\ " but inserts a space that
+  stretches like a regular " " when the line is adjusted.
+* [nt]roff: The "\E" escape is similar to "\e" but is not interpreted in
+  copy mode.
+* [nt]roff: The ".shift" request shifts the arguments to a macro.
+* [nt]roff: The "\$(.." and "\$[...]" escapes can be used to refer to
+  macro arguments.
+* troff/dpost: The "\X'Sync'" escape forces dpost to write position and
+  font information to the generated PostScript. This is sometimes useful
+  to ensure that following "\X'PS: ...'" escapes work as expected.
+* troff: The "-a" option now generates locale-dependent output, with best
+  results in UTF-8 locales.
+* The "-mpictures" macros have been added from Plan 9 sources.
+* The "picpack" preprocessor has been added.
+* eqn: The default resolution has been changed to 72000 dpi to match that
+  of troff. The "-r" option was introduced to change it.
+* eqn: Handles "\[]" and "\*[]" now.
+* troff, dpost: Device and font descriptions are now read directly from
+  text files; the "makedev" utility is no longer needed.
+* [nt]roff: The ".xflag" request controls the availability of extensions
+  like the "-x" and "-X" command line options.
+* The file "NEWS" describes new troff language features.
+* tbl: The specification "decimalpoint(x)" can now be used to make the
+  character "x" the decimal point for numeric columns.
+* tbl: There can now be up to 100 columns in a table.
+* [nt]roff: There is no static limit on the number of "-m" options anymore.
+* [nt]roff: There is no static limit on the ".hw" table anymore.
+* [nt]roff: There is no static limit on the pushback buffer anymore; this
+  makes it possible to use longer arguments to macros.
+* [nt]roff: The output of long names with ".pm" and stack dumps has been
+  fixed.
+* [nt]roff: Nested long-name string references \*[\*...] now work.
+* [nt]roff: Tabulators as in ".XY\t" are now correctly handled with -x.
+* The "-man" macro no longer produces cut marks when used with troff.
+* tbl: Two bugs that had been introduced with support for lines of unlimited
+  length have been fixed. They resulted in printing a stray character when
+  more than one input file was used, and in improper handling of input lines
+  continued with a backslash.
+* A new malloc() replacement has been added for performance reasons.
+* A bug in the previously supplied realloc() replacement could result in
+  heap corruption.
+
 Release 050816
 * nroff: A special terminal name, -Tlocale, has been introduced. With this
   option, UTF-8 output is generated if permitted by the current LC_CTYPE

@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n1.c	1.17 (gritter) 8/16/05
+ * Sccsid @(#)n1.c	1.37 (gritter) 9/11/05
  */
 
 /*
@@ -68,11 +68,9 @@ char *xxxvers = "@(#)roff:n1.c	2.13";
 #include <stdarg.h>
 #include <unistd.h>
 #ifdef 	EUC
-#ifdef	NROFF
 #include <stddef.h>
 #include <limits.h>
 #include <wchar.h>
-#endif	/* NROFF */
 #endif	/* EUC */
 
 #include "tdef.h"
@@ -94,11 +92,9 @@ char	cfname[NSO+1][NS];	/*file name stack*/
 int	cfline[NSO];		/*input line count stack*/
 char	*progname;	/* program name (troff) */
 #ifdef	EUC
-#ifdef	NROFF
 char	mbbuf1[MB_LEN_MAX + 1];
 char	*mbbuf1p = mbbuf1;
 wchar_t	twc = 0;
-#endif	/* NROFF */
 #endif	/* EUC */
 
 static void printn(long, long);
@@ -108,6 +104,8 @@ static void vfdprintf(int fd, const char *fmt, va_list ap);
 #ifdef	DEBUG
 int	debug = 0;	/*debug flag*/
 #endif	/* DEBUG */
+
+static int	_xflag;
 
 int
 main(int argc, char **argv)
@@ -124,6 +122,8 @@ main(int argc, char **argv)
 	growblist();
 	growcontab();
 	grownumtab();
+	growpbbuf();
+	morechars(1);
 	if (signal(SIGHUP, SIG_IGN) != SIG_IGN)
 		signal(SIGHUP, catch);
 	if (signal(SIGINT, catch) == SIG_IGN) {
@@ -139,9 +139,7 @@ main(int argc, char **argv)
 	nrehash();
 	init0();
 #ifdef EUC
-#ifdef NROFF
-	(void)localize();
-#endif /* NROFF */
+	localize();
 #endif /* EUC */
 	if ((p = getenv("TYPESETTER")) != 0)
 		strcpy(devname, p);
@@ -198,7 +196,8 @@ main(int argc, char **argv)
 			continue;
 		case 'c':
 		case 'm':
-			if (mflg++ >= NMF) {
+			if (mflg++ >= NMF && (mfiles = realloc(mfiles,
+						++NMF * sizeof *mfiles)) == 0) {
 				errprint("Too many macro packages: %s",
 					 argv[0]);
 				continue;
@@ -227,7 +226,7 @@ main(int argc, char **argv)
 			dotT++;
 			continue;
 		case 'x':
-			xflag = 1;
+			xflag = 2;
 			continue;
 		case 'X':
 			xflag = 0;
@@ -272,9 +271,11 @@ start:
 	rargc = argc;
 	nmfi = 0;
 	init2();
+	_xflag = xflag;
 	setjmp(sjbuf);
 	eileenct = 0;		/*reset count for "Eileen's loop"*/
 loop:
+	xflag = _xflag;
 	copyf = lgf = nb = nflush = nlflg = 0;
 	if (ip && rbf0(ip) == 0 && ejf && frame->pframe <= ejl) {
 		nflush++;
@@ -316,6 +317,12 @@ loop:
 		copyf--;
 		if ((j = getrq()) >= 256)
 			j = maybemore(j, 0);
+		if (xflag != 0 && j == PAIR('d', 'o')) {
+			xflag = 2;
+			skip();
+			if ((j = getrq()) >= 256)
+				j = maybemore(j, 0);
+		}
 		control(j, 1);
 		flushi();
 		goto loop;
@@ -332,6 +339,7 @@ Lt:
 int
 tryfile(register char *pat, register char *fn, int idx)
 {
+	mfiles[idx] = malloc(strlen(pat) + strlen(fn) + 1);
 	strcpy(mfiles[idx], pat);
 	strcat(mfiles[idx], fn);
 	if (access(mfiles[idx], 4) == -1)
@@ -378,6 +386,7 @@ init1(char a)
 	for (i = NTRTAB; --i; )
 		trtab[i] = i;
 	trtab[UNPAD] = ' ';
+	trtab[STRETCH] = ' ';
 }
 
 
@@ -414,6 +423,7 @@ init2(void)
 	frame = stk = (struct s *)setbrk(DELTA);
 	dip = &d[0];
 	nxf = frame + 1;
+	initenv = env;
 #ifdef INCORE
 	for (i = 0; i < NEV; i++) {
 		extern tchar *corebuf;
@@ -562,6 +572,16 @@ loop:
 		printn(va_arg(ap, long), 10);
 	} else if (c == 'O') {
 		printn(va_arg(ap, long), 8);
+	} else if (c == 'e' || c == 'E' ||
+			c == 'f' || c == 'F' ||
+			c == 'g' || c == 'G') {
+		extern int sprintf(char *, const char *, ...);
+		char	tmp[40];
+		char	fmt[] = "%%";
+		fmt[1] = c;
+		sprintf(s = tmp, fmt, va_arg(ap, double));
+		while (c = *s++)
+			putchar(c);
 	}
 	goto loop;
 }
@@ -627,6 +647,13 @@ loop:
 		str = sprintn(str, va_arg(ap, long), 10);
 	} else if (c == 'O') {
 		str = sprintn(str, va_arg(ap, unsigned) , 8);
+	} else if (c == 'e' || c == 'E' ||
+			c == 'f' || c == 'F' ||
+			c == 'g' || c == 'G') {
+		extern int sprintf(char *, const char *, ...);
+		char	fmt[] = "%%";
+		fmt[1] = c;
+		str += sprintf(str, fmt, va_arg(ap, double));
 	}
 	goto loop;
 }
@@ -673,9 +700,8 @@ control(register int a, register int b)
 		if (frame_cnt > MAX_RECURSION_DEPTH) {
 			errprint(
 			    "Exceeded maximum stack size (%d) when "
-			    "executing macro %c%c. Stack dump follows",
-			    MAX_RECURSION_DEPTH,
-			    frame->mname & 0177, (frame->mname >> BYTE) & 0177);
+			    "executing macro %s. Stack dump follows",
+			    MAX_RECURSION_DEPTH, macname(frame->mname));
 			edone(02);
 		}
 	}
@@ -860,6 +886,11 @@ g0:
 	case ' ':	/* unpaddable space */
 		i = UNPAD;
 		goto gx;
+	case '~':	/* stretchable but unbreakable space */
+		if (xflag == 0)
+			break;
+		i = STRETCH;
+		goto gx;
 	case '\'':	/* \(aa */
 		i = ACUTE;
 		goto gx;
@@ -890,6 +921,11 @@ g0:
 	case '%':	/* ohc */
 		i = OHC;
 		return(i);
+	case ':':	/* optional line break but no hyphenation */
+		if (xflag == 0)
+			break;
+		i = OHC | BLBIT;
+		return(i);
 	case 'g':	/* return format of a number register */
 		setaf();
 		goto g0;
@@ -903,7 +939,7 @@ gx:
 		return(i);
 	}
 	if (copyf) {
-		*pbp++ = j;
+		pbbuf[pbp++] = j;
 		return(eschar);
 	}
 	switch (k) {
@@ -919,6 +955,11 @@ gx:
 		if ((i = setch(k)) == 0)
 			goto g0;
 		return(i);
+	case 'E':	/* printable version of current eschar */
+		if (xflag == 0)
+			goto dfl;
+		i = PRESC;
+		goto gx;
 	case 's':	/* size indicator */
 		setps();
 		goto g0;
@@ -1020,15 +1061,15 @@ tchar getch0(void)
 	register int	j;
 	register tchar i;
 #ifdef	EUC
-#ifdef	NROFF
 	register int	n;
+#ifdef	NROFF
 	int col_index;
 #endif	/* NROFF */
 #endif	/* EUC */
 
 again:
 	if (pbp > lastpbp)
-		i = *--pbp;
+		i = pbbuf[--pbp];
 	else if (ip) {
 #ifdef INCORE
 		extern tchar *corebuf;
@@ -1072,8 +1113,36 @@ g2:
 		if (i >= 040 && i < 0177)
 #else
 #ifndef	NROFF
-		i = *ibufp++ & 0177;
+		i = *ibufp++ & 0377;
 		ioff++;
+		*mbbuf1p++ = i;
+		*mbbuf1p = 0;
+		if (multi_locale && (*mbbuf1&~(wchar_t)0177)) {
+			mbstate_t	state;
+			memset(&state, 0, sizeof state);
+			if ((n = mbrtowc(&twc, mbbuf1, mbbuf1p-mbbuf1, &state))
+					==(size_t)-1) {
+				mbbuf1p = mbbuf1;
+				*mbbuf1p = 0;
+				i &= 0177;
+			} else if (n == (size_t)-2)
+				goto again;
+			else {
+				int	f;
+				mbbuf1p = mbbuf1;
+				*mbbuf1p = 0;
+				if ((i = un2tr(twc, &f)) != 0) {
+					i |= chbits & ~FMASK;
+					setfbits(i, f);
+					goto g4;
+				}
+			}
+		} else {
+			mbbuf1p = mbbuf1;
+			*mbbuf1p = 0;
+			if (!raw)
+				i &= 0177;
+		}
 		if (i >= 040 && i < 0177)
 #else
 		i = *ibufp++ & 0377;
@@ -1156,11 +1225,13 @@ pushback(register tchar *b)
 	while (*b++)
 		;
 	b--;
-	while (b > ob && pbp < &pbbuf[NC-3])
-		*pbp++ = *--b;
-	if (pbp >= &pbbuf[NC-3]) {
-		errprint("pushback overflow");
-		done(2);
+	while (b > ob) {
+		if (pbp >= pbsize-3)
+			if (growpbbuf() == NULL) {
+				errprint("pushback overflow");
+				done(2);
+			}
+		pbbuf[pbp++] = *--b;
 	}
 }
 
@@ -1172,12 +1243,26 @@ cpushback(register char *b)
 	while (*b++)
 		;
 	b--;
-	while (b > ob && pbp < &pbbuf[NC-3])
-		*pbp++ = *--b;
-	if (pbp >= &pbbuf[NC-3]) {
-		errprint("cpushback overflow");
-		done(2);
+	while (b > ob) {
+		if (pbp >= pbsize-3)
+			if (growpbbuf() == NULL) {
+				errprint("cpushback overflow");
+				done(2);
+			}
+		pbbuf[pbp++] = *--b;
 	}
+}
+
+tchar *
+growpbbuf(void)
+{
+	tchar	*npb;
+	int	inc = NC;
+
+	if ((npb = realloc(pbbuf, (pbsize + inc) * sizeof *pbbuf)) == NULL)
+		return NULL;
+	pbsize += inc;
+	return pbbuf = npb;
 }
 
 int
@@ -1243,7 +1328,7 @@ popf(void)
 			*q++ = *p++;
 		return(0);
 	}
-	if (lseek(ifile, (long)(ioff & ~(IBUFSZ-1)), 0) == (long) -1
+	if (lseek(ifile, ioff & ~(IBUFSZ-1), 0) == -1
 	   || (i = read(ifile, ibuf, IBUFSZ)) < 0)
 		return(1);
 	eibuf = ibuf + i;
@@ -1496,9 +1581,12 @@ setrpt(void)
 	if (i < 0 || cbits(j = getch0()) == RPT)
 		return;
 	i &= BYTEMASK;
-	while (i>0 && pbp < &pbbuf[NC-3]) {
+	while (i>0) {
+		if (pbp >= pbsize-3)
+			if (growpbbuf() == NULL)
+				break;
 		i--;
-		*pbp++ = j;
+		pbbuf[pbp++] = j;
 	}
 }
 
@@ -1514,4 +1602,15 @@ casedb(void)
 	debug = max(atoi(), 0);
 	noscale = 0;
 #endif	/* DEBUG */
+}
+
+void
+casexflag(void)
+{
+	int	i;
+
+	skip();
+	i = atoi();
+	if (!nonumb)
+		_xflag = xflag = i & 3;
 }

@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n4.c	1.7 (gritter) 8/15/05
+ * Sccsid @(#)n4.c	1.12 (gritter) 9/5/05
  */
 
 /*
@@ -98,6 +98,7 @@ setn(void)
 	register int i, j;
 	register tchar ii;
 	int	f;
+	double	fl;
 
 	f = nform = 0;
 	if ((i = cbits(ii = getach())) == '+')
@@ -113,7 +114,13 @@ setn(void)
 	if ((i & 0177) == '.')
 		switch (i >> BYTE) {
 		case 's': 
-			i = pts;	
+			i = fl = u2pts(pts);
+			if (i != fl) {
+				char	tb[20];
+				roff_sprintf(tb, "%f", fl);
+				cpushback(tb);
+				return;
+			}
 			break;
 		case 'v': 
 			i = lss;		
@@ -198,8 +205,8 @@ setn(void)
 			break;
 		case 'z': 
 			i = dip->curd;
-			*pbp++ = (i >> BYTE) & BYTEMASK;
-			*pbp++ = i & BYTEMASK;
+			pbbuf[pbp++] = (i >> BYTE) & BYTEMASK;
+			pbbuf[pbp++] = i & BYTEMASK;
 			return;
 		case 'b': 
 			i = bdtab[font];
@@ -227,7 +234,7 @@ tchar	numbuf[17];
 tchar	*numbufp;
 
 int 
-wrc(int i)
+wrc(tchar i)
 {
 	if (numbufp >= &numbuf[16])
 		return(0);
@@ -335,7 +342,7 @@ usedr (	/* returns -1 if nr i has never been used */
 
 
 int 
-fnumb(register int i, register int (*f)(int))
+fnumb(register int i, register int (*f)(tchar))
 {
 	register int j;
 
@@ -363,7 +370,7 @@ fnumb(register int i, register int (*f)(int))
 
 
 int 
-decml(register int i, register int (*f)(int))
+decml(register int i, register int (*f)(tchar))
 {
 	register int j, k;
 
@@ -376,7 +383,7 @@ decml(register int i, register int (*f)(int))
 
 
 int 
-roman(int i, int (*f)(int))
+roman(int i, int (*f)(tchar))
 {
 
 	if (!i)
@@ -389,7 +396,7 @@ roman(int i, int (*f)(int))
 
 
 int 
-roman0(int i, int (*f)(int), char *onesp, char *fivesp)
+roman0(int i, int (*f)(tchar), char *onesp, char *fivesp)
 {
 	register int q, rem, k;
 
@@ -416,7 +423,7 @@ roman0(int i, int (*f)(int), char *onesp, char *fivesp)
 
 
 int 
-abc(int i, int (*f)(int))
+abc(int i, int (*f)(tchar))
 {
 	if (!i)
 		return((*f)('0' | nrbits));
@@ -426,7 +433,7 @@ abc(int i, int (*f)(int))
 
 
 int 
-abc0(int i, int (*f)(int))
+abc0(int i, int (*f)(tchar))
 {
 	register int j, k;
 
@@ -583,7 +590,7 @@ long
 atoi1(register tchar ii)
 {
 	register int i, j, digits;
-	register long	acc;
+	register long long	acc;
 	int	neg, abs, field;
 
 	neg = abs = field = digits = 0;
@@ -775,10 +782,17 @@ setaf (void)	/* return format of number register */
 	if (i == -1)
 		return;
 	if (numtab[i].fmt > 20)	/* it was probably a, A, i or I */
-		*pbp++ = numtab[i].fmt;
-	else
-		for (j = (numtab[i].fmt ? numtab[i].fmt : 1); j; j--)
-			*pbp++ = '0';
+		pbbuf[pbp++] = numtab[i].fmt;
+	else {
+		for (j = (numtab[i].fmt ? numtab[i].fmt : 1); j; j--) {
+			if (pbp >= pbsize-3)
+				if (growpbbuf() == NULL) {
+					errprint("no space for .af");
+					done(2);
+				}
+			pbbuf[pbp++] = '0';
+		}
+	}
 }
 
 

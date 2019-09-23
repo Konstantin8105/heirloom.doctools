@@ -1,0 +1,364 @@
+Font handling in troff with PostScript devices
+==============================================
+
+The basics
+----------
+
+Heirloom troff understands two ways to select PostScript fonts.
+
+The new method can access PostScript font files directly. Fonts are
+selected using an extended ".fp" request:
+
+  .fp r yy afmname [supplyname]
+	reads metrics from "afmname". If the TROFFONTS environment variable
+	is set, each of the colon-separated directories in it is tried for
+	the file "afmname.afm", or, if "afmname" has the ".afm" extension
+	itself, for "afmname". Otherwise, the font is loaded from the file
+	"/usr/ucblib/doctools/font/devps/afmname.afm". If this fails, a
+	legacy ditroff font is assumed (see below).
+	  The font is then available with ".ft yy", "\f(yy", etc. "yy" may
+	be freely chosen. The "r" argument specifies a register on which
+	the font is to be mounted. If it is zero, the font is mounted on
+	a free position (not on position zero). The "r" argument may
+	consist of more than a single digit.
+	  "yy" may be the name of an existing ditroff-style font, such
+	as "R". In this case, the same register must be reused. For best
+	compatibility with conventional troff usage, it is recommended
+	that the base fonts of a document are mounted as "1 R", "2 I".
+	The initial fonts on positions 9 (S1) and 10 (S) should not be
+	changed, as these contain special metrics for drawing commands.
+	  "yy" may also consist of more than two characters.
+	  If the optional "supplyname" argument is present, glyph data
+	is included in the generated PostScript file. If "supplyname"
+	is one of "pfb", "pfa", or "t42", the file "supplyname.pfb" (or
+	likewise) is searched in the directories in TROFFONTS first as
+	described for the AFM file above, and if it is not found there,
+	in "/usr/ucblib/doctools/font/devps/supplyname.pfb" (or
+	likewise). "supplyname" may also be the basename of a file like
+	"afmname" above.
+
+As a simple example,
+      
+	.fp 0 VA van_____ pfb
+	.ft VA
+	Here is some text in Monotype Van Dijck Regular.
+
+But it is also possible to have different names for the metrics and
+glyph data files, as in
+
+	.fp 0 BM mykerning.afm bm______.pfb
+	.ft BM
+	This text prints in Monotype Bembo using modified kerning.
+
+The new default higher-resolution "ps" PostScript device always uses
+AFM files; it supports the conventional ".fp" request for backwards
+compatibility to select pre-installed fonts from the PDF base set.
+
+With fonts selected by this method, localized input processing is
+performed according to the LC_CTYPE environment variable, or according
+to a document-specific value set by the new ".lc_ctype" request. Note
+that your terminal and text editor/pager must support UTF-8 to display
+the following example properly:
+
+	.\" Enable long request names.
+	.do xflag 2
+	.\" de_DE.utf8 is for GNU libc; de_DE.UTF-8 may work elsewhere.
+	.lc_ctype de_DE.utf8
+	Deutscher Text mit „Anführungszeichen“
+	.sp
+	The first five small letters of the Greek alphabet: α β γ δ ε
+
+Note that any use of AFM files requires that the output of troff is
+passed to the exactly matching version of dpost, i.e. to the one that
+was delivered with the same release of this package. Sending such
+troff output directly to a print spooler that invokes a system version
+of dpost will thus usually not work.
+
+The old ditroff method requires font tables to be generated manually.
+It is still supported, and is still the default for the lower-resolution
+"post" PostScript device, but it is not recommended anymore that it is
+used for adding fonts. Localized input processing according to LC_CTYPE
+is not available with this method.
+
+
+Installing fonts
+----------------
+
+Making additional fonts available is easy with the new method. If you
+buy a PostScript Type 1 font for use with troff, select the Windows
+version. You will get a set of files from the vendor. Only two of them
+are of interest for troff:
+
+  xxxxxxxx.afm
+	This is the metrics file. troff accesses it to learn the widths
+	of characters in the font.
+
+  xxxxxxxx.pfb
+	This file contains the actual glyph data. troff does not really
+	need this file, but your printer or PDF converter does. In many
+	cases, it is most convenient to include the data directly into
+	the .ps file generated, as described for ".fp" above.
+
+Create a directory to hold your fonts. For compatibility with future
+versions of troff, it is recommended that it is put outside the troff
+hierarchy /usr/ucblib/doctools; something below /usr/local may be a
+good choice. For each font you want to install, copy or link both the
+AFM and the PFB file into the directory. Set the TROFFONTS environment
+variable to this directory; if you have multiple font directories, you
+can separate them in TROFFONTS by colons, just as in the PATH variable
+for the shell, e.g. "TROFFONTS=/usr/local/share/fonts:/usr/share/fonts
+export TROFFONTS". Write the definition in your .profile to make it
+permanent. You can now use the fonts with troff. If you want to install
+more fonts later, it is sufficient to put them into the font directory.
+
+For TrueType fonts, an additional conversion step is necessary. troff
+cannot handle TrueType fonts directly, but it can handle PostScript
+Type 42 fonts, which are a special representation of them. You can
+use the "ttftot42" utility from <http://www.nih.at/ttftot42/> to
+generate a Type 42 font from a TrueType font. It will produce a .afm
+file and a .t42 file; put both files into your font directory as with
+Type 1 fonts. You can then use the Type 42 font just like a Type 1
+font. The only drawback with this is that a Type 42 font requires
+special support from the PostScript interpreter; an aging printer
+may not be able to process it.
+
+
+Using fonts with old style numerals
+-----------------------------------
+
+A font with old style numerals but otherwise standard characters usually
+does not require any special mechanism. It can simply be mounted, selected,
+and used.
+
+
+Using fonts with small capital letters
+--------------------------------------
+
+Small capital fonts normally need letter space tracking. Thus e.g.
+to use the Stempel Garamond small capital font, write something like
+
+	.do xflag 2
+	.fp 0 SC gsrsc___ pfb
+	.track SC 1 .2 24 2
+	.ft SC
+	This text prints in Small Capitals.
+
+
+Using a combination of expert and standard fonts for small capitals
+-------------------------------------------------------------------
+
+An expert font contains small capital letters but no upper-case capital
+letters. Since it would be very inconvenient to change the font
+explicitly for each upper-case letter, the fallback sequence is useful
+in this case. The expert font is selected as text font, but for each
+upper-case letter encountered, troff changes automatically to the
+standard font. An example with the Monotype Fournier type:
+
+	.do xflag 2
+	.fp 1 R fn______ pfb
+	.fp 0 E fny_____ pfb
+	.track E 1 .2 24 2
+	.fallback E R
+	.ft E
+	This text prints in Small Capitals.
+
+
+Using a combination of expert and standard fonts for old style numerals
+-----------------------------------------------------------------------
+
+This also uses the fallback sequence, but since the standard numerals
+are present in the standard font, they have to be hidden first so that
+troff does not select them:
+
+	.do xflag 2
+	.fp 1 R fn______ pfb
+	.fp 0 E fny_____ pfb
+	.fallback R E
+	.hidechar R 0123456789
+	The numerals 0 1 2 3 4 5 6 7 8 9 are in old style.
+
+
+Using the expert font for both small capitals and old style numerals
+--------------------------------------------------------------------
+
+The examples above can also be combined. Since the .track request does not
+affect the tracking of fonts that are selected by the fallback sequence,
+it is sufficient to mount each font once:
+
+	.do xflag 2
+	.fp 1 R fn______ pfb
+	.fp 0 E fny_____ pfb
+	.fallback R E
+	.fallback E R
+	.track E 1 .2 24 2
+	.hidechar R 0123456789
+	The numerals 0 1 2 3 4 5 6 7 8 9 are in old style.
+	.br
+	.ft E
+	But this text prints in Small Capitals.
+
+
+Using the expert font for ligatures
+-----------------------------------
+
+PostScript fonts usually do not contain ligatures for ff, ffi, and ffl
+in the base font; an expert font delivers them in addition. Automatic
+substitution of such ligatures can be enabled using the ".flig" request
+in combination with the fallback sequence:
+
+	.do xflag 2
+	.fp 1 R fn______ pfb
+	.fp 0 E fny_____ pfb
+	.fallback R E
+	.flig R 31
+	effective office offline
+
+
+Combining different fonts
+-------------------------
+
+Different fonts often have different visual sizes even if they are set
+in the same nominal point size. To adjust this, the ".fzoom" request
+is available. It only applies to characters that are actually in the
+current font, not to characters from another font that have been
+selected using the fallback sequence.
+
+	.do xflag 2
+	.fp 1 R pl______ pfb
+	.fzoom H .92
+	Text in \fHHelvetica\fP must be adjusted to fit with Plantin.
+
+The ".fzoom" request affects all characters set in the respective font on
+the current output line. To create single zoomed words, mount a font twice
+under different names, but zoom it only once.
+
+
+Tracking individual words
+-------------------------
+
+Tracking of individual words is used for highlighting text e.g. with German
+blackletter faces. Like the ".fzoom" request, the ".track" request applies
+to all characters in the respective font on an entire output line. Thus it
+is also necessary to mount a font twice but to track it only once when it
+is used for tracking individual words.
+
+
+Setting text in all-capital letters
+-----------------------------------
+
+When setting text in all-capital letters, it is normally necessary
+to zoom the font to a smaller size than that of the lower-case text
+surrounding it, and to track it as well. Mounting the regular font
+a second time is the most convenient way to handle this:
+
+	.do xflag 2
+	.fp 1 R fn______ pfb
+	.fp 0 XC fn______ pfb
+	.track XC 1 .2 24 2
+	.fzoom XC .9
+	Regular text followed by \f(XCALL-CAPITAL TEXT\fP which ends.
+
+
+Pairwise kerning
+----------------
+
+Pairwise kerning is enabled unless the -X option is given. The ".kern"
+request disables it. Kerning tables are initially read from AFM files;
+this default kerning only applies if two adjacent characters are from
+the same font. There are two methods to adjust the kerning tables: In
+many cases, it is most convenient to create a private copy of the AFM
+file and to adjust the "KPX" entries in it. This has the advantage that
+the modified kerning pairs are immediately available for other documents.
+
+For cases where this is not suitable, or not possible because the
+characters in the kerning pair originate from a different font, troff
+provides the ".kernpair" request:
+
+	.do xflag 2
+	.fp 1 R fn______ pfb
+	.fp 0 E fny_____ pfb
+	.fallback R E
+	.hidechar R 0123456789
+	.kernpair E 0 R / 50
+	.kernpair R / E 1 -90
+	.kernpair E 1 R / 40
+	.kernpair R / E 2 -80
+	0/1/2
+
+In this example, old-style numerals from Fournier Expert are mixed
+with the slash character from Fournier Regular, and are adjusted to
+achieve matching visual letter spacing.
+
+It is sometimes useful to add a certain amount of space whenever a
+character appears, for example before ";" or "?", or on the inner
+sides of guillemots in French/Swiss style. The ".kernafter" and
+".kernbefore" requests are useful for this:
+
+	.do xflag 2
+	.kernafter R ; 60 ? 60
+
+If the characters affected by these requests are also member of a
+regular kerning pair, the resulting added space is the sum of both
+definitions. These requests are applied at the same places as kerning
+pairs, i.e. they have no effect if following or preceding a motion
+command, "\&" or line margin, and they are additionally restricted to
+have no effect if the other character is a space.
+
+
+Hanging characters
+------------------
+
+Since there are no tables for hanging characters in AFM files, values
+must be given explicitly in troff source code using the ".lhang" and
+".rhang" requests. Both accept a font specification followed by one
+or more pairs of characters and values:
+
+	.do xflag 2
+	.ps 10
+	.fp 1 R fn______ pfb
+	.lhang R V -50 J -40
+	.rhang R \(hy 80
+
+Adjustments are given in units of 1/72000 inch multiplied by the actual
+point size, or 1/1000 of the em size when the line is printed. Thus in
+this example, the left margin is shifted to the left by .5 points when
+the leftmost letter is a "V", and by .4 points when the leftmost letter
+is a "J"; the right margin is shifted to the right by .8 points when
+the rightmost letter is a hyphen.
+
+Left margin adjustments are evaluated before the letters that fit on the
+current line are computed, and can thus principally be of any length. In
+contrast, right margin adjustments are evaluated after this computation
+is finished, and the adjustment is simply added to the word space of the
+output line. Thus a positive right adjustment that is large in relation
+to the line length will cause visible holes, and a negative adjustment
+will ultimately cause the words on the line to be printed over each
+other. This is not a problem for the typical application of hanging
+punctuation for visual alignment, though; if a line with eight word
+spaces is shifted in the example above, each word space is enlarged
+by only 1/100 em.
+
+
+Limitations
+-----------
+
+dpost can currently only access the first 255 characteres defined
+in an AFM file. This is sufficient for traditional PostScript fonts
+which almost uniformly contain fewer characters, but limits the use
+of internationalized fonts. If only a few characters need to be
+accessed, it is possible reorder the character entry lines in the
+AFM file to work around. Otherwise it would be necessary to extend
+dpost. This is possible, but it is currently not a scheduled task.
+
+The PostScript/Unicode conversion tables currently only contain
+Western character names; other characters are simply ignored when
+they occur in input text. The "Adobe Glyph List" cannot be used for
+this task since it lists many characters in positions which are not
+appropriate for the troff input mechanism. For example, small capitals
+are put in the private area there which would make it necessary to
+transform ASCII input text in order to use them; the troff mechanism
+in contrast allows them to be selected simply with a font change.
+Contributions of appropriate tables for other languages are welcome.
+
+
+Gunnar Ritter                                                 9/13/05

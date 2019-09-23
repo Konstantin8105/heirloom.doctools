@@ -28,7 +28,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)gen.h	1.4 (gritter) 8/13/05
+ * Sccsid @(#)gen.h	1.9 (gritter) 9/8/05
  */
 
 /*
@@ -79,7 +79,7 @@ void newcolor(char *);
 void setcolor(void);
 /* dpost.c */
 void init_signals(void);
-void header(void);
+void header(FILE *);
 void options(void);
 void setpaths(char *);
 void setup(void);
@@ -89,7 +89,7 @@ void account(void);
 void conv(register FILE *);
 void devcntrl(FILE *);
 void fontinit(void);
-void loadfont(int, char *, char *);
+void loadfont(int, char *, char *, int);
 void loadspecial(void);
 void loaddefault(void);
 void fontprint(int);
@@ -102,13 +102,14 @@ void t_init(void);
 void t_page(int);
 void t_newline(void);
 int t_size(int);
-void setsize(int);
-void t_fp(int, char *, char *);
+void setsize(int, float);
+void t_fp(int, char *, char *, void *);
 int t_font(char *);
 void setfont(int);
 void t_sf(void);
-void t_charht(int);
+void t_charht(int, float);
 void t_slant(int);
+void t_supply(char *);
 void t_reset(int);
 void t_trailer(void);
 void hgoto(int);
@@ -148,7 +149,7 @@ void settext(char *);
 void error(int, char *, ...);
 void out_list(char *);
 int in_olist(int);
-int cat(char *);
+int cat(char *, FILE *);
 int str_convert(char **, int);
 char *tempname(const char *);
 /* pictures.c */

@@ -1,0 +1,346 @@
+New features in the Heirloom Documentation Tools troff language
+===============================================================
+
+With the "-x" option, new features become available by the names as
+shown. Without the "-x" option, long requests can be invoked with
+the ".do" prefix as described below; other features are available by
+default since they should not normally create compatibility problems.
+With the "-X" option, all extensions except for locale-dependent input
+and the AFM font selection using ".fp" are disabled. See also the
+description for ".xflag" below.
+
+.chop name
+	removes the last character of the macro, string, or diversion
+	"name".
+
+.de longname
+.ds longname
+.ft longname
+.nr longname
+	The names of macros, strings, number registers, and fonts can be
+	longer than two characters now with the "-x" option.
+
+.do request arguments
+	has the same effect as executing ".request arguments" with the
+	"-x" option enabled, even if that was not given on the command
+	line.  Thus ".do papersize a4" works like ".papersize a4",
+	".do de longname" defines a macro with a long name, and
+	".do longname" executes it. It is possible to contract extended
+	request names without the "-x" option, such as ".dopapersize",
+	although such usage seems questionable.
+
+.ev name
+	Environments can be named, or be given an arbitrary number.
+
+.evc name
+	copies the environment "name" into the current environment.
+	The temporary state of the current environment is reset, and
+	incompletely filled lines are discarded.
+
+.fallback ff aa bb ...					troff only
+	selects the fallback sequence for font ff. If the current font
+	is ff and a character is not found, font aa is searched first,
+	then font bb, etc. If the character still has not been found,
+	it is searched for in font S, then in font 0, 1, and so forth.
+
+.flig ff ligatures					troff only
+	defines the set of ligatures to be used with font ff. The
+	"ligatures" parameter is the sum of the values 1 for ff, 2 for
+	fi, 4 for fl, 8 for ffi, and 16 for ffl. Thus ".flig R 31"
+	enables all these ligatures in font R. The default is specific
+	to a font and is determined from its AFM file. Enabling the ff,
+	ffi, and ffl ligatures with PostScript fonts usually requires
+	an expert font that has been selected for character substitution
+	using the ".fallback" request.
+
+.fp r yy afmname [supplyname]				troff only
+	reads metrics from "afmname". If the TROFFONTS environment variable
+	is set, each of the colon-separated directories in it is tried for
+	the file "afmname.afm", or, if "afmname" has the ".afm" extension
+	itself, for "afmname". Otherwise, the font is loaded from the file
+	"/usr/ucblib/doctools/font/devps/afmname.afm". If this fails, a
+	legacy ditroff font is assumed.
+	  The font is then available with ".ft yy", "\f(yy", etc. "yy" may
+	be freely chosen. The "r" argument specifies a register on which
+	the font is to be mounted. If it is zero, the font is mounted on
+	a free position (not on position zero). The "r" argument may
+	consist of more than a single digit.
+	  "yy" may be the name of an existing ditroff-style font, such
+	as "R". In this case, the same register must be reused. For best
+	compatibility with conventional troff usage, it is recommended
+	that the base fonts of a document are mounted as "1 R", "2 I".
+	The initial fonts on positions 9 (S1) and 10 (S) should not be
+	changed, as these contain special metrics for drawing commands.
+	  "yy" may also consist of more than two characters.
+	  If the optional "supplyname" argument is present, glyph data
+	is included in the generated PostScript file. If "supplyname"
+	is one of "pfb", "pfa", or "t42", the file "supplyname.pfb" (or
+	likewise) is searched in the directories in TROFFONTS first as
+	described for the AFM file above, and if it is not found there,
+	in "/usr/ucblib/doctools/font/devps/supplyname.pfb" (or
+	likewise). "supplyname" may also be the basename of a file like
+	"afmname" above.
+
+.fzoom ff z						troff only
+	zooms font ff by "z", where "z" is a positive floating-point
+	number. This request is useful for adjusting fonts with different
+	visual sizes but identical nominal points; the zoom is thus not
+	applied to characters from another font that have been found by
+	the fallback sequence.
+
+.hidechar ff c d ...					troff only
+	hides the characters c, d, etc. from font ff. If the characters
+	appear in input afterwards, they are searched in other fonts
+	using the fallback sequence. This is useful e.g. for combining
+	characters from a regular and an expert font.
+
+.hylang language
+	Sets the hyphenation language to "language", where language
+	is one of de_DE, de_DE@traditional, en_US, fr_FR, it_IT, or
+	la_VA. Other languages can be made available by adding hyphenation
+	files to the directory /usr/ucblib/doctools/hyphen; see the notes
+	in "troff/libhnj/hyphen.d" for details. If no "language" argument
+	is present, the hyphenation is reset to the traditional troff
+	mechanism. Note that hyphenation is disabled by default if troff
+	is used directly, and can be switched on using the ".hy" request,
+	which is what many macro packages do.
+
+.kern [0|1]						troff only
+	Disables (0) or enables pairwise kerning. The default is enabled
+	unless the "-X" option is given.
+
+.kernafter ff char0 units0 char1 units1 ...		troff only
+.kernbefore ff char0 units0 char1 units1 ...		troff only
+	adds a constant amount of space if the current font is "ff" and
+	"char0" is the first (or second, respectively) character of a
+	pair of characters subject to kerning. The "units0" arguments is
+	1/72000 of an inch multiplied by the current point size or 1/1000
+	of an em (as in AFM kerning pair definitions). Same for char1/
+	units1 etc.
+
+.kernpair ff charf gg charg units			troff only
+	adds a kerning pair to the kerning table for character "charf"
+	from font "ff" and character "charg" from font "gg". The "units"
+	argument is 1/72000 of an inch multiplied by the current point
+	size or 1/1000 of an em (as in AFM kerning pair definitions). To
+	add a kerning pair that includes the space character, use "\ ".
+
+.lhang ff char0 units0 char1 units1 char2 units2 ...	troff only
+	When the current font is "ff" and "char0" appears at the left margin
+	of an output line in left-adjusted, both-adjusted, or nofill mode,
+	the margin is relocated to the right by "units0", where units is
+	1/72000 of an inch multiplied by the current point size or 1/1000
+	of an em (as in AFM character width definitions). Same for
+	char1/units1 etc.
+
+.lc_ctype localename
+	sets the LC_CTYPE locale setting to "localename". The default is
+	the value of the LC_CTYPE environment variable. This request is
+	useful to specify an input character set regardless of environment
+	influences.
+
+.papersize executive|letter|legal|ledger|tabloid|aN|bN|cN|x y	troff only
+	sets the paper size to the given format, which may be either one
+	of the predefined American or international formats (such as a4),
+	or a user-defined format "x y". The page length is set from these
+	parameters, the page offset and line length are adjusted as needed,
+	and the post-processor is instructed to generate appropriate device
+	setup commands. The last action is the real reason why this request
+	exists; without it, PostScript printers may displace the pages of
+	the document. The default are "letter" measurements but no device
+	setup commands. This request should be used early in a document;
+	if it is given multiple times, the last one will setup the device.
+
+.ps x.y							troff only
+	accepts any points size now with PostScript devices, including
+	fractional sizes.
+
+.rhang ff char0 units0 char1 units1 char2 units2 ...	troff only
+	When the current font is "ff" and "char0" appears at the right margin
+	of an output line in right-adjusted or aligned mode, the margin is
+	relocated to the right by "units0", where units is 1/72000 of an inch
+	multiplied by the current point size or 1/1000 of an em (as in AFM
+	character width definitions). Same for char1/units1 etc.
+
+.return
+	immediately returns from the current macro to the level above.
+
+.shift [n]
+	shifts the arguments to the current macro by "n", or 1 if "n"
+	is missing.
+
+.ss n m							troff only
+	with the second argument "m" determines whether additional white
+	space is added between sentences. If m is zero, no additional
+	white space is added. Otherwise, a space of size n is added as
+	usual.
+
+.track ff s1 n1 s2 n2					troff only
+	specifies tracking of letter space for font ff. If the current font
+	is ff and the point size is below or equal to s1, white space of
+	width n1 is added to each character. If the point size is above or
+	equal to s2, white space of width n2 is added. If the point size
+	is between s1 and s2, the amount of white space added is computed
+	as a value between n1 and n2 using the current point size s:
+	(s * n2 - s * n1 + s2 * n1 - s1 * n2) / (s2 - s1). The default unit
+	for all numeric arguments is "p". Negative numbers are accepted and
+	cause a decrease of letter space. No adjustment is performed on the
+	last character of an output line. Tracking also applies to characters
+	from another font that have been selected by the fallback sequence.
+
+.xflag [0|1|2]
+	controls the availability of newer features like the "-x" and "-X"
+	command line options: ".do xflag 0" corresponds to "-X" and disables
+	all extensions, ".do xflag 1" corresponds to the default behavior,
+	and ".do xflag 2" corresponds to "-x" and enables long request names.
+	Note that ".do xflag 0" is not reversible anymore since the ".xflag"
+	request itself is only available at xflag level one and above.
+
+\$(nn
+\$[nnn]
+	refer to arguments "nn" or "nnn" to a macro.
+
+\$*
+	prints all arguments to a macro, separated by spaces.
+
+\$@
+	prints all arguments to a macro, each one surrounded by double
+	quotes, separated by spaces.
+
+\&
+	inhibits kerning if put between two characters, in addition to
+	its previous functionality.
+
+\*[name]
+	refers to the string "name".
+
+\:
+	is similar to "\%", but only inserts an optional line break and
+	does not cause a hyphen to be printed if the line is split.
+
+\[name]							troff only
+	selects the character "name" as defined in the AFM file for the
+	current font. The file "stuff/showfont.sh" can be used to display
+	the characters in a PostScript font along with their names.
+
+\E
+	is similar to "\e", but is not interpreted in copy mode.
+
+\f[name]						troff only
+	selects font "name".
+
+\n(.s
+	prints a decimal fraction if the current point size is not an
+	integer. Since standard number registers cannot hold decimal
+	fractions, point sizes must be saved and restored as follows:
+		.nr os \n(.sp
+		    . . .
+		.ps \n(osu
+
+\n[name]
+	refers to the number register "name".
+
+\s'size'
+	sets the current point size and allows any numerical expression
+	in "size". This is particularly useful for specifying large sizes
+	with more than two numerals, or for fractional sizes.
+
+\~
+	is similar to "\ ", but inserts space that stretches when the
+	line is adjusted like a regular " ".
+
+any character in the current LC_CTYPE locale in text input
+	In nroff, any printable character is just passed through.
+	  In troff, a non-ASCII character is converted to a named
+	PostScript character. If it is found in the current font, it
+	is printed. Otherwise, the .fallback sequence is searched for
+	it. This mechanism does not work with legacy ditroff fonts.
+	  In macro, string, and number register names, only ASCII
+	characters may be used.
+
+
+Changes to troff intermediate output
+====================================
+
+s-23 d.d
+	is a crude way to tell the post-processor that "d.d" is a
+	(possibly fractional) point size for the current font. This
+	command is only used if the "-X" option was not given, if
+	the "anysize" keyword is contained in the DESC file for the
+	device, and if either the ".fzoom" request has been used, or
+	a direct size change has resulted in a font size that is not
+	contained in the DESC "sizes" table.
+
+x font n filename.afm
+	tells the post-processor that "filename.afm" contains the
+	metrics for the font on position "n". This is certainly the
+	change to intermediate output with the most impact. First,
+	it will trigger buffer overflows in many existing variants
+	of post-processors. Second, the way how information about
+	the font is exchanged in the following output is specific
+	to the current version of the AFM handling routines. For
+	all characters that are neither ASCII nor troff special,
+	troff produces "Nnnn" commands, where "nnn" is the position
+	of the character in an encoding that has been produced at
+	runtime while reading the AFM data. The post-processor thus
+	has to know about the encoding, and this is only guaranteed
+	if the AFM routines are the same as for troff.
+	  If this is a problem, use -Tpost and no AFM files. Sorry,
+	but direct handling of Type 1 fonts comes at a certain price.
+
+x H -23 d.d
+	tells the post-processor about the character height, with "d.d"
+	as a fractional point unit. Only generated under comparable
+	circumstances as described for fractional point sizes.
+
+x X PaperSize x y
+	results from the ".papersize" request and gives the paper
+	size as "x" and "y" in points (1/72 i). It is not generated
+	otherwise.
+
+x X PDFMark attribute value
+	includes information that is used by the distiller utility when
+	generating PDF documents. Recognized types of "attribute" are:
+
+	Author		"value" is the author of the document.
+	Bookmark	"value" consists of two space-separated parts:
+			An integer between 0 and 20 specifies the level
+			of the bookmark. Bookmarks of the same level
+			become children of the previous bookmark of the
+			next higher level. The second part of "value"
+			gives the bookmark title.
+	BookmarkClosed	same as "Bookmark", but the initial view in the
+			tree structure is closed, i.e. no children are
+			visible.
+	Keywords	"value" is a comma-separated list of keywords
+			for cross-document searches.
+	Subject		"value" is the subject of the document.
+	Title		"value" is the title of the document.
+
+	This command is not directly generated by troff, but is usable
+	as e.g. "\X'PDFMark: Keywords foo, bar, baz'" or
+	"\X'PDFMark: Bookmark 2 Title of subsection'".
+
+x X SupplyFont fontname filename
+	results from the fourth argument to the extended ".fp" request
+	and instructs the post-processor to include "filename" as glyph
+	data for font "fontname".
+
+x X Sync
+	instructs the post-processor to write position and font information
+	to the generated output exactly at the place where this escape
+	sequence occurs. This is sometimes useful to ensure that
+	following "\X'PS: ...'" commands work as expected. Not directly
+	generated by troff, but usable as "\X'Sync'".
+
+x X Track a
+	gives a hint to the post-processor that the following
+	characters are tracked by amount "a" in units. This is used
+	by dpost for the PostScript "ashow" operator in order to
+	reduce the size of the output. Interpretation of this command
+	is completely optional; it does not change the semantics of
+	the following output. It is only generated with the ".track"
+	request.
+
+
+Gunnar Ritter                                                   9/13/05
