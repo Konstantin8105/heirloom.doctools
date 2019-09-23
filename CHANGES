@@ -1,3 +1,33 @@
+Release 070524
+* [nt]roff: Fixed an endless loop that occurred when ".ns" was active at
+  the end of a document and ".bp" was called from the page trap macro.
+* dpost: When including a picture, the PostScript "save" and "restore"
+  operators are now executed in correct order. Previously, the state
+  before page initialization was restored before including a picture.
+  Thus, graphics attributes such as colors were reset to the state
+  before page initialization, and drawing (as with pic) did not work
+  afterwards but resulted in a PostScript error.
+* [nt]roff: With paragraph-at-once adjustment, if a ".in" was encountered
+  before any input, its argument was ignored. This lead to zero indent in
+  combination with the 6h Edition manual page macros, and has been fixed.
+* troff: Do not break a line at a zero-width character, as e.g. inside a
+  "\X'...'" or "\z'...'".
+* troff: The ".flig" request can now use the \[] names for ff, ffi, and
+  ffl ligatures properly, i.e. ".flig R ff \[ff]" works (bug reported by
+  Sebastian Leusch).
+* troff: Pseudo-ligatures for ff, ffi, and ffl are no longer added to fonts
+  that do not contain the respective base characters. This makes it possible
+  to use a fallback sequence like ".fallback R XX FF", where XX does not
+  contain ff ligatures, but FF does, and to get the ligatures from font FF
+  as expected (bug reported by Sebastian Leusch).
+* [nt]roff: Using ".hy" or ".nh" is now effective for the last word of a
+  "\@{...\@}" inline environment.
+* The file "grap.defines" is now installed again; it was omitted in the
+  previous release.
+* When generating a RPM package, install all manual pages into
+  "/usr/share/man/5man" to avoid conflicts with manual pages of
+  packages supplied by the distribution default packages.
+
 Release 070318
 * [nt]roff: The concept of an "inline environment" has been introduced.
   An inline environment contains the values of the current point size, the
