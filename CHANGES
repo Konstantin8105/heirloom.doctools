@@ -1,3 +1,19 @@
+Release 070908
+* troff: The ".hw" request now works correctly for words that contain
+  ligatures (bug reported by Dirk-Wilhelm Peters).
+* troff: Hyphenate correctly when a hyphenation point occurs inside a
+  ligature that follows a non-ASCII character. Previously, the word was
+  actually hyphenated too early in this situation (bug reported by
+  Dirk-Wilhelm Peters).
+* troff: Clear the font width cache before mounting a Type 1, TrueType,
+  or OpenType font. The previous failure to do so could lead to improper
+  alignment of lines when a font was mounted on the same font position
+  that was previously used (bug reported by Dirk-Wilhelm Peters).
+* [nt]roff: When converting floating point values in exponential notation
+  (1.234e5 etc.) to integers, apply the exponent before computing the final
+  position of the decimal point for better rounding behavior (bug reported
+  by Dirk-Wilhelm Peters).
+
 Release 070524
 * [nt]roff: Fixed an endless loop that occurred when ".ns" was active at
   the end of a document and ".bp" was called from the page trap macro.
