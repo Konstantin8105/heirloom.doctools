@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)ext.h	1.93 (gritter) 10/3/06
+ * Sccsid @(#)ext.h	1.102 (gritter) 11/5/06
  */
 
 /*
@@ -86,6 +86,7 @@ extern	int	clonef;
 extern	int	copyf;
 extern	int	cs;
 extern	int	defaultpl;
+extern	int	defcf;
 extern	int	dfact;
 extern	int	dfactd;
 extern	int	diflg;
@@ -128,6 +129,7 @@ extern	int	minflg;
 extern	int	minspc;
 extern	int	mpts;
 extern	int	ndone;
+extern	struct contab	*newmn;
 extern	int	nflush;
 extern	int	nfo;
 extern	int	nfonts;
@@ -144,9 +146,11 @@ extern	int	npn;
 extern	int	npnflg;
 extern	int	nx;
 extern	int	oldbits;
+extern	struct contab	*oldmn;
 extern	int	*olt;
 extern	int	over;
 extern	int	padc;
+extern	int	padj;
 extern	int	pfont;
 extern	int	pfrom;
 extern	pid_t	pipeflg;
@@ -240,6 +244,7 @@ extern	int	spreadlimit;
 extern	int	lastrq;
 
 /* n1.c */
+extern	void	mainloop(void);
 extern	int	tryfile(char *, char *, int);
 extern	void	catch(int);
 extern	void	kcatch(int);
@@ -305,6 +310,7 @@ extern	void	caseig(void);
 extern	void	casern(void);
 extern	void	maddhash(register struct contab *);
 extern	void	munhash(register struct contab *);
+extern	filep	finds(register int, int, int);
 extern	void	caserm(void);
 extern	void	caseas(void);
 extern	void	caseds(void);
@@ -389,6 +395,7 @@ extern	int	vnumb(int *);
 extern	int	hnumb(int *);
 extern	int	inumb(int *);
 extern	int	inumb2(int *, int *);
+extern	float	atop(void);
 extern	int	quant(int, int);
 extern	tchar	moflo(int);
 /* n5.c */
@@ -397,6 +404,7 @@ extern	void	casead(void);
 extern	void	casena(void);
 extern	void	casefi(void);
 extern	void	casenf(void);
+extern	void	casepadj(void);
 extern	void	casers(void);
 extern	void	casens(void);
 extern	void	casespreadwarn(void);
@@ -411,6 +419,9 @@ extern	void	casenh(void);
 extern	void	casehlm(void);
 extern	void	casehcode(void);
 extern	void	caseshc(void);
+extern	void	casehylen(void);
+extern	void	casehypp(void);
+extern	void	casepshape(void);
 extern	void	caselpfx(void);
 extern	int	max(int, int);
 extern	int	min(int, int);
@@ -516,6 +527,7 @@ extern	void	horiz(int);
 extern	void	setnel(void);
 extern	int	getword(int);
 extern	void	storeword(register tchar, register int);
+extern	void	growpgsize(void);
 /* n8.c */
 extern	void	hyphen(tchar *);
 extern	int	punct(tchar);
@@ -540,6 +552,7 @@ extern	void	setvline(void);
 extern	void	setdraw(void);
 extern	void	casefc(void);
 extern	tchar	setfield(int);
+extern	tchar	setpenalty(void);
 extern	tchar	mkxfunc(int, int);
 extern	void	localize(void);
 extern	void	caselc_ctype(void);

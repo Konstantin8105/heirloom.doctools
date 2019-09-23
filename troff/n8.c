@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n8.c	1.34 (gritter) 9/5/06
+ * Sccsid @(#)n8.c	1.39 (gritter) 11/13/06
  */
 
 /*
@@ -111,7 +111,7 @@ hyphen(tchar *wp)
 		;
 	if (*--i)
 		return;
-	if (!(hyf & 060) && (wdend - wdstart - (dicthnj ? 3 : 4)) < 0)
+	if (!(hyf & 060) && (wdend - wdstart - (hylen - 1)) < 0)
 		return;
 	hyp = hyptr;
 	*hyp = 0;
@@ -186,21 +186,29 @@ alph(tchar j)
 	i = cbits(j);
 	f = fbits(j);
 	if (!ismot(j) && i < nhcode && (h = hcode[i]) != 0) {
-		h = tr2un(h, f);
+		if (h & ~0177)
+			h = tr2un(h, f);
+#ifdef EUC
 		return hyext ? iswalnum(h) : iswalpha(h);
 	} else
-#if !defined (NROFF) && defined (EUC)
+#else	/* !EUC */
+		i = h;
+	}
+#endif	/* !EUC */
+#ifdef EUC
 	if (!ismot(j) && i & ~0177) {
 		int	u;
+#ifndef	NROFF
 		if (islig(j) && hyext &&
 				lgrevtab && lgrevtab[f] && lgrevtab[f][i])
 			return 1;
+#endif	/* !NROFF */
 		u = tr2un(i, f);
 		if (u == 0x017F)	/* longs */
 			u = 's';
 		return hyext ? iswalnum(u) : iswalpha(u);
 	} else
-#endif	/* !NROFF && EUC */
+#endif	/* EUC */
 	if (!ismot(j) && i >= 'a' && i <= 'z' || i >= 'A' && i <= 'Z' ||
 			hyext && i >= '0' && i <= '9')
 		return(1);
@@ -366,19 +374,21 @@ maplow(tchar t)
 		t = charout[sbits(t)].ch;
 	i = cbits(t);
 	f = fbits(t);
-	if (!ismot(i) && i < nhcode && (h = hcode[i]) != 0) {
+	if (!ismot(t) && i < nhcode && (h = hcode[i]) != 0) {
+		if (h & ~0177)
+			h = tr2un(h, f);
 		h = tr2un(h, f);
 		return(h);
 	} else
-#if !defined (NROFF) && defined (EUC)
-	if (!ismot(i) && i & ~0177) {
+#ifdef EUC
+	if (!ismot(t) && i & ~0177) {
 		i = tr2un(i, f);
 		if (i == 0x017F)	/* longs */
 			i = 's';
 		if (iswupper(i))
 			i = towlower(i);
 	} else
-#endif	/* !NROFF && EUC */
+#endif	/* EUC */
 	if (ischar(i) && isupper(i)) 
 		i = tolower(i);
 	return(i);
@@ -533,7 +543,7 @@ addc(int m, char **cp, tchar **wp, int **wpp, int distance)
 		*(*cp)++ = m >> 12 & 017 | 0340;
 		*(*wpp)++ = distance;
 		*(*cp)++ = m >> 6 & 077 | 0200;
-		*(*wp)++ = -1000;
+		*(*wpp)++ = -1000;
 		*(*cp)++ = m & 077 | 0200;
 		*(*wpp)++ = -1000;
 	} else

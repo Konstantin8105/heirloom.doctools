@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n2.c	1.32 (gritter) 9/11/06
+ * Sccsid @(#)n2.c	1.41 (gritter) 11/13/06
  */
 
 /*
@@ -58,20 +58,8 @@
 #include <setjmp.h>
 #ifdef EUC
 #include <limits.h>
-#ifdef NROFF
-#include <stddef.h>
-#ifdef	__sun
-#include <widec.h>
-#else
-#include <wchar.h>
-#endif
 #include <ctype.h>
 #include <unistd.h>
-
-char mbobuf[MB_LEN_MAX] = {0};
-wchar_t wchar;
-int	nmb1 = 0;
-#endif /* NROFF */
 #endif /* EUC */
 #include "tdef.h"
 #ifdef NROFF
@@ -131,12 +119,7 @@ pchar(register tchar i)
 	default:
 	dfl:
 		if (!xflag || !isdi(i)) {
-#if !defined (EUC) || !defined (NROFF)
 			setcbits(i, tflg ? trnttab[j] : trtab[j]);
-#else	/* EUC && NROFF */
-			if (!multi_locale || (!(j & CSMASK) && !(j & MBMASK1)))
-				setcbits(i, tflg ? trnttab[j] : trtab[j]);
-#endif /* EUC && NROFF */
 			if (xon == 0)
 				setcbits(i, ftrans(fbits(i), cbits(i)));
 		}
@@ -161,7 +144,8 @@ pchar1(register tchar i)
 			dip->flss++;
 		else if (dip->flss > 0)
 			dip->flss--;
-		else if (!ismot(i) && cbits(i) > 32 && !tflg)
+		else if (!ismot(i) && (cbits(i) > 32 || cbits(i) == XFUNC) &&
+				!tflg)
 			i |= DIBIT;
 		wbf(i);
 		dip->op = offset;
@@ -224,11 +208,11 @@ outtp(tchar i)
 {
 	int	j = cbits(i);
 
-#if !defined (NROFF) && defined (EUC)
+#ifdef	EUC
 	if (iscopy(i))
 		fdprintf(ptid, "%lc", j);
 	else
-#endif	/* !NROFF && EUC */
+#endif	/* EUC */
 		fdprintf(ptid, "%c", j);
 }
 

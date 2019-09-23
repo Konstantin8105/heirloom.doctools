@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n3.c	1.165 (gritter) 10/5/06
+ * Sccsid @(#)n3.c	1.178 (gritter) 11/13/06
  */
 
 /*
@@ -75,13 +75,12 @@ int	strflg;
 tchar *wbuf;
 tchar *corebuf;
 
-static struct contab	*oldmn;
-static struct contab	*newmn;
+struct contab	*oldmn;
+struct contab	*newmn;
 
 static void	mrehash(struct contab *, int, struct contab **);
 static void	_collect(int);
 static struct contab	*_findmn(int, int, int);
-static filep	finds(register int, int, int);
 static void	clrmn(struct contab *);
 static void	caselds(void);
 static void	casewatchlength(void);
@@ -91,8 +90,6 @@ static void	caselength(void);
 static void	caseindex(void);
 static void	caseasciify(void);
 static void	caseunformat(int);
-static void	casepull(void);
-static void	pull(int);
 static int	getls(int, int *, int);
 static void	addcon(int, char *, void(*)(int));
 
@@ -137,6 +134,8 @@ static const struct {
 	{ "hidechar",		(void(*)(int))casehidechar },
 	{ "hlm",		(void(*)(int))casehlm },
 	{ "hylang",		(void(*)(int))casehylang },
+	{ "hylen",		(void(*)(int))casehylen },
+	{ "hypp",		(void(*)(int))casehypp },
 	{ "index",		(void(*)(int))caseindex },
 	{ "itc",		(void(*)(int))caseitc },
 	{ "kern",		(void(*)(int))casekern },
@@ -159,10 +158,11 @@ static const struct {
 	{ "open",		(void(*)(int))caseopen },
 	{ "opena",		(void(*)(int))caseopena },
 	{ "output",		(void(*)(int))caseoutput },
+	{ "padj",		(void(*)(int))casepadj },
 	{ "papersize",		(void(*)(int))casepapersize },
 	{ "psbb",		(void(*)(int))casepsbb },
+	{ "pshape",		(void(*)(int))casepshape },
 	{ "pso",		(void(*)(int))casepso },
-	{ "pull",		(void(*)(int))casepull },
 	{ "rchar",		(void(*)(int))caserchar },
 	{ "recursionlimit",	(void(*)(int))caserecursionlimit },
 	{ "return",		(void(*)(int))casereturn },
@@ -201,6 +201,7 @@ _growcontab(struct contab **contp, int *NMp, struct contab ***hashp)
 {
 	int	i, j, inc = 256;
 	struct contab	*onc;
+	struct s	*s;
 
 	onc = *contp;
 	if ((*contp = realloc(*contp, (*NMp+inc) * sizeof **contp)) == NULL)
@@ -226,6 +227,14 @@ _growcontab(struct contab **contp, int *NMp, struct contab ***hashp)
 			if ((*contp)[i].link)
 				(*contp)[i].link = (struct contab *)
 					((char *)((*contp)[i].link) + j);
+		for (s = frame; s != stk; s = s->pframe)
+			if (s->contp >= onc && s->contp < &onc[*NMp])
+				s->contp = (struct contab *)
+					((char *)(s->contp) + j);
+		for (i = 0; i <= dilev; i++)
+			if (d[i].soff >= onc && d[i].soff < &onc[*NMp])
+				d[i].soff = (struct contab *)
+					((char *)(d[i].soff) + j);
 	}
 	*NMp += inc;
 	return *contp;
@@ -576,7 +585,7 @@ clrmn(struct contab *contp)
  * Note: finds() may invalidate the result of a previous findmn()
  * for another macro since it may call growcontab().
  */
-static filep 
+filep 
 finds(register int mn, int als, int globonly)
 {
 	register tchar i;
@@ -880,6 +889,11 @@ rbf (void)		/*return next char from blist[] block*/
 		else
 			return(popi());
 	}
+	if (ip == -2) {
+		errprint("Bad storage while processing paragraph");
+		ip = 0;
+		done2(-5);
+	}
 	/* this is an inline expansion of rbf0: dirty! */
 	i = corebuf[ip];
 	/* end of rbf0 */
@@ -946,8 +960,6 @@ popi(void)
 	sfree(p);
 	if (p->contp != NULL)
 		p->contp->flags &= ~FLAG_USED;
-	if (p->pull > 0)
-		pull(p->mname);
 	frame = p->pframe;
 	ip = p->pip;
 	pendt = p->ppendt;
@@ -963,6 +975,8 @@ popi(void)
 		if (p->loopf & LOOP_FREE)
 			ffree(p->newip);
 	free(p);
+	if (frame->flags & FLAG_PARAGRAPH)
+		longjmp(*frame->jmp, 1);
 	return(c);
 }
 
@@ -1533,12 +1547,9 @@ prwatch(struct contab *contp, int rq, int prc)
 		while ((c = rbf()) != 0) {
 			while (isxfunc(c, CHAR))
 				c = charout[sbits(c)].ch;
-#if !defined (NROFF) && defined (EUC)
 			if (iscopy(c) && (k = wctomb(&buf[j], cbits(c))) > 0)
 				j += k;
-			else
-#endif	/* !NROFF && EUC */
-			if (ismot(c))
+			else if (ismot(c))
 				buf[j++] = '?';
 			else if ((k = cbits(c)) < 0177) {
 				if (isprint(k))
@@ -1766,7 +1777,8 @@ casesubstring(void)
 						st = 1;
 				}
 				if (st == 1) {
-					wbf(tp[j]);
+					if (tp)
+						wbf(tp[j]);
 					if (j >= n2)
 						break;
 				}
@@ -2002,68 +2014,6 @@ caseunformat(int flag)
 }
 
 
-static void
-casepull(void)
-{
-	struct contab	*contp;
-	int	i, n;
-
-	if (skip(1) || (n = vnumb(NULL)) <= 0 || nonumb)
-		return;
-	if (skip(1) || (i = getrq(0)) == 0)
-		return;
-	if ((contp = findmn(i)) == NULL || !contp->mx) {
-		nosuch(i);
-		return;
-	}
-	nxf->pull = n;
-	control(i, 0);
-}
-
-
-static void
-pull(int i)
-{
-	int	j, k, sz = 0, nlink;
-	tchar	*tp = NULL, c;
-
-	if (dip != d)
-		wbfl();
-	k = 0;
-	app++;
-	while ((c = rbf()) != 0) {
-		if (k >= sz) {
-			sz += 512;
-			tp = realloc(tp, sz * sizeof *tp);
-		}
-		tp[k++] = c;
-	}
-	app--;
-	if ((offset = finds(i, 1, 0)) != 0) {
-		for (j = 0; j < k; j++)
-			wbf(tp[j]);
-		wbt(0);
-		if (oldmn != NULL && (nlink = oldmn->nlink) > 0)
-			k = oldmn->rq;
-		else {
-			k = i;
-			nlink = 0;
-		}
-		clrmn(oldmn);
-		if (newmn) {
-			if (newmn->rq)
-				munhash(newmn);
-			newmn->rq = k;
-			newmn->nlink = nlink;
-			maddhash(newmn);
-			prwatch(newmn, i, 1);
-		}
-	}
-	free(tp);
-	offset = dip->op;
-}
-
-
 /*
  * Tables for names with more than two characters. Any number in
  * contab.rq or numtab.rq that is greater or equal to MAXRQ2 refers
@@ -2231,14 +2181,14 @@ int
 maybemore(int sofar, int flags)
 {
 	char	c, buf[NC+1], pb[] = { '\n', 0 };
-	int	i = 2, n, _raw = raw, _init = init;
+	int	i = 2, n, _raw = raw, _init = init, _app = app;
 
 	if (xflag < 2)
 		return sofar;
 	if (xflag == 2)
 		raw = 1;
 	else
-		init++;
+		app = 0;
 	buf[0] = sofar&BYTEMASK;
 	buf[1] = (sofar>>BYTE)&BYTEMASK;
 	do {
@@ -2261,6 +2211,7 @@ maybemore(int sofar, int flags)
 				cpushback(&buf[2]);
 			raw = _raw;
 			init = _init;
+			app = _app;
 			if (flags & 2) {
 				if (i > 3 && xflag >= 3)
 					sofar = -2;
@@ -2288,6 +2239,7 @@ maybemore(int sofar, int flags)
 		cpushback(pb);
 	raw = _raw;
 	init = _init;
+	app = _app;
 	return MAXRQ2 + n;
 }
 

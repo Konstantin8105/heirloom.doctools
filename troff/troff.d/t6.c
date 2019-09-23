@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)t6.c	1.184 (gritter) 10/9/06
+ * Sccsid @(#)t6.c	1.188 (gritter) 11/2/06
  */
 
 /*
@@ -582,7 +582,7 @@ getkw(tchar c, tchar d)
 	}
 	i = cbits(c);
 	j = cbits(d);
-	if (i == SLANT || j == SLANT || cstab[f])
+	if (i == SLANT || j == SLANT || i == XFUNC || j == XFUNC || cstab[f])
 		return 0;
 	k = 0;
 	if (i >= 32 && j >= 32) {
@@ -996,6 +996,7 @@ tchar setht(void)		/* set character height from \H'...' */
 		n = apts;	/* does this work? */
 	c = CHARHT;
 	c |= ZBIT;
+	setfbits(c, font);
 	setsbits(c, n);
 	return(c);
 }
@@ -1013,7 +1014,8 @@ tchar setslant(void)		/* set slant from \S'...' */
 		n = 0;
 	c = SLANT;
 	c |= ZBIT;
-	setsfbits(c, n+180);
+	setfbits(c, font);
+	setsbits(c, n+180);
 	return(c);
 }
 
@@ -1788,6 +1790,10 @@ caseletadj(void)
 	if (skip(0) || (n = atoi()) == 0) {
 		letspsz = 0;
 		letsps = 0;
+		lspmin = 0;
+		lspmax = 0;
+		lshmin = 0;
+		lshmax = 0;
 		goto ret;
 	}
 	if (skip(1))
@@ -2744,6 +2750,12 @@ un2tr(int c, int *fp)
 		else if ((c & ~0177) == 0) {
 			illseq(c, NULL, 0);
 			return 0;
+		} else if (defcf && (c & ~0xffff) == 0) {
+			char	buf[20];
+			sprintf(buf, "[uni%04X]", c);
+			cpushback(buf);
+			unadd(c, NULL);
+			return WORDSP;
 		} else {
 			if (warn & WARN_CHAR)
 				errprint("no glyph available for %U", c);

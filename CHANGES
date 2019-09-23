@@ -1,3 +1,86 @@
+Release 061114
+* [nt]roff: The units "t" (printer's point), "T" (printer's pica), "D"
+  (Didot point) and "C" (cicero) have been introduced.
+* [nt]roff: ".ad p" mode no longer employs a temporary diversion; the
+  lines are now written directly to the current output level, possibly
+  interrupted by trap processing. This makes it possible to use "'in"
+  and ".ll" inside a paragraph, although the line breaking decisions
+  may be suboptimal in this case.
+* [nt]roff: The ".hypp" request now accepts a third argument specifying
+  a penalty for hyphenating the last word of a paragraph.
+* nroff: Characters are now internally stored as 64-bit integers as
+  in troff. As a consequence, hyphenation of words in international
+  languages now works if non-ASCII characters are involved.
+* [nt]roff: A memory allocation error that could occur with extensive
+  use of output-line traps has been fixed.
+* [nt]roff: A control character written in a diversion is now correctly
+  interpreted when the diversion is re-read (unless in groff compatibility
+  mode). This fixes the ".AU" macro of "-mm".
+* [nt]roff: The "\R" escape sequence works correctly again; in the last
+  release, it had inserted the letter "R" into the text.
+* [nt]roff: Long names including a string in their name are now handled
+  correctly, e.g. ".nr x\*yz 1" no longer tries to set the register "x\*y"
+  to the value "z".
+* [nt]roff: Fixed some more memory access problems that had been introduced
+  with support for local variables.
+* [nt]roff: Fixed a non-local goto error that could lead to segmentation
+  faults with ".ad p" at the end of the input.
+* [nt]roff: Fixed a problem in ".bp" that could lead to the page number
+  being reset to zero in ".ad p" mode.
+* [nt]roff: A null pointer dereference in ".ad p" mode that occured when
+  nofill mode was activated while a partial paragraph was present has been
+  fixed.
+* -ms: The ".IX" index macro now works in ".padj" mode.
+* -me: The ".(x" and ".)x" index macros now work in ".padj" mode.
+* A "-mpadj" macro set has been added. It simply executes ".do padj"
+  and is useful to enable paragraph-at-once adjustment from the command
+  line.
+
+Release 061106
+* [nt]roff: Support for paragraph-based justification has been added,
+  enabled with ".ad p". The "Justification in Heirloom Troff" document
+  has been expanded to cover the new features.
+* [nt]roff: The ".hylen" request has been introduced to control the
+  minimum number of characters a word must contain in order to be subject
+  to hyphenation. The default is 5 independent of whether the ".hylang"
+  request is active (in that case, it previously had been 4).
+* [nt]roff: The ".pshape" request has been introduced to control the shape
+  of a paragraph in ".ad p" mode.
+* [nt]roff: The ".hypp" request has been introduced to control penalties
+  of hyphenation points in ".ad p" mode.
+* [nt]roff: The ".padj" request has been added; it enables ".ad p" mode
+  globally in all environments. It is most useful to enable paragraph-at-
+  once adjustment in existing documents.
+* [nt]roff: The "\j" escape sequence has been introduced to specify custom
+  penalties for line breaks in ".ad p" mode.
+* troff: The ".char" request is now able to construct replacements for
+  otherwise unknown locale-specific characters.
+* troff: Fixed a typo in the hyphenation code that could result in the
+  insertion of a large negative vertical motion in a word containing a
+  character above Unicode point U+0800.
+* troff: Fixed "\H" and "\S" to become effective if positioned directly
+  after a font change (Bugreport by Dirk-Wilhelm Peters).
+* [nt]roff: The ".pull" request (introduced in the previous release) has
+  been removed again. It is recommended that the traditional approach to
+  re-divert text is used instead.
+* [nt]roff: Fixed an invalid memory access that had been introduced with
+  local strings in the last release.
+* troff: Fixed a segmentation violation if a ligature in a hyphenated
+  word was not in the current font (Bugreport by Dirk-Wilhelm Peters).
+* troff, dpost: Fixed a rounding error when reading TrueType metrics.
+* dpost: Fixed a bug introduced with the previous release that caused
+  PostScript errors on a page following colored text unless the "-e"
+  option was explicitly specified.
+* dpost: Now handles DSC font comments in included PostScript files and
+  supplies glyph data for them if specified with a troff ".fp" request.
+* dpost: Fixed to compile on NetBSD again (Bugreport by Dirk-Wilhelm Peters).
+* eqn: Handles fractional point sizes with "size" and "gsize" now.
+* tbl: Fixed a segmentation fault with empty tables that occurred due
+  to the changed memory layout introduced in the last release.
+* A "Quickstart Guide" document has been added. It is aimed at people
+  who know other variants of troff to some extent and want to explore
+  Heirloom troff.
+
 Release 061010
 * A simplistic XSLT stylesheet to convert OpenDocument text to troff input
   has been added. See the comments in the file "stuff/odt2tr.xsl" for usage

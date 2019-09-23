@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n5.c	1.98 (gritter) 9/11/06
+ * Sccsid @(#)n5.c	1.121 (gritter) 11/13/06
  */
 
 /*
@@ -103,6 +103,8 @@ casead(void)
 	/*leave admod alone*/
 	if (skip(0))
 		return;
+	pa = 0;
+loop:
 	switch (i = cbits(getch())) {
 	case 'r':	/*right adj, left ragged*/
 		admod = 2;
@@ -125,6 +127,14 @@ casead(void)
 	case '3': 
 	case '5':
 		admod = (i - '0') / 2;
+		break;
+	case 'p':
+	case '7':
+		if (xflag) {
+			pa = 1;
+			admod = 0;
+			goto loop;
+		}
 	}
 }
 
@@ -150,6 +160,21 @@ casenf(void)
 {
 	tbreak();
 	fi = 0;
+}
+
+
+void
+casepadj(void)
+{
+	int	n;
+
+	if (skip(0))
+		padj = 1;
+	else {
+		n = atoi();
+		if (!nonumb)
+			padj = n;
+	}
 }
 
 
@@ -301,6 +326,79 @@ caseshc(void)
 }
 
 void
+casehylen(void)
+{
+	int	n;
+
+	if (skip(0))
+		hylen = 5;
+	else {
+		n = atoi();
+		if (!nonumb)
+			hylen = n;
+	}
+}
+
+void
+casehypp(void)
+{
+	float	t;
+
+	if (skip(0))
+		hypp = hypp2 = hypp3 = 0;
+	else {
+		t = atop();
+		if (!nonumb)
+			hypp = t;
+		if (skip(0))
+			hypp2 = hypp3 = 0;
+		else {
+			t = atop();
+			if (!nonumb)
+				hypp2 = t;
+			if (skip(0))
+				hypp3 = 0;
+			else {
+				t = atop();
+				if (!nonumb)
+					hypp3 = t;
+			}
+		}
+	}
+}
+
+void
+casepshape(void)
+{
+	int	i, l;
+
+	pshapes = 0;
+	if (skip(0)) {
+		pshapes = 0;
+		return;
+	}
+	do {
+		dfact = EM;
+		i = atoi();
+		if (nonumb)
+			break;
+		if (skip(0))
+			l = ll;
+		else {
+			dfact = EM;
+			l = atoi();
+			if (nonumb)
+				break;
+		}
+		if (pshapes >= pgsize)
+			growpgsize();
+		pgin[pshapes] = i;
+		pgll[pshapes] = l;
+		pshapes++;
+	} while (!skip(0));
+}
+
+void
 caselpfx(void)
 {
 	int	n;
@@ -434,7 +532,7 @@ casein(void)
 	tbreak();
 	in1 = in;
 	in = i;
-	if (!nc) {
+	if (!nc && !pgwords) {
 		un = in;
 		setnel();
 	}
@@ -682,11 +780,16 @@ casebp(void)
 	if (dip != d)
 		return;
 	savframe = frame;
-	skip(0);
-	if ((i = inumb(&numtab[PN].val)) < 0)
-		i = 0;
+	if (skip(0))
+		i = -1;
+	else {
+		if ((i = inumb(&numtab[PN].val)) < 0)
+			i = 0;
+		if (nonumb)
+			i = -1;
+	}
 	tbreak();
-	if (!nonumb) {
+	if (i >= 0) {
 		npn = i;
 		npnflg++;
 	} else if (dip->nls)
@@ -748,7 +851,6 @@ loop:	for (i = 0; i < NTM - 5 - mb_cur_max; ) {
 			break;
 		}
 	c:	j = cbits(c);
-#if !defined (NROFF) && defined (EUC)
 		if (iscopy(c)) {
 			int	n;
 			if ((n = wctomb(&tmbuf[i], j)) > 0) {
@@ -756,7 +858,6 @@ loop:	for (i = 0; i < NTM - 5 - mb_cur_max; ) {
 				continue;
 			}
 		}
-#endif	/* !NROFF && EUC */
 		if (xflag == 0) {
 			tmbuf[i++] = c;
 			continue;
@@ -969,11 +1070,15 @@ casesp(int a)
 void
 casebrp(void)
 {
-	if (nc) {
-		spread++;
+	if (nc || pgchars) {
+		spread = 2;
 		flushi();
-		pendt++;
-		text();
+		if (pgchars)
+			tbreak();
+		else {
+			pendt++;
+			text();
+		}
 	} else
 		tbreak();
 }
@@ -1202,11 +1307,42 @@ evc(struct env *dp, struct env *sp)
 	dp->_linep = NULL;
 	dp->_wdsize = 0;
 	dp->_word = 0;
+	dp->_wdpenal = 0;
 	dp->_wordp = 0;
 	dp->_spflg = 0;
 	dp->_seflg = 0;
 	dp->_ce = 0;
 	dp->_rj = 0;
+	dp->_pgsize = 0;
+	dp->_pgcsize = 0;
+	dp->_pgssize = 0;
+	dp->_pglines = 0;
+	dp->_pgwords = 0;
+	dp->_pgchars = 0;
+	dp->_pgspacs = 0;
+	dp->_para = NULL;
+	dp->_parsp = NULL;
+	dp->_pgwordp = NULL;
+	dp->_pgspacp = NULL;
+	dp->_pgwordw = NULL;
+	dp->_pghyphw = NULL;
+	dp->_pgadspc = NULL;
+	dp->_pglsphc = NULL;
+	dp->_pgopt = NULL;
+	dp->_pgspacw = NULL;
+	dp->_pgspacp = NULL;
+	dp->_pglgsc = NULL;
+	dp->_pglgec = NULL;
+	dp->_pglgsw = NULL;
+	dp->_pglgew = NULL;
+	dp->_pglgsh = NULL;
+	dp->_pglgeh = NULL;
+	dp->_pgin = NULL;
+	dp->_pgll = NULL;
+	dp->_pgwdin = NULL;
+	dp->_pgwdll = NULL;
+	dp->_pglno = NULL;
+	dp->_pgpenal = NULL;
 	if (dp->_brnl < INT_MAX)
 		dp->_brnl = 0;
 	if (dp->_brpnl < INT_MAX)
@@ -1278,10 +1414,62 @@ evcline(struct env *dp, struct env *sp)
 	memcpy(dp->_line, sp->_line, sp->_lnsize * sizeof *sp->_line);
 	dp->_word = malloc((dp->_wdsize = sp->_wdsize) * sizeof *dp->_word);
 	memcpy(dp->_word, sp->_word, sp->_wdsize * sizeof *sp->_word);
+	dp->_wdpenal = malloc((dp->_wdsize = sp->_wdsize) *
+			sizeof *dp->_wdpenal);
+	memcpy(dp->_wdpenal, sp->_wdpenal, sp->_wdsize * sizeof *sp->_wdpenal);
 	dp->_linep = sp->_linep + (dp->_line - sp->_line);
 	dp->_wordp = sp->_wordp + (dp->_word - sp->_word);
 	dp->_wdend = sp->_wdend + (dp->_word - sp->_word);
 	dp->_wdstart = sp->_wdstart + (dp->_word - sp->_word);
+	dp->_para = malloc((dp->_pgcsize = sp->_pgcsize) * sizeof *dp->_para);
+	memcpy(dp->_para, sp->_para, dp->_pgcsize * sizeof *sp->_para);
+	dp->_parsp = malloc((dp->_pgssize = sp->_pgssize) * sizeof *dp->_parsp);
+	memcpy(dp->_parsp, sp->_parsp, dp->_pgssize * sizeof *sp->_parsp);
+	dp->_pgsize = sp->_pgsize;
+	dp->_pgwordp = malloc(dp->_pgsize * sizeof *dp->_pgwordp);
+	memcpy(dp->_pgwordp, sp->_pgwordp, dp->_pgsize * sizeof *dp->_pgwordp);
+	dp->_pgwordw = malloc(dp->_pgsize * sizeof *dp->_pgwordw);
+	memcpy(dp->_pgwordw, sp->_pgwordw, dp->_pgsize * sizeof *dp->_pgwordw);
+	dp->_pghyphw = malloc(dp->_pgsize * sizeof *dp->_pghyphw);
+	memcpy(dp->_pghyphw, sp->_pghyphw, dp->_pgsize * sizeof *dp->_pghyphw);
+	dp->_pgadspc = malloc(dp->_pgsize * sizeof *dp->_pgadspc);
+	memcpy(dp->_pgadspc, sp->_pgadspc, dp->_pgsize * sizeof *dp->_pgadspc);
+	dp->_pglsphc = malloc(dp->_pgsize * sizeof *dp->_pglsphc);
+	memcpy(dp->_pglsphc, sp->_pglsphc, dp->_pgsize * sizeof *dp->_pglsphc);
+	dp->_pgopt = malloc(dp->_pgsize * sizeof *dp->_pgopt);
+	memcpy(dp->_pgopt, sp->_pgopt, dp->_pgsize * sizeof *dp->_pgopt);
+	dp->_pgspacw = malloc(dp->_pgsize * sizeof *dp->_pgspacw);
+	memcpy(dp->_pgspacw, sp->_pgspacw, dp->_pgsize * sizeof *dp->_pgspacw);
+	dp->_pgspacp = malloc(dp->_pgsize * sizeof *dp->_pgspacp);
+	memcpy(dp->_pgspacp, sp->_pgspacp, dp->_pgsize * sizeof *dp->_pgspacp);
+	dp->_pglgsc = malloc(dp->_pgsize * sizeof *dp->_pglgsc);
+	memcpy(dp->_pglgsc, sp->_pglgsc, dp->_pgsize * sizeof *dp->_pglgsc);
+	dp->_pglgec = malloc(dp->_pgsize * sizeof *dp->_pglgec);
+	memcpy(dp->_pglgec, sp->_pglgec, dp->_pgsize * sizeof *dp->_pglgec);
+	dp->_pglgsw = malloc(dp->_pgsize * sizeof *dp->_pglgsw);
+	memcpy(dp->_pglgsw, sp->_pglgsw, dp->_pgsize * sizeof *dp->_pglgsw);
+	dp->_pglgew = malloc(dp->_pgsize * sizeof *dp->_pglgew);
+	memcpy(dp->_pglgew, sp->_pglgew, dp->_pgsize * sizeof *dp->_pglgew);
+	dp->_pglgsh = malloc(dp->_pgsize * sizeof *dp->_pglgsh);
+	memcpy(dp->_pglgsh, sp->_pglgsh, dp->_pgsize * sizeof *dp->_pglgsh);
+	dp->_pglgeh = malloc(dp->_pgsize * sizeof *dp->_pglgeh);
+	memcpy(dp->_pglgeh, sp->_pglgeh, dp->_pgsize * sizeof *dp->_pglgeh);
+	dp->_pgin = malloc(dp->_pgsize * sizeof *dp->_pgin);
+	memcpy(dp->_pgin, sp->_pgin, dp->_pgsize * sizeof *dp->_pgin);
+	dp->_pgll = malloc(dp->_pgsize * sizeof *dp->_pgll);
+	memcpy(dp->_pgll, sp->_pgll, dp->_pgsize * sizeof *dp->_pgll);
+	dp->_pgwdin = malloc(dp->_pgsize * sizeof *dp->_pgwdin);
+	memcpy(dp->_pgwdin, sp->_pgwdin, dp->_pgsize * sizeof *dp->_pgwdin);
+	dp->_pgwdll = malloc(dp->_pgsize * sizeof *dp->_pgwdll);
+	memcpy(dp->_pgwdll, sp->_pgwdll, dp->_pgsize * sizeof *dp->_pgwdll);
+	dp->_pglno = malloc(dp->_pgsize * sizeof *dp->_pglno);
+	memcpy(dp->_pglno, sp->_pglno, dp->_pgsize * sizeof *dp->_pglno);
+	dp->_pgpenal = malloc(dp->_pgsize * sizeof *dp->_pgpenal);
+	memcpy(dp->_pgpenal, sp->_pgpenal, dp->_pgsize * sizeof *dp->_pgpenal);
+	dp->_pgwords = sp->_pgwords;
+	dp->_pgchars = sp->_pgchars;
+	dp->_pgspacs = sp->_pgspacs;
+	dp->_pglines = sp->_pglines;
 }
 
 void
@@ -1295,7 +1483,53 @@ relsev(struct env *ep)
 	ep->_lnsize = 0;
 	free(ep->_word);
 	ep->_word = NULL;
+	free(ep->_wdpenal);
+	ep->_wdpenal = NULL;
 	ep->_wdsize = 0;
+	free(ep->_para);
+	ep->_para = NULL;
+	ep->_pgcsize = 0;
+	free(ep->_pgwordp);
+	ep->_pgwordp = NULL;
+	free(ep->_pgwordw);
+	ep->_pgwordw = NULL;
+	free(ep->_pghyphw);
+	ep->_pghyphw = NULL;
+	free(ep->_pgadspc);
+	ep->_pgadspc = NULL;
+	free(ep->_pglsphc);
+	ep->_pglsphc = NULL;
+	free(ep->_pgopt);
+	ep->_pgopt = NULL;
+	free(ep->_pgspacw);
+	ep->_pgspacw = NULL;
+	free(ep->_pgspacp);
+	ep->_pgspacp = NULL;
+	free(ep->_pglgsc);
+	ep->_pglgsc = NULL;
+	free(ep->_pglgec);
+	ep->_pglgec = NULL;
+	free(ep->_pglgsw);
+	ep->_pglgsw = NULL;
+	free(ep->_pglgew);
+	ep->_pglgew = NULL;
+	free(ep->_pglgsh);
+	ep->_pglgsh = NULL;
+	free(ep->_pglgeh);
+	ep->_pglgeh = NULL;
+	free(ep->_pgin);
+	ep->_pgin = NULL;
+	free(ep->_pgll);
+	ep->_pgll = NULL;
+	free(ep->_pgwdin);
+	ep->_pgwdin = NULL;
+	free(ep->_pgwdll);
+	ep->_pgwdll = NULL;
+	free(ep->_pglno);
+	ep->_pglno = NULL;
+	free(ep->_pgpenal);
+	ep->_pgpenal = NULL;
+	ep->_pgsize = 0;
 }
 
 void
@@ -1394,13 +1628,6 @@ caseif(int x)
 		tryglf++;
 		if (!skip(1)) {
 			j = getch();
-#if defined (NROFF) && defined (EUC)
-			if (multi_locale && j & MBMASK) {
-				while ((j & MBMASK) != LASTOFMB)
-					j = getch();
-				true++;
-			} else
-#endif	/* NROFF && EUC */
 			true = !ismot(j) && cbits(j) && cbits(j) != ' ';
 		}
 		tryglf--;
@@ -1695,7 +1922,9 @@ rdtty(void)
 {
 	char	onechar;
 #if defined (EUC) && defined (NROFF)
-	int	i, n, col_index;
+	int	i, n;
+
+loop:
 #endif /* EUC && NROFF */
 
 	onechar = 0;
@@ -1715,33 +1944,23 @@ rdtty(void)
 			*mbbuf1p++ = i;
 			*mbbuf1p = 0;
 			if ((*mbbuf1&~(wchar_t)0177) == 0) {
-				twc = *mbbuf1;
-				i |= (BYTE_CHR);
-				setcsbits(i, 0);
 				twc = 0;
 				mbbuf1p = mbbuf1;
+				goto loop;
 			}
 			else if ((n = mbtowc(&twc, mbbuf1, mb_cur_max)) <= 0) {
 				if (mbbuf1p >= mbbuf1 + mb_cur_max) {
-					i &= ~(MBMASK | CSMASK);
+					illseq(-1, mbbuf1, mbbuf1p-mbbuf1);
 					twc = 0;
 					mbbuf1p = mbbuf1;
 					*mbbuf1p = 0;
+					i &= 0177;
 				} else {
-					i |= (MIDDLEOFMB);
+					goto loop;
 				}
 			} else {
 				if (n > 1)
-					i |= (LASTOFMB);
-				else
-					i |= (BYTE_CHR);
-				if ((twc & ~(wchar_t)0177) == 0) {
-					col_index = 0;
-				} else {
-					if ((col_index = wcwidth(twc)) < 0)
-						col_index = 0;
-				}
-				setcsbits(i, col_index);
+					i = twc | COPYBIT;
 				twc = 0;
 				mbbuf1p = mbbuf1;
 			}

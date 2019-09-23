@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)tdef.h	1.136 (gritter) 9/10/06
+ * Sccsid @(#)tdef.h	1.156 (gritter) 11/13/06
  */
 
 /*
@@ -167,6 +167,7 @@
 #define	NSRQ	5	/* number of tchars to store a request */
 #define	CHAR	0022	/* formatted result of a .char execution */
 #define	INDENT	0023	/* current indent (informational only, no move) */
+#define	PENALTY	0024	/* line breaking penalty */
 
 #define	isxfunc(c, x)	(cbits(c) == XFUNC && fbits(c) == (x))
 
@@ -225,7 +226,6 @@ extern	int	NCHARS;	/* maximum size of troff character set */
 
 /*
 	Internal character representation:
-ifndef NROFF
 	Internally, every character is carried around as
 	a 64 bit cookie, called a "tchar" (typedef int64_t).
 	Bits are numbered 63..0 from left to right.
@@ -236,27 +236,8 @@ ifndef NROFF
 		if bit 63	zero motion
 		bits 62..40	size
 		bits 39..32	font
-else NROFF
-	Internally, every character is carried around as
-	a 32 bit cookie, called a "tchar" (typedef int32_t).
-	Bits are numbered 31..0 from left to right.
-	If bit 15 is 1, the character is motion, with
-		if bit 16 it's vertical motion
-		if bit 17 it's negative motion
-	If bit 15 is 0, the character is a real character.
-		if bit 31	zero motion
-		bits 28..24	size
-		bits 23..16	font
-ifdef EUC
-		bits 14,13	identifier for the colunm of print of character.
-		bits 12,11	multibyte position identifier
-	This applies only to nroff; troff stores wide characters
-	as PostScript characters.
-endif EUC
-endif NROFF
 */
 
-#ifndef	NROFF
 /* in the following, "LL" should really be a tchar, but ... */
 
 #define	MOT	(01LL<<21)	/* motion character indicator */
@@ -307,79 +288,16 @@ endif NROFF
 #define	setsfbits(n,sf)	n = (n & ~SFMASK) | (tchar)(sf) << 32
 #define	setcbits(n,c)	n = (n & ~0x001FFFFFLL | (c))	/* set character bits */
 
-#else	/* NROFF */
-/* in the following, "L" should really be a tchar, but ... */
-
-#define	MOT	(01L<<15)	/* motion character indicator */
-#define	MOTV	(07L<<15)	/* clear for motion part */
-#define	VMOT	(01L<<16)	/* vert motion bit */
-#define	NMOT	(01L<<17)	/* negative motion indicator*/
-#define	MAXMOT	32767	/* bad way to write this!!! */
-#define	ismot(n)	((n) & MOT)
-#define	isvmot(n)	((n) & VMOT)	/* must have tested MOT previously */
-#define	isnmot(n)	((n) & NMOT)	/* ditto */
-#define	absmot(n)	(unsigned)(0177777 & (n) & ~MOT)	/* (short) is cheap mask */
-#define	sabsmot(n)	(!xflag || (n) <= MAXMOT ? (n)&0177777 : moflo(n))
-
-#define	ZBIT	0x80000000 	/*  (01L << 31) */	/* zero width char */
-#define	iszbit(n)	((n) & ZBIT)
-#define	BLBIT	0x40000000	/* optional break-line char */
-#define	isblbit(n)	((n) & BLBIT)
-#define	COPYBIT	0x20000000	 /* wide character in copy mode */
-#define	iscopy(n)	((n) & COPYBIT && !ismot(n) && cbits(n) & ~0177)
-#define	ADJBIT	0x20000000	/* adjusted space */
-#define	isadjspc(n)	((n) & ADJBIT && !ismot(n) && (cbits(n) & ~0177) == 0 \
-				&& cbits(n) != FILLER)
-#define	isadjmot(n)	((n) & ADJBIT && ismot(n))
-#define	TRANBIT	0x20000000	/* transparent filler */
-#define	istrans(n)	((n) & TRANBIT && cbits(n) == FILLER)
-#define	TAILBIT	0x10000000	/* tail recursion */
-#define	istail(n)	(((n) & (TAILBIT|MOT|'\n')) == (TAILBIT|'\n'))
-#define	ABSCHAR		0400	/* absolute char number in this font */
-#define	AUTOLIG	0		/* ligature substituted automatically */
-#define	islig(n)	((n) ? 0 : 0)
-#define	SENTSP		0	/* sentence space */
-#define	issentsp(n)	((n) ? 0 : 0)
-#define	DIBIT	0		/* written in a diversion */
-#define	isdi(n)		((n) ? 0 : 0)
-
-#define	SMASK		(0037L << 24)
-#define	FMASK		(0377L << 16)
-#define	SFMASK		(SMASK|FMASK)	/* size and font in a tchar */
-#define	sbits(n)	(unsigned)(((n) >> 24) & 0037)
-#define	fbits(n)	(((n) >> 16) & 0377)
-#define	sfbits(n)	(unsigned)(0177777 & (((n) & SFMASK) >> 16))
-#define	cbits(n)	(unsigned)(0177777 & (n))	/* isolate bottom 16 bits  */
-#define	absbits(n)	(cbits(n) & ~ABSCHAR)
-
-#define	setsbits(n,s)	n = (n & ~SMASK) | (tchar)(s) << 24
-#define	setfbits(n,f)	n = (n & ~FMASK) | (tchar)(f) << 16
-#define	setsfbits(n,sf)	n = (n & ~SFMASK) | (tchar)(sf) << 16
-#define	setcbits(n,c)	n = (n & ~077777L | (c))	/* set character bits */
-#endif	/* NROFF */
-
 #define	BYTEMASK	0377
 #define	BYTE	8
 
 #define	ischar(n)	(((n) & ~BYTEMASK) == 0)
 
-#if defined (EUC) && defined (NROFF)
-#define CSMASK	0x6000	/* colunm of print identifier */
-#define MBMASK	0x1c00	/* bits identifying position in a multibyte char */
-#define MBMASK1	0x1800
-#define FIRSTOFMB	0x1000
-#define MIDDLEOFMB	0x0800
-#define LASTOFMB	0x0400
-#define BYTE_CHR	0x0000
-#define	cs(n)	(((n) & CSMASK) >> 13)	/* colum of print of character */
-#define	setcsbits(n,c)	n = ((n & ~CSMASK) | ((c) << 13))
-#define CHMASK	(BYTEMASK | CSMASK | MBMASK)
+#if defined (NROFF) && defined (EUC) && defined (ZWDELIMS)
 #define ZWDELIM1	ZBIT | FIRSTOFMB | ' '	/* non-ASCII word delimiter 1 */
 #define ZWDELIM2	ZBIT | MIDDLEOFMB | ' '	/* non-ASCII word delimiter 2 */
 #define ZWDELIM(c)	((c) == 0) ? ' ' : ((c) == 1) ? ZWDELIM1 : ZWDELIM2
-#else	/* !EUC || !NROFF */
-#define	MBMASK	0
-#endif	/* !EUC || !NROFF */
+#endif	/* NROFF && EUC && ZWDELIMS */
 
 #define	ZONE	5	/* 5 hrs for EST */
 #define	TABMASK	0x3FFFFFFF
@@ -392,17 +310,17 @@ endif NROFF
 #define	LGBIT	020
 #define	CHBIT	040
 
+#define	INFPENALTY0	(1e6)
+#define	INFPENALTY	(1e9)
+#define	MAXPENALTY	(1e6)
+#define	PENALSCALE	(1.0/50)
+
 #define	PAIR(A,B)	(A|(B<<BYTE))
 #define	LOOP		(-4)
 
 #ifndef EUC
 #define	oput(c)	if ((*obufp++ = (c)), obufp >= &obuf[OBUFSZ]) flusho(); else
 #else
-#ifdef notdef
-#ifndef NROFF
-#define	oput(c)	if ((*obufp++ = (c)), obufp >= &obuf[OBUFSZ]) flusho(); else
-#endif /* NROFF */
-#endif
 #define	oput(c)	if ((*obufp++ = cbits(c) & BYTEMASK), obufp >= &obuf[OBUFSZ]) flusho(); else
 #endif /* EUC */
 
@@ -459,12 +377,9 @@ typedef long filep;
 #define	ENV_BLK		((NEV * sizeof(env) / sizeof(tchar) + BLK-1) / BLK)
 				/* rounded up to even BLK */
 
+#include <setjmp.h>
 #include <inttypes.h>
-#ifndef	NROFF
 typedef	int64_t		tchar;
-#else	/* NROFF */
-typedef	int32_t		tchar;
-#endif	/* NROFF */
 
 extern	int	Inch, Hor, Vert, Unitwidth;
 
@@ -547,7 +462,8 @@ enum flags {
 	FLAG_STRING	= 02,
 	FLAG_USED	= 04,
 	FLAG_DIVERSION	= 010,
-	FLAG_LOCAL	= 020
+	FLAG_LOCAL	= 020,
+	FLAG_PARAGRAPH	= 040
 };
 
 struct	d {	/* diversion */
@@ -592,7 +508,6 @@ struct	s {	/* stack frame */
 	int	frame_cnt;
 	int	tail_cnt;
 	struct contab	*contp;
-	int	pull;
 	struct numtab	*numtab;
 	struct numtab	**nhash;
 	struct contab	*contab;
@@ -605,6 +520,7 @@ struct	s {	/* stack frame */
 		LOOP_EVAL = 04
 	} loopf;
 	enum flags	flags;
+	jmp_buf	*jmp;
 };
 
 extern struct contab {
@@ -729,6 +645,10 @@ struct acc {
 #define	hyoff	env._hyoff
 #define	hlm	env._hlm
 #define	hlc	env._hlc
+#define	hylen	env._hylen
+#define	hypp	env._hypp
+#define	hypp2	env._hypp2
+#define	hypp3	env._hypp3
 #define	un1	env._un1
 #define	tabc	env._tabc
 #define	dotc	env._dotc
@@ -739,6 +659,7 @@ struct acc {
 #define	admod	env._admod
 #define	adflg	env._adflg
 #define	adspc	env._adspc
+#define	pa	env._pa
 #define	wordp	env._wordp
 #define	spflg	env._spflg
 #define	seflg	env._seflg
@@ -774,6 +695,17 @@ struct acc {
 #define	itmac	env._itmac
 #define	lnsize	env._lnsize
 #define	wdsize	env._wdsize
+#define	pgsize	env._pgsize
+#define	pgcsize	env._pgcsize
+#define	pgssize	env._pgssize
+#define	pgchars	env._pgchars
+#define	pgspacs	env._pgspacs
+#define	pgwords	env._pgwords
+#define	pglines	env._pglines
+#define	pglnout	env._pglnout
+#define	pshapes	env._pshapes
+#define	pgne	env._pgne
+#define	pglastw	env._pglastw
 #define	linkin	env._linkin
 #define	linkout	env._linkout
 #define	linkhp	env._linkhp
@@ -794,10 +726,33 @@ struct acc {
 #define	tabtab	env._tabtab
 #define	line	env._line
 #define	word	env._word
+#define	wdpenal	env._wdpenal
 #define	sentch	env._sentch
 #define	transch	env._transch
 #define	breakch	env._breakch
 #define	nhych	env._nhych
+#define	para	env._para
+#define	parsp	env._parsp
+#define	pgwordp	env._pgwordp
+#define	pgspacp	env._pgspacp
+#define	pgwordw	env._pgwordw
+#define	pghyphw	env._pghyphw
+#define	pgadspc	env._pgadspc
+#define	pglsphc	env._pglsphc
+#define	pgopt	env._pgopt
+#define	pgspacw	env._pgspacw
+#define	pglgsc	env._pglgsc
+#define	pglgec	env._pglgec
+#define	pglgsw	env._pglgsw
+#define	pglgew	env._pglgew
+#define	pglgsh	env._pglgsh
+#define	pglgeh	env._pglgeh
+#define	pgin	env._pgin
+#define	pgll	env._pgll
+#define	pgwdin	env._pgwdin
+#define	pgwdll	env._pgwdll
+#define	pglno	env._pglno
+#define	pgpenal	env._pgpenal
 #define	evname	env._evname
 
 extern struct env {
@@ -857,6 +812,10 @@ extern struct env {
 	int	_hyoff;
 	int	_hlm;
 	int	_hlc;
+	int	_hylen;
+	float	_hypp;
+	float	_hypp2;
+	float	_hypp3;
 	int	_un1;
 	int	_tabc;
 	int	_dotc;
@@ -867,6 +826,7 @@ extern struct env {
 	int	_admod;
 	int	_adflg;
 	int	_adspc;
+	int	_pa;
 	tchar	*_wordp;
 	int	_spflg;
 	int	_seflg;
@@ -902,6 +862,17 @@ extern struct env {
 	int	_itmac;
 	int	_lnsize;
 	int	_wdsize;
+	int	_pgsize;
+	int	_pgcsize;
+	int	_pgssize;
+	int	_pgchars;
+	int	_pgspacs;
+	int	_pgwords;
+	int	_pglines;
+	int	_pglnout;
+	int	_pshapes;
+	int	_pgne;
+	int	_pglastw;
 	int	_linkin;
 	int	_linkout;
 	int	_linkhp;
@@ -926,5 +897,28 @@ extern struct env {
 	int	_nhych[NSENT];
 	tchar	*_line;
 	tchar	*_word;
+	int	*_wdpenal;
+	tchar	*_para;
+	tchar	*_parsp;
+	int	*_pgwordp;
+	int	*_pgspacp;
+	int	*_pgwordw;
+	int	*_pghyphw;
+	int	*_pgadspc;
+	int	*_pglsphc;
+	int	*_pgopt;
+	int	*_pgspacw;
+	tchar	*_pglgsc;
+	tchar	*_pglgec;
+	tchar	*_pglgsw;
+	tchar	*_pglgew;
+	tchar	*_pglgsh;
+	tchar	*_pglgeh;
+	int	*_pgin;
+	int	*_pgll;
+	int	*_pgwdin;
+	int	*_pgwdll;
+	int	*_pglno;
+	float	*_pgpenal;
 	char	*_evname;
 } env, initenv;

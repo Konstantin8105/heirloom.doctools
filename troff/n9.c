@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n9.c	1.64 (gritter) 9/11/06
+ * Sccsid @(#)n9.c	1.66 (gritter) 11/5/06
  */
 
 /*
@@ -637,6 +637,31 @@ rtn:
 
 
 tchar
+setpenalty(void)
+{
+	tchar	c, delim;
+	int	n;
+
+	if (ismot(delim = getch()))
+		return 0;
+	noscale++;
+	n = atoi();
+	noscale--;
+	if (nonumb)
+		return 0;
+	c = getch();
+	if (!issame(c, delim))
+		nodelim(delim);
+	if (n > INFPENALTY0)
+		n = INFPENALTY0;
+	else if (n < -INFPENALTY0)
+		n = -INFPENALTY0;
+	n += INFPENALTY0 + 1;
+	return mkxfunc(PENALTY, n);
+}
+
+
+tchar
 mkxfunc(int f, int s)
 {
 	tchar	t = XFUNC;
@@ -837,13 +862,13 @@ getpsbb(const char *name, double bb[4])
 				atend++;
 				continue;
 			}
-			bb[0] = strtol(cp, &cp, 10);
+			bb[0] = strtod(cp, &cp);
 			if (*cp)
-				bb[1] = strtol(cp, &cp, 10);
+				bb[1] = strtod(cp, &cp);
 			if (*cp)
-				bb[2] = strtol(cp, &cp, 10);
+				bb[2] = strtod(cp, &cp);
 			if (*cp) {
-				bb[3] = strtol(cp, &cp, 10);
+				bb[3] = strtod(cp, &cp);
 				found = 1;
 			} else
 				errprint("missing arguments to "
@@ -1100,7 +1125,7 @@ illseq(int wc, const char *mb, int n)
 void
 storerq(int i)
 {
-	tchar	tp[6];
+	tchar	tp[NSRQ+1];
 
 	tp[0] = mkxfunc(RQ1, i & 037);
 	tp[1] = mkxfunc(RQ2, i >> 5 & 037);

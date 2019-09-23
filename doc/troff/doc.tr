@@ -43,12 +43,13 @@
 .\"
 .\"
 .\" Changes by Gunnar Ritter, Freiburg i. Br., Germany, February 2006.
-.\" Sccsid @(#)doc.tr	1.153 (gritter) 10/5/06
+.\" Sccsid @(#)doc.tr	1.175 (gritter) 11/10/06
 .\"
 .\" from file m.mac
 .do xflag 3
 .warn
 .mediasize letter
+.lc_ctype en_US.utf8
 .fps math,greek 1 R times ttf
 .fp 2 I timesi ttf
 .fp 3 B timesbd ttf
@@ -98,7 +99,7 @@
 .fallback BI BIE
 .flig BI 31
 ..
-.ds Sccsdate 10/5/06
+.ds Sccsdate 11/10/06
 .ds Str \*[Sccsdate]
 .substring Str 0 0
 .if '\*[Str]'%' \{\
@@ -160,6 +161,7 @@
 .ds GR: "\fIgroff:\fR
 .ds PS "\fRPostScript\fR
 .ds PDF "\s-1PDF\s+1
+.ds TEX "\fIT\h'-.13m'\v'.165m'E\v'-.165m'\h'-.01m'X\fR
 .ds H
 .nr PS 10
 .nr PO 1i
@@ -179,12 +181,14 @@
 .nr m -1i
 .nr x 0 1
 .nr y 0+\nmu
+.ad p
 .ii
 .ev 1
 .ps \n(PS-2
 .vs \n(PS
 .ll 6.5i
 'in 0
+.ad p
 .ev
 .tr &.
 .de xx
@@ -376,6 +380,7 @@ Form	Value\\$2	Argument	Notes\\$1	Explanation
 .de bt
 .ft R
 .xx
+.nr nosave 1
 .ne 1.1
 .ti 0
 .nr nosave 0
@@ -463,11 +468,13 @@ Form	Value\\$2	Argument	Notes\\$1	Explanation
 .xx
 .in .5i
 .nf
+.nr nosave 1
 ..
 .de x2
 .xx
 .in 0
 .fi
+.nr nosave 0
 ..
 .de EM
 .br
@@ -477,6 +484,7 @@ Form	Value\\$2	Argument	Notes\\$1	Explanation
 ..
 .em EM
 .de TS
+.br
 .nr nosave 1
 .sp
 .ie '\\$1'H' \{\
@@ -678,14 +686,36 @@ The last form allows direct input of international language texts
 in almost any character encoding,
 including \s-1UTF\s+1-8.
 .pg
+Improvements to the line adjusting mechanism
+can be activated to achieve more aesthetically pleasant output:
+\*(TR can compute line breaks for a whole paragraph at once,
+using a variant of an algorithm
+originally developed by Donald Knuth and Michael Plass
+for the \*[TEX] system\T'ref_7'\|\*u7\*d\T.
+Interword spaces can be shrunk
+as an alternative to being expanded.
+Inter-letter spaces and letter shapes
+can be dynamically varied
+both for computing break points
+and for adjusting output lines;
+this is sometimes called ``micro-typography'',
+cf. e.g. the thesis by Hàn Thế Thành\T'ref_8'\|\*u8\*d\T.
+All paragraph formatting options can be arbitrarily combined.
+.pg
 A variety of international paper formats
 and hyphenation languages are supported by \*[TR.]
+The algorithm for the latter is derived
+from the respective one developed for \*[TEX]
+by Franklin Liang\T'ref_9'\|\*u9\*d\T;
+\*(TR uses the implementation of \fILibHnj\fR by Raph Levien.
+\*[TEX] hyphenation patterns can be converted
+to the format accepted by \*[TR.]
 .pg
 Many internal limitations of \*(TR have been removed;
 most notably, \*(TR can now set characters in fractional point sizes.
 .pg
 The \*(TR language has been extended
-similarly as in the \s-1GNU\s+1 version of \*[TR,] \T'ref_7'\*(GR\|\*u7\*d\T;
+similarly as in the \s-1GNU\s+1 version of \*[TR,] \T'ref_10'\*(GR\|\*u10\*d\T;
 for example,
 names of requests, macros, strings, number registers, and fonts
 can consist of more than two characters.
@@ -729,9 +759,9 @@ of how to write well-styled \*(NR documents.
 .pg
 This manual as well as some of the pre- and post-processor commands
 have been derived from \s-1UNIX\s+1 code
-re\%leased by \T'ref_8'Caldera\*u8\*d\T,
+re\%leased by \T'ref_11'Caldera\*u11\*d\T,
 and from materials released by Lucent as parts
-of the \T'ref_9'\fIPlan\ 9\fR system\*u9\*d\T.
+of the \T'ref_12'\fIPlan\ 9\fR system\*u12\*d\T.
 .pg
 .ft B
 Background to the Second Edition
@@ -859,10 +889,16 @@ Comments and bug reports should be sent to Gunnar Ritter,
 .ft B
 References
 .pg
-.ta .3i
+.ta .2iR .3i
 .in .3i
+.de ref
 .ti 0
-\A'ref_1'[1]	M. D. McIllroy, B. W. Kernighan (Eds.),
+.sp .4
+	\A'ref_\\$1'[\\$1]	\c
+..
+.ns
+.ref 1
+M. D. McIllroy, B. W. Kernighan (Eds.),
 .ul
 Unix Programmer's Manual,
 Vol.\|2,
@@ -870,39 +906,46 @@ AT\[ampersand]T Bell Laboratories,
 Murray Hill,
 \s-1NJ\s+1 07974, 1979;
 <http://plan9.bell-labs.com/7thEdMan/index.html>.
-.sp .4
-.ti 0
-\A'ref_2'[2]	B. W. Kernighan, L. L. Cherry,
-.ul
-Typesetting Mathematics \(em User's Guide (Second Edition),
+.ref 2
+B. W. Kernighan, L. L. Cherry,
+``Typesetting Mathematics \(em User's Guide (Second Edition)'',
 in [1].
-.sp .4
-.ti 0
-\A'ref_3'[3]	M. E. Lesk,
-.ul
-Tbl \(em A Program to Format Tables,
+.ref 3
+M. E. Lesk,
+``Tbl \(em A Program to Format Tables'',
 in [1].
-.sp .4
-.ti 0
-\A'ref_4'[4]	B. W. Kernighan, \fIA TROFF Tutorial\fR,
+.ref 4
+B. W. Kernighan, ``A TROFF Tutorial'',
 in [1].
-.sp .4
-.ti 0
-\A'ref_5'[5]	J. F. Ossanna, ``Nroff/Troff User's Manual'',
+.ref 5
+J. F. Ossanna, ``Nroff/Troff User's Manual'',
 in [1].
-.sp .4
-.ti 0
-\A'ref_6'[6]	<http://www.opensolaris.org>
-.sp .4
-.ti 0
-\A'ref_7'[7]	<http://groff.ffii.org>
-.sp .4
-.ti 0
-\A'ref_8'[8]	<http://www.tuhs.org/Archive/Caldera-license.pdf>
-.sp .4
-.ti 0
-\A'ref_9'[9]	<http://plan9.bell-labs.com/plan9>
-'in 0
+.ref 6
+<http://www.opensolaris.org>
+.ref 7
+D. E. Knuth, M. F. Plass,
+``Breaking paragraphs into lines'',
+\fISoftware\(emPractice and Experience\fR,
+Vol. 11, Issue 12 (1981), pp.\ 1119\(en1184;
+also in D. E. Knuth, \fIDigital Typography\fR,
+Stanford, 1999 (\s-1CSLI\s0 lecture notes no. 78),
+pp.\ 67\(en155.
+.ref 8
+Hàn Thế Thành, \fIMicro-typographic extensions to the \*[TEX]\fI
+typesetting system\fR,
+Masaryk University Brno, 2000.
+.ref 9
+F. M. Liang, \fIWord Hy-phen-a-tion by Com-put-er\fR,
+Stanford University, \s-1CA\s0 94305,
+Report No. \s-1STAN\s0-\s-1CS\s0-83-977,
+1983.
+.ref 10
+<http://groff.ffii.org>
+.ref 11
+<http://www.tuhs.org/Archive/Caldera-license.pdf>
+.ref 12
+<http://plan9.bell-labs.com/plan9>
+.in 0
 .pg
 .nr nosave 1
 .bp
@@ -1293,9 +1336,11 @@ Text Filling, Adjusting, and Centering
 .b1
 \T'nf'\fB&nf\fR	fill	\(en	B,E	No filling or adjusting of output lines.\T
 .b1
-\T'ad'\fB&ad\fI|c\fR	adj,both	adjust	E	Adjust output lines with mode \fIc\fR; \fIc\fP\^=\^l,\^r,\^c,\^b,\^\fInone\fP\T
+\T'ad'\fB&ad\fI|c\fR	adj,both	adjust	E	Adjust output lines with mode \fIc\fR; \fIc\fP\^=\^l,\^r,\^c,\^b,\^p,\^\fInone\fP\T
 .b1
 \T'na'\fB&na\fR	adjust	\(en	E	No output line adjusting.\T
+.b1
+\T'padj'\fB&padj\fI|N\fR	off	on	\(en	Control paragraph-at-once adjustment globally.\T
 .b1
 \T'ce'\fB&ce\fI|N\fR	off	\fIN\(eq\fR1	B,E	Center following \fIN\fR input text lines.\T
 .b1
@@ -1349,10 +1394,12 @@ vertical distance \fIN\fR \fIin either direction\fR.\T
 Line Length and Indenting
 .bt
 \T'll'\fB&ll\fI|\(+-N\fR	6.5\|i	previous	E,\fBm\fR	Line length.\T
-.b1 0
+.b1
 \T'in'\fB&in\fI|\(+-N\fR	\fIN\(eq\fR\^0	previous	B,E,\fBm\fR	Indent.\T
 .b1 0
 \T'ti'\fB&ti\fI|\(+-N\fR	\(en	ignored	B,E,\fBm\fR	Temporary indent.\T
+.b1 0
+\T'pshape'\fB&pshape\fI|I1|L1|I2|L2|\fR...	off	E,\fBm\fR	Define the shape of the current paragraph in \fBad p\fR mode.\T
 .mht s_mac
 Macros, Strings, Diversion, and Position Traps
 .bt
@@ -1389,8 +1436,6 @@ Macros, Strings, Diversion, and Position Traps
 \T'unformat'\fB&unformat\fI|xx\fR	\(en	ignored	\(en	Strip line break information from diversion \fIxx\fR.\T
 .b1
 \T'asciify'\fB&asciify\fI|xx\fR	\(en	ignored	\(en	All characters in diversion \fIxx\fR changed to plain text.\T
-.b1
-\T'pull'\fB&pull\fI|N|xx\fR	\(en	ignored	\fBv\fR	Pull text of height \fIN\fR out of diversion \fIxx\fR.\T
 .b1
 \T'wh'\fB&wh\fI|N|xx\fR	\(en	\(en	\fBv\fR	Set location trap; negative is w.r.t. page bottom.\T
 .b1
@@ -1513,11 +1558,15 @@ Hyphenation.
 .b1
 \T'hcode'\fB&hcode\fI|abcd...\fR	\(en	E	Hyphenation code of \fIa\fR is \fIb\fR, etc.\T
 .b1
+\T'hylen'\fB&hylen\fI|N\fR	5	5	E	Hyphenate only words of at least \fIN\fR characters in length.\T
+.b1
+\T'hlm'\fB&hlm\fI|N\fR	off	off	E	Maximum number of consecutive hyphenated lines.\T
+.b1
+\T'hypp'\fB&hypp\fI|N|M|L\fR	0|0|0	0|0|0	E	Define hyphenation penalties for \fBad p\fR mode.\T
+.b1
 \T'breakchar'\fB&breakchar\fI|c.\fR	\fB\(hy\(em\fR	off	E	Optional line break characters.\T
 .b1
 \T'nhychar'\fB&nhychar\fI|c...\fR	\fB\(hy\(em\fR	off	E	Hyphenation-inhibiting characters.\T
-.b1
-\T'hlm'\fB&hlm\fI|N\fR	off	off	E	Maximum number of consecutive hyphenated lines.\T
 .b1 0
 \T'hc'\fB&hc\fI|c\fR	\fB\e%	\e%\fR	E	Hyphenation indicator character \fIc\fR.\T
 .b1 0
@@ -1770,6 +1819,8 @@ refer to the detailed description on how to include it.
 \T'hw'hw	13\T
 \T'hy'hy	13\T
 \T'hylang'hylang	13\T
+\T'hylen'hylen	13\T
+\T'hypp'hypp	13\T
 \T'ie'ie	16\T
 \T'if'if	16\T
 \T'ig'ig	20\T
@@ -1817,6 +1868,7 @@ refer to the detailed description on how to include it.
 \T'opena'opena	19\T
 \T'os'os	5\T
 \T'output'output	10\T
+\T'padj'padj	4\T
 \T'papersize'papersize	3\T
 \T'pc'pc	14\T
 \T'pi'pi	19\T
@@ -1827,8 +1879,8 @@ refer to the detailed description on how to include it.
 \T'po'po	3\T
 \T'ps'ps	2\T
 \T'psbb'psbb	23\T
+\T'pshape'pshape	6\T
 \T'pso'pso	19\T
-\T'pull'pull	7\T
 \T'rchar'rchar	10\T
 \T'rd'rd	18\T
 \T'recursionlimit'recursionlimit	7\T
@@ -1964,12 +2016,13 @@ Reference	Sequence	Meaning
 \T'e_C'2.1\T	\T'e_C'\fB\eC\fI\'xxx\'\fR\T	\T'e_C'Character named \fIxxx\fP\T
 \T'e_d'11.1\T	\T'e_d'\fB\ed\fR\T	\T'e_d'Forward (down) 1/2\|em vertical motion (1/2 line in \*(NR)\T
 \T'e_D'12.5\T	\T'e_D'\fB\eD\fI\'c...\'\fR\T	\T'e_D'Draw graphics function \fIc\fP with parameters ...; \fIc\fP\^=\^\fBl\fR,\^\fBc\fR,\^\fBe\fR,\^\fBa\fP,\^\fB\(ap\fP\T
-\T'e_e'10.1\T	\T'e_e'\fB\ee\fR\T	\T'e_e'Printable version of the \fIcurrent\fR escape character.\T
-\T'e_E'10.1\T	\T'e_E'\fB\eE\fR\T	\T'e_E'Escape character, not interpreted in \fIcopy mode\fR.\T
+\T'e_e'10.1\T	\T'e_e'\fB\ee\fR\T	\T'e_e'Printable version of the \fIcurrent\fR escape character\T
+\T'e_E'10.1\T	\T'e_E'\fB\eE\fR\T	\T'e_E'Escape character, not interpreted in \fIcopy mode\fR\T
 \T'e_f'2.2\T	\T'e_f'\fB\ef\fIx\fR,\fB\ef(\fIxx\fR,\fB\ef[\fIxxx\fB]\fR,\fB\ef\fIN\fR\T	\T'e_f'Change to font named \fIx\fR, \fIxx\fR, or \fIxxx\fR, or position \fIN\fR\T
 \T'e_g'8\T	\T'e_g'\fB\eg\fIx\fR,\fB\eg(\fIxx\fR,\fB\eg[\fIxxx\fB]\fR\T	\T'e_g'Format of number register \fIx\fP, \fIxx\fR, or \fIxxx\fR\T
 \T'e_h'11.1\T	\T'e_h'\fB\eh\fI\'N\'\fR\T	\T'e_h'Local horizontal motion; move right \fIN\fR \fI(negative left)\fR\T
 \T'e_H'2.3\T	\T'e_H'\fB\eH\fI\'N\'\fR\T	\T'e_H'Height of current font is \fIN\fR\T
+\T'e_j'4.1\T	\T'e_j'\fB\ej\fI\'N\'\fR\T	\T'e_j'Penalty for breaking a line after the current word is \fIN\fR\T
 \T'e_k'11.3\T	\T'e_k'\fB\ek\fIx\fR,\fB\ek(\fIxx\fR,\fB\ek[\fIxxx\fB]\fR\T	\T'e_k'Mark horizontal \fIinput\fR place in register \fIx,\fR \fIxx\fR, or \fIxxx\fR\T
 \T'e_l'12.4\T	\T'e_l'\fB\el\fI\^\'Nc\'\fR\T	\T'e_l'Horizontal line drawing function (optionally with \fIc\fR\|)\T
 \T'e_L'12.4\T	\T'e_L'\fB\eL\fI\'Nc\'\fR\T	\T'e_L'Vertical line drawing function (optionally with \fIc\fR\|)\T
@@ -2108,6 +2161,10 @@ using \fB\ex\fI\'N\'\fR.\T
 \T'n_.hlm'13\T	\T'n_.hlm'\fB&hlm\fR\T	\T'n_.hlm'Maximum number of consecutive hyphenated lines.\T
 \T'n_.hy'13\T	\T'n_.hy'\fB&hy\fR\T	\T'n_.hy'Current hyphenation flags.\T
 \T'n_.hylang'13\T	\T'n_.hylang'\fB&hylang\fR\T	\T'n_.hylang'Current hyphenation language [sic].\T
+\T'n._hylen'13\T	\T'n_.hylen'\fB&hylen\fR\T	\T'n_.hylen'Current minimum hyphenation word length.\T
+\T'n._hypp'13\T	\T'n_.hypp'\fB&hypp\fR\T	\T'n_.hypp'Penalty for hyphen in \fBad p\fR mode.\T
+\T'n._hypp2'13\T	\T'n_.hypp2'\fB&hypp2\fR\T	\T'n_.hypp2'Penalty for consecutive hyphens in \fBad\ p\fR mode.\T
+\T'n._hypp3'13\T	\T'n_.hypp3'\fB&hypp3\fR\T	\T'n_.hypp3'Penalty for hyphenating the last word of a paragraph in \fBad\ p\fR mode.\T
 \T'n_.H'11.1\T	\T'n_.H'\fB&H\fR\T	\T'n_.H'Available horizontal resolution in basic units.\T
 \T'n_.i'6\T	\T'n_.i'\fB&i\fR\T	\T'n_.i'Current indent as set by \fBin\fR.\T
 \T'n_.in'6\T	\T'n_.in'\fB&in\fR\T	\T'n_.in'Current indent including temporary indent, if any.\T
@@ -2131,6 +2188,7 @@ using \fB\ex\fI\'N\'\fR.\T
 \T'n_.nhychar'13\T	\T'n_.nhychar'\fB&nhychar\fR\T	\T'n_.nhychar'Current hyphenation-inhibiting characters.\T
 \T'n_.o'3\T	\T'n_.o'\fB&o\fR\T	\T'n_.o'Current page offset.\T
 \T'n_.p'3\T	\T'n_.p'\fB&p\fR\T	\T'n_.p'Current page length.\T
+\T'n_.padj'4\T	\T'n_.padj'\fB&padj\fR\T	\T'n_.padj'Current paragraph-at-once global setting.\T
 \T'n_.pn'3\T	\T'n_.pn'\fB&pn\fR\T	\T'n_.pn'Number of next page.\T
 \T'n_.ps'2.3\T	\T'n_.ps'\fB&ps\fR\T	\T'n_.ps'Current point size in units.\T
 \T'n_.psr'2.3\T	\T'n_.psr'\fB&psr\fR\T	\T'n_.psr'Last requested point size in units.\T
@@ -2328,6 +2386,10 @@ _
 \fBM\fR	1/100 Em	\fIS\fR/100	\fIC\fR/100
 \fBp\fR,\fBz\fR	Point = 1/72 inch	1000	240/72
 \fBu\fR,\fBs\fR	Basic unit	1	1
+\fBt\fR	Printer's point	72000\(mu100/7227	240\(mu100/7227
+\fBT\fR	Printer's pica	72000\(mu400/2409	240\(mu400/2409
+\fBD\fR	Didot point	72000\(mu24/1621	240\(mu24/1621
+\fBC\fR	Cicero	72000\(mu288/1621	240\(mu288/1621
 \fBv\fR	Vertical line space	\fIV\fR	\fIV\fR
 none	Default, see below
 .TE
@@ -3186,6 +3248,34 @@ which may result in condensed spacing and shaping.
 The horizontal positions in the \fB.k\fR and \fB.x\fR registers
 are always computed using default character and spacing widths.
 .pg
+\A'ad_p'As an alternative to adjusting one line at a time as described,
+\*(TR also supports adjusting one paragraph at once.
+In this mode,
+words are collected from input lines
+and requests are processed
+until a \fIbreak\fR occurs.
+The words are then split into lines
+such that the interword spaces
+are closest to the optimum setting
+across the entire paragraph.
+Ultimately, the lines so determined
+are printed.
+\T'c_trap'Traps\T, page breaks,
+and any positioning become effective only at this time.
+It is thus well possible that the current page number
+as read on the input line in the \T'n_%'\fB%\fR\T register
+is lower than the number of the page
+on which the corresponding text is actually output.
+Any reference to the page number or page position
+(e.g. writing an index entry)
+should thus be handled using
+the \T's_olt'output-line trap\T mechanism
+instead of in-line macros.
+Likewise the \T'n_.k'\fB.k\fR\T and \T'n_.x'\fB.x\fR\T
+registers are not meaningful in this mode,
+except that \T'n_.k'\fB.k\fR\T is never zero
+when text is present in a partial paragraph.
+.pg
 .tr &&
 An input text line ending with \fB.\fR\^, \fB?\fR, \fB!\fR, or \fB:\fR,
 optionally followed by any number of \fB"\fR, \fB\'\fR,
@@ -3219,6 +3309,22 @@ text is still adjusted to the line length.
 When filling is in effect, a \A'e_p'\fB\ep\fR may be imbedded or attached to a word to
 cause a \fIbreak\fR at the \fIend\fR of the word and have the resulting output
 line \fIspread out\fR to fill the current line length.
+.pg
+When adjusting paragraphs at once,
+is possible to specify additional \fIpenalties\fR
+for putting a line break after the current word
+(or part of a hyphenated word)
+by imbedding or attaching a \A'e_j'\fB\ej\fI\'N\'\fR to it.
+A positive value of \fIN\fR discourages a line break,
+a negative value encourages it.
+Values of 1\^000\^000 and above
+are taken as infinitive penalties
+and always prevent a line break;
+values of \-1\^000\^000 always cause a line break.
+Separate penalties can be specified
+for breaking a line after a hyphenated word part
+using the \T'hypp'\fBhypp\fR\T request
+\T's_hyphen'(\(sc13).\T
 .pg
 With the \fBbrpnl\fR request,
 each end of a text input line in fill mode
@@ -3318,7 +3424,10 @@ Text lines beginning with space characters
 and empty text lines (blank lines) also cause a break.
 .bta brp
 \fB&brp\fR	\(en	\(en	B	Break and spread;
-same effect as the \T'e_p'\fB\ep\fR\T escape sequence.
+same effect as the \T'e_p'\fB\ep\fR\T escape sequence
+except that it causes the remaining part
+of a paragraph shape as set with
+\T'pshape'\fBpshape\fR\T to be discarded.
 .bta fi
 .lg 0
 \fB&fi\fR	\(fill|on	\(en	B,E	Fill subsequent output lines.
@@ -3346,6 +3455,10 @@ _
 \fBr\fR	adjust right margin only
 \fBc\fR	center
 \fBb\fR or \fBn\fR	adjust both margins
+\fBp\fR or \fBpb\fR	adjust both margins paragraph-wise
+\fBpl\fR	adjust left margin paragraph-wise
+\fBpr\fR	adjust right margin paragraph-wise
+\fBpc\fR	center paragraph-wise
 absent	unchanged
 .TE
 The number register \A'n_.j'\fB.j\fR contains the current value
@@ -3358,6 +3471,12 @@ Adjustment is turned off;
 the right margin will be ragged.
 The adjustment type for \fBad\fR is not changed.
 Output line filling still occurs if fill mode is on.
+.bta padj
+\fB&padj\fI|N\fR	off	on	\(en	Control paragraph-at-once adjustment globally.
+If \fIN\fR\(!=0 or missing,
+paragraph-at-once adjustment is enabled in all environments,
+and \fBad\ \fIx\fR effectively acts like \fBad\ p\fIx\fR.
+The current value is available in the \A'n_.padj'\fB&padj\fR register.
 .bta ce
 \fB&ce\fI|N\fR	off	\fIN\fR\(eq1	B,E	Center the next \fIN\fR input text lines
 within the current (line-length minus indent).
@@ -3665,6 +3784,16 @@ that actually applies to the current line,
 taking a temporary indent into account.
 The length of \fIthree-part titles\fR produced by \T'tl'\fBtl\fR\T
 \T's_titles'(see \(sc14)\T is \fIindependently\fR set by \T'lt'\fBlt\fR.\T
+.xx
+In \T'ad_p'\fBad\ p\fR\T mode,
+indent, temporary indent, and line length should be predefined
+for the entire paragraph
+at the time a \fIbreak\fR occurs.
+To achieve this with indent and line length varying inside a paragraph,
+a shape can be defined with \T'pshape'\fBpshape\fR\T.
+The \T'll'\fBll\fR\T and \T'in'\fBin\fR\T requests
+are also effective while formatting a paragraph
+but may result in less optimal line breaking decisions then.
 .h1
 .bta ll
 \fB&ll\fI|\(+-N\fR	6.5\|in	previous	E,\fBm\fR	Line length is set to \(+-\fIN\fR.
@@ -3677,6 +3806,88 @@ The \fInext\fR output text line will be indented a distance \fI\(+-N\fR
 with respect to the current indent.
 The resulting total indent may not be negative.
 The current indent is not changed.
+.bta pshape
+.di keep
+.hylang en_US
+.minss 9
+.letadj 95 98 18 105 102
+\fB&pshape\fI|I1|L1|I2|L2|\fR...	off	E,\fBm\fR	Set a special shape for the current paragraph in \T'ad_p'\fBad\ p\fR\T mode.
+\#.ds l 4m 6m 8m 10m 12m 14m 16m 18m 20m 22m 24m \
+\#22m 20m 18m 16m 14m 12m 10m 8m 6m 4m
+\#.ds s
+\#.while 1 \{\
+\#.	ds c \*l
+\#.	index i c " 
+\#.	if \ni>=0 \{\
+\#.		substring c 0 \ni-1
+\#.		substring l \ni+1
+\#.	\}
+\#.	nr t (\n(.l-\n(.i)-\*c/2
+\#.	nr in \n(.iu+\ntu
+\#.	nr ll \n(.lu-\ntu
+\#.	as s " \n(inu \n(llu
+\#.	if \ni<0 .break
+\#.\}
+\#.pshape \*s
+.nr l (\n(.lu-\n(.iu-7.4m)/3
+.nr t \nlu+3.7m
+.pshape \
+0 \n(.iu+\nlu-1m \
+\n(.iu \n(.iu+\nlu-.75m \
+\n(.iu \n(.iu+\nlu-.5m \
+\n(.iu \n(.iu+\nlu-.25m \
+\n(.iu \n(.iu+\nlu \
+\n(.iu+\ntu-.5m+1m \n(.iu+\ntu+\nlu-1m+.5m \
+\n(.iu+\ntu-.5m+.75m \n(.iu+\ntu+\nlu-.75+.5m \
+\n(.iu+\ntu-.5m+.5m \n(.iu+\ntu+\nlu-.5+.5m \
+\n(.iu+\ntu-.5m+.25m \n(.iu+\ntu+\nlu-.25+.5m \
+\n(.iu+\ntu-.5m \n(.iu+\ntu+\nlu+.5m \
+\n(.lu-\nlu+1m \n(.lu \
+\n(.lu-\nlu+.75m \n(.lu \
+\n(.lu-\nlu+.5m \n(.lu \
+\n(.lu-\nlu+.25m \n(.lu \
+\n(.lu-\nlu \n(.lu \
+\n(.iu \n(.lu
+.mk T
+.nr B \nTu+5v
+.dt \nBu T2
+.de T2
+.ch T2
+.sp |\nTu
+.dt \nBu T3
+..
+.de T3
+.ch T3
+.sp |\nTu
+..
+At the next \fIbreak\fR when the paragraph gets formatted,
+its first line is indented by \fII1\fR and has length \fIL1\fR,
+its second line is indented by \fII2\fR and has length \fIL2\fR,
+and so forth.
+The last of the indent and line length pairs stays effective
+if the paragraph has more lines
+than pairs are given.
+In the absence of a terminating line length measure,
+the standard line length as set by \T'll'\fBll\fR\T is used.
+Once the current paragraph has been printed,
+the shape specification is forgotten,
+and the standard indent and line length values are in effect again
+unless another \fBpshape\fR request occurs.
+As an exception, \T'e_p'\fB\ep\fR\T preserves the remaining part
+of the shape.
+Combine this mechanism with \T'c_trap'page or diversion traps\T
+to move lines in vertical direction
+as shown here.
+.br
+.di
+.ne \n(dnu
+.in 0
+.nf
+.keep
+.fi
+.hylang
+.minss
+.letadj
 .mha s_mac
 Macros, Strings, Diversion, and Position Traps
 .sc
@@ -3884,7 +4095,7 @@ in the \A'n_.t'\fB.t\fR register;
 if there are no traps between the current position and the bottom of the page,
 the distance returned is the distance to the page bottom.
 .pg
-An output-line trap is planted using
+\A's_olt'An output-line trap is planted using
 the escape sequence \A'e_P'\fB\eP\fIx\fR,
 \fB\eP(\fIxx\fR, or \fB\eP[\fIxxx\fB]\fR.
 It is converted to an internal character code
@@ -4058,13 +4269,6 @@ and hyphenated word parts are combined again.
 Has all effects described for \fBunformat\fR
 and additionally discards font and point size information
 and splits substituted ligatures to their individual characters.
-.bta pull
-\fB&pull\fI|N|xx\fR	\(en	ignored	\fBv\fR	Pull text of height \fIN\fR out of diversion \fIxx\fR.
-In contrast to a direct call of \fI&xx\fR,
-only \fIN\fR lines of \fIxx\fR are printed
-and are afterwards removed from \fIxx\fR.
-If the total height of \fIxx\fR is smaller than \fIN\fR,
-an empty diversion remains.
 .bta wh
 \fB&wh\fI|N|xx\fR	\(en	\(en	\fBv\fR	Install
 a trap to invoke \fIxx\fR at page position \fIN;\fR
@@ -5133,19 +5337,9 @@ When determining the hyphenation points for an input word,
 When no hyphenation code is specified for a character,
 it is mapped to its lower-case variant if necessary,
 and the ``long \[longs]'' character is mapped to a ``round s''.
-.bta breakchar
-\fB&breakchar\fI|c.\fR	\fB\(hy\(em\fR	off	E	Optional line break characters.
-A line may always be split after one of these characters.
-The current set of optional line break characters is available
-in the \A'n_.breakchar'\fB&breakchar\fR number register.
-.bta nhychar
-\fB&nhychar\fI|c...\fR	\fB\(hy\(em\fR	off	E	Hyphenation-inhibiting characters.
-A word that contains one of the characters \fIc...\fR
-is not hyphenated,
-except that it may be split across lines
-if one of these characters is also an optional line break character.
-The current set of hyphenation-inhibiting characters is available
-in the \A'n_.nhychar'\fB&nhychar\fR number register.
+.bta hylen
+\fB&hylen\fI|N\fR	5	5	E	Hyphenate only words of at least \fIN\fR characters in length.
+The current value is available in the \A'n_.hylen'\fB&hylen\fR number register.
 .bta hlm
 \fB&hlm\fI|N\fR	off	off	E	Maximum number of consecutive hyphenated lines.
 Each time a line is hyphenated automatically,
@@ -5160,6 +5354,34 @@ when the count of consecutive lines has reached the maximum,
 the current line is not hyphenated.
 The default is no limit.
 The current value is accessible in the \A'n_.hlm'\fB&hlm\fR number register.
+.bta hypp
+\fB&hypp\fI|N|M|L\fR	0|0|0	0|0|0	E	Define hyphenation penalties for \T'ad_p'\fBad p\fR\T mode.
+Every inserted hyphen is given a penalty of \fIN\fR
+when computing optimal break points;
+each hyphen that is followed by another hyphen
+gets an additional penalty of \fIM\fR.
+A hyphen that is inserted in the last word of a paragraph
+gets an additional penalty of \fIL\fR.
+A value of zero means no penalty.
+Effective penalties correspond to values between 10 and 200.
+The current values are available in the
+\A'n_.hypp'\fB&hypp\fR,
+\A'n_.hypp2'\fB&hypp2\fR, and
+\A'n_.hypp3'\fB&hypp3\fR
+number registers.
+.bta breakchar
+\fB&breakchar\fI|c.\fR	\fB\(hy\(em\fR	off	E	Optional line break characters.
+A line may always be split after one of these characters.
+The current set of optional line break characters is available
+in the \A'n_.breakchar'\fB&breakchar\fR number register.
+.bta nhychar
+\fB&nhychar\fI|c...\fR	\fB\(hy\(em\fR	off	E	Hyphenation-inhibiting characters.
+A word that contains one of the characters \fIc...\fR
+is not hyphenated,
+except that it may be split across lines
+if one of these characters is also an optional line break character.
+The current set of hyphenation-inhibiting characters is available
+in the \A'n_.nhychar'\fB&nhychar\fR number register.
 .bta hc
 \fB&hc\fI|c\fR	\fB\e%	\e%\fR	E	Hyphenation indicator character is set
 to \fIc\fR or to the default \fB\e%\fR.
@@ -5550,6 +5772,7 @@ If \fIN\fR is not given, the previous \fIN\fR is used; the initial \fIN\fR is
 0.2|inches in \*(NR and 1\|em in \*[TR.]
 The margin character used with this paragraph was a 12-point box-rule.
 .br
+.ad b
 .mc
 .bta lpfx
 \fB&lpfx\fI|string\fR	off	off	E	Set the line prefix
@@ -5563,6 +5786,7 @@ This request is mainly useful
 to implement a historic form of block quotation.
 The current value is available in the \A'n_.lpfx'\fB&lpfx\fR register.''
 .br
+.ad p
 .lpfx
 .bta tm
 \fB&tm\fI|string\fR	\(en	newline	\(en	\
@@ -5639,6 +5863,7 @@ When one of the selected conditions occurs,
 a \fIwarning\fR message is written
 in the same format as an error message,
 but processing continues.
+.br
 .ne 6
 .TS H
 nokeep box center;
@@ -5910,9 +6135,24 @@ If a \*(PS file lacks page-delimiting comments,
 the entire file is included.
 If no
 .B %%BoundingBox
+or
+.B %%HiResBoundingBox
 comment is present, the picture is
 assumed to fill an 8.5\(mu11-inch page.
 Nothing prevents the picture from being placed off the page.
+.pg
+\fIdpost\fR handles \s-1DSC\s+1 font comments
+in the included files,
+but it can only supply glyph data
+if a path to the respective font file
+has previously been specified
+with a \*(TR \T'fp'\fBfp\fR\T request.
+It is not necessary that the font is otherwise used
+in the \*(TR input text.
+If \fIdpost\fR cannot retrieve a matching font by this mechanism,
+it indicates this in the \%\fB%%DocumentNeededResources\fR comment
+so that a print manager at a later production stage
+may include the missing data.
 .pg
 .nr nosave 1
 .ne 9
@@ -5992,6 +6232,8 @@ to left-justify, center, or right-justify the frame.
 Move the frame horizontally from the original
 .I position
 by this amount, default \fB0i\fR.
+.br
+.ne 2
 .Arg
 .I flags
 One or more of:
@@ -6022,27 +6264,39 @@ below the frame.
 .in \n[Ind]u
 .xx
 If there is room,
-.B &BP
+.B BP
 fills text around the frame.
 Everything destined for either side of the frame
 goes into a \T'c_diversion'diversion\T to be retrieved when the accumulated
 text sweeps past the trap set by
-.B &BP
+.B BP
 or when the \T'c_diversion'diversion\T is explicitly closed
-by \fB&EP\fR.
+by \fBEP\fR.
+.xx
+\fBBP\fR is not recommended for text filling
+in \T'ad_p'\fBad\ p\fR\T mode
+since its trap-based mechanism
+may result in less optimal output,
+and since it is not possible
+to define the shape of a complete paragraph
+with the information it has.
+Use a combination of
+\T'psbb'\fBpsbb\fR\T,
+\T'pshape'\fBpshape\fR\T,
+and \T'PI'\fBPI\fR\T instead.
 .bta EP
-\fB&EP\fR	\(en	\(en	\(en	End a picture started by \fB&BP\fR;
-\fB&EP\fR is usually called implicitly by a trap
+\fB&EP\fR	\(en	\(en	\(en	End a picture started by \fBBP\fR;
+\fBEP\fR is usually called implicitly by a trap
 at frame bottom.
 A picture and associated text silently disappear if
 a diversion trap set by
-.B &BP
+.B BP
 is not reached.
 Call
-.B &EP
+.B EP
 at the end of the document to retrieve it.
 .bta PI
-\fB&PI\fI|source|height\fB,\fIwidth\fB,\fIyoffset\fB,\fIxoffset|flags\fR	This low-level macro, used by \fB&BP\fR,
+\fB&PI\fI|source|height\fB,\fIwidth\fB,\fIyoffset\fB,\fIxoffset|flags\fR	This low-level macro, used by \fBBP\fR,
 can help do more complex things.
 The two arguments not already described are:
 .Arg
@@ -6097,6 +6351,7 @@ To generate such data,
 use the \fBPDFMark\fR device command of \fIdpost\fR
 with the \*(TR \T'e_X'\fB\eX\fR escape sequence\T, e.g.\&
 .x1
+.ne 2
 \fB\eX\'PDFMark: Author \fIMy Name\fB\'
 \fB\eX\'PDFMark: Keywords \fITypesetting, PDF documents\fB\'
 \fB\eX\'PDFMark: Subject \fItroff, dpost, and pdfmark\fB\'
@@ -6317,7 +6572,7 @@ and \fIwidth\fR defines the width.
 \f(BIgroff\fP Compatibility
 .pg
 Heirloom \*(TR provides most of the extensions
-to the \*(TR language introduced in \T'ref_7'\*(GR\|\*u7\*d\T.
+to the \*(TR language introduced in \T'ref_10'\*(GR\|\*u10\*d\T.
 Consequently, it is possible
 to create documents, macro sets, and preprocessors
 that can be used with both
@@ -6942,12 +7197,15 @@ have by design a syntax reminiscent
 of earlier text processors*
 .fn
 .xx
+.ad b
 *For example:
 P.|A.|Crisman, Ed.,
 .ul
 The Compatible Time-Sharing System,
 MIT Press, 1965, Section|AH9.01
-(Description of RUNOFF program on MIT's CTSS system).
+(Description of \%RUNOFF program on MIT's CTSS system).
+.br
+.ad p
 .ef
 with the intent of easing their use,
 it is almost always necessary to

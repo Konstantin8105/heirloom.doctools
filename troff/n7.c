@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n7.c	1.106 (gritter) 9/9/06
+ * Sccsid @(#)n7.c	1.162 (gritter) 11/14/06
  */
 
 /*
@@ -48,13 +48,6 @@
 
 #include <stdlib.h>
 #include <limits.h>
-#if defined (EUC) && defined (NROFF)
-#ifdef	__sun
-#include <widec.h>
-#else
-#include <wchar.h>
-#endif
-#endif /* EUC && NROFF */
 #include "tdef.h"
 #ifdef NROFF
 #include "tw.h"
@@ -74,29 +67,24 @@ tchar	gettch();
  * text
  */
 
+#include <math.h>
+#include <string.h>
 #include <ctype.h>
-#if defined (EUC) && defined (NROFF)
-#include <wctype.h>
-#endif /* EUC && NROFF */
 #include "ext.h"
-#if defined (EUC) && defined (NROFF)
-char	mbbuf2[MB_LEN_MAX + 1];
-char	*mbbuf2p = mbbuf2;
-tchar	mtbuf[MB_LEN_MAX + 1];
-tchar	*mtbufp;
-int	pendmb = 0;
+#if defined (EUC) && defined (NROFF) && defined (ZWDELIMS)
 wchar_t	cwc, owc, wceoll;
-#endif /* EUC && NROFF */
+#endif /* EUC && NROFF && ZWDELIMS */
 int	brflg;
 
 #undef	iswascii
 #define	iswascii(c)	(((c) & ~(wchar_t)0177) == 0)
 
-static void	chkpull(int);
 static int	_findt(struct d *, int, int);
 static tchar	adjbit(tchar);
 static void	sethtdp(void);
-static void	leftend(tchar, int);
+static void	leftend(tchar, int, int);
+static void	parword(void);
+static void	parfmt(void);
 #ifndef	NROFF
 #define	nroff		0
 extern int	lastrst;
@@ -112,7 +100,9 @@ static int	lspcomp(int);
 #define	lastrsb		0
 #define	setlhang(a)
 #define	setrhang()
+#define	getlsp(c)	0
 #define	storelsp(a, b)
+#define	getlsh(c, w)	0
 #define	storelsh(a, b)
 #define	letshrink()
 #define	letgrow()	0
@@ -127,6 +117,7 @@ tbreak(void)
 	register int resol = 0;
 	int _minflg;
 
+restart:
 	trap = 0;
 	if (nb)
 		return;
@@ -134,7 +125,7 @@ tbreak(void)
 		newline(1);
 		return;
 	}
-	if (!nc) {
+	if (!nc && !pgchars) {
 		setnel();
 		if (!wch)
 			return;
@@ -148,6 +139,10 @@ tbreak(void)
 		adflg |= 2;
 		text();
 		return;
+	}
+	if ((pa || padj) && pglines == 0 && pgchars) {
+		parfmt();
+		goto restart;
 	}
 	if (minspsz && !brflg && ad && !admod)
 		ne += adspc;
@@ -180,7 +175,8 @@ tbreak(void)
 	if (lastl + un > dip->maxl)
 		dip->maxl = lastl + un;
 	horiz(un);
-	pchar(mkxfunc(INDENT, un));
+	if (un != 0)
+		pchar(mkxfunc(INDENT, un));
 #ifdef NROFF
 	if (adrem % t.Adj)
 		resol = t.Hor; 
@@ -191,7 +187,7 @@ tbreak(void)
 #endif
 	adrem = (adrem / resol) * resol;
 	for (i = line; nc > 0; ) {
-		if ((c = cbits(j = *i++) & ~MBMASK) == ' ' || c == STRETCH) {
+		if ((c = cbits(j = *i++)) == ' ' || c == STRETCH) {
 			if (xflag && !fi && dilev || iszbit(j) || isadjspc(j))
 				goto std;
 			pad = 0;
@@ -203,8 +199,7 @@ tbreak(void)
 				minflg = _minflg;
 				pad += width(j);
 				nc--;
-			} while ((c = cbits(j = *i++) & ~MBMASK) == ' ' ||
-					c == STRETCH);
+			} while ((c = cbits(j = *i++)) == ' ' || c == STRETCH);
 			pad += kernadjust(i[-2], i[-1]);
 			i--;
 			pad += adsp;
@@ -460,7 +455,7 @@ nofill(void)
 		nwd = 10000;
 	}
 	nexti = GETCH();
-	leftend(nexti, !ce && !rj && !pendnf);
+	leftend(nexti, !ce && !rj && !pendnf, !isdi(nexti));
 	while ((j = (cbits(i = nexti))) != '\n') {
 		if (stopch && issame(i, stopch))
 			break;
@@ -535,7 +530,8 @@ ckul(void)
 		font = sfont;
 		mchbits();
 	}
-	if (it && (!itc || !pendw && !pendnf) && (--it == 0) && itmac)
+	if (it && !pglines && (!itc || !pendw && !pendnf) &&
+			(--it == 0) && itmac)
 		control(itmac, 0);
 }
 
@@ -573,44 +569,64 @@ s1:
 
 
 #ifndef	NROFF
+static int
+getlsp(tchar c)
+{
+	int	s;
+
+	if (!ad || admod || ismot(c))
+		return 0;
+	if (iszbit(c) || cbits(c) <= ' ' && !isxfunc(c, CHAR))
+		return 0;
+	while (isxfunc(c, CHAR))
+		c = charout[sbits(c)].ch;
+	s = sbits(c) / 2;
+	return s;
+}
+
 static void
 storelsp(tchar c, int neg)
 {
 	int	s;
 
-	if (!ad || admod || ismot(c))
-		return;
 	if (isxfunc(c, FLDMARK)) {
 		lsplow = lsphigh = lspnc = 0;
 		fldcnt += neg ? -1 : 1;
 		return;
 	}
-	if (iszbit(c) || cbits(c) <= ' ' && !isxfunc(c, CHAR))
-		return;
-	while (isxfunc(c, CHAR))
-		c = charout[sbits(c)].ch;
-	s = sbits(c) / 2;
-	if (neg)
-		s = -s;
-	lsplow += s * lspmin / LAFACT;
-	lsphigh += s * lspmax / LAFACT;
-	lspnc += neg ? -1 : 1;
+	if ((s = getlsp(c)) != 0) {
+		if (neg)
+			s = -s;
+		lsplow += s * lspmin / LAFACT;
+		lsphigh += s * lspmax / LAFACT;
+		lspnc += neg ? -1 : 1;
+	}
+}
+
+static int
+getlsh(tchar c, int w)
+{
+	if (!ad || admod || ismot(c))
+		return 0;
+	if (iszbit(c) || cbits(c) <= ' ')
+		return 0;
+	return w;
 }
 
 static void
 storelsh(tchar c, int w)
 {
-	if (!ad || admod || ismot(c))
-		return;
+	int	s;
+
 	if (isxfunc(c, FLDMARK)) {
 		lshlow = lshhigh = lshwid = 0;
 		return;
 	}
-	if (iszbit(c) || cbits(c) <= ' ')
-		return;
-	lshwid += w;
-	lshlow = lshwid * lshmin / LAFACT;
-	lshhigh = lshwid * lshmax / LAFACT;
+	if ((s = getlsh(c, w)) != 0) {
+		lshwid += s;
+		lshlow = lshwid * lshmin / LAFACT;
+		lshhigh = lshwid * lshmax / LAFACT;
+	}
 }
 #endif	/* !NROFF */
 
@@ -641,7 +657,6 @@ newline(int a)
 			nlss += dip->alss;
 			dip->alss = 0;
 		}
-		chkpull(nlss);
 		if (vpt > 0 && dip->ditrap && !dip->ditf && dip->dnl >= dip->ditrap && dip->dimac)
 			if (control(dip->dimac, 0)) {
 				trap++; 
@@ -662,14 +677,13 @@ newline(int a)
 	pchar1((tchar)'\n');
 	flss = 0;
 	lss = j;
-	chkpull(nlss);
 	if (vpt == 0 || numtab[NL].val < pl)
 		goto nl2;
 nl1:
 	ejf = dip->hnl = numtab[NL].val = 0;
 	ejl = frame->tail_cnt;
-	if (donef) {
-		if ((!nc && !wch) || ndone)
+	if (donef || ndone && pgchars && !pglines) {
+		if ((!nc && !wch && !pglines) || ndone)
 			done1(0);
 		ndone++;
 		donef = 0;
@@ -682,7 +696,7 @@ nl1:
 		numtab[PN].val = npn;
 		npn = npnflg = 0;
 	}
-	prwatchn(PN);
+	prwatchn(&numtab[PN]);
 nlpn:
 	if (numtab[PN].val == pfrom) {
 		print++;
@@ -709,6 +723,7 @@ nl2:
 			trap |= control(olt[i], 0);
 		nolt = 0;
 		free(olt);
+		olt = NULL;
 	}
 nlt:
 	if (dip != d)
@@ -764,17 +779,6 @@ chkpn(void)
 	}
 }
 
-
-static void
-chkpull(int nlss)
-{
-	if (nlss > 0 && frame->pull) {
-		if (nlss >= frame->pull)
-			popi();
-		else
-			frame->pull -= nlss;
-	}
-}
 
 int 
 findt(struct d *dp, int a)
@@ -896,12 +900,31 @@ nhychar(tchar c)
 	}
 }
 
+static int
+ishyp(tchar *wp)
+{
+	tchar	*tp;
+	int	yes = 0;
+
+	tp = (tchar *)((intptr_t)*hyp & ~(intptr_t)03);
+	if (hyoff != 1 && tp == wp) {
+		if (!wdstart || (wp > wdstart + 1 && wp < wdend &&
+		   (!(hyf & 04) || wp < wdend - 1) &&		/* 04 => last 2 */
+		   (!(hyf & 010) || wp > wdstart + 2)) ||	/* 010 => 1st 2 */
+		   (hyf & 020 && wp == wdend) ||		/* 020 = allow last */
+		   (hyf & 040 && wp == wdstart + 1))		/* 040 = allow first */
+			yes = 1;
+		hyp++;
+	}
+	return yes;
+}
+
 
 int
 movword(void)
 {
 	register int w;
-	register tchar i, *wp, c, *lp, *lastlp, lasti = 0, *tp;
+	register tchar i, *wp, c, *lp, *lastlp, lasti = 0;
 	int	savwch, hys, stretches = 0, wholewd = 0, mnel, hyphenated = 0;
 	int	hc;
 #ifndef	NROFF
@@ -917,10 +940,14 @@ movword(void)
 #define	optlinep	0
 #endif	/* NROFF */
 
+	if (pa || padj) {
+		parword();
+		return(0);
+	}
 	over = 0;
 	wp = wordp;
 	if (!nwd) {
-		while ((c = cbits(i = *wp++) & ~MBMASK) == ' ') {
+		while ((c = cbits(i = *wp++)) == ' ') {
 			if (iszbit(i))
 				break;
 			wch--;
@@ -931,7 +958,7 @@ movword(void)
 		wp--;
 		if (wp > wordp)
 			wne -= kernadjust(wp[-1], wp[0]);
-		leftend(*wp, admod != 1 && admod != 2);
+		leftend(*wp, admod != 1 && admod != 2, 1);
 	}
 	wsp = 0;
 	if (wne > nel - adspc && !hyoff && hyf && (hlm < 0 || hlc < hlm) &&
@@ -945,26 +972,18 @@ movword(void)
 	while (*hyp && *hyp <= wp)
 		hyp++;
 	while (wch) {
-		tp = (tchar *)((intptr_t)*hyp & ~(intptr_t)03);
-		if (hyoff != 1 && tp == wp) {
-			if (!wdstart || (wp > wdstart + 1 && wp < wdend &&
-			   (!(hyf & 04) || wp < wdend - 1) &&		/* 04 => last 2 */
-			   (!(hyf & 010) || wp > wdstart + 2)) ||	/* 010 => 1st 2 */
-			   (hyf & 020 && wp == wdend) ||		/* 020 = allow last */
-			   (hyf & 040 && wp == wdstart + 1)) {		/* 040 = allow first */
-				i = IMP;
-				setsbits(i, (intptr_t)*hyp & 03);
-				if (storeline(i, 0))
-					nhyp++;
-			}
-			hyp++;
+		if (ishyp(wp)) {
+			i = IMP;
+			setsbits(i, (intptr_t)(hyp[-1]) & 03);
+			if (storeline(i, 0))
+				nhyp++;
 		}
 		i = *wp++;
 		minflg = minspsz && ad && !admod;
 		w = width(i);
 		storelsh(i, rawwidth);
 		adspc += minspc;
-		w += kernadjust(i, *wp ? *wp : ' ' | (spbits?spbits:sfmask(i)));
+		w += kernadjust(i, *wp);
 		wne -= w;
 		wch--;
 		if (cbits(i) == STRETCH && cbits(lasti) != STRETCH)
@@ -987,6 +1006,9 @@ movword(void)
 		nwd += stretches + 1;
 		if (nel - adspc < 0 && nwd > 1)
 			adflg |= 5;
+		w = kernadjust(lasti,  ' ' | (spbits?spbits:sfmask(lasti)));
+		ne += w;
+		nel -= w;
 		return(0);	/* line didn't fill up */
 	}
 m0:
@@ -1010,10 +1032,9 @@ m1:
 	if ((*--linep & ~SMASK) != IMP)
 		goto m5;
 #ifndef	NROFF
-	if ((s = sbits(*linep)) != 0) {
-		i = *(linep + 1);
-		if ((ip = lgrevtab[fbits(i)][cbits(i)]) == NULL)
-			goto m5;
+	i = *(linep + 1);
+	if ((s = sbits(*linep)) != 0 &&
+			(ip = lgrevtab[fbits(i)][cbits(i)]) != NULL) {
 		lgs = strlg(fbits(i), ip, s) | sfmask(i) | AUTOLIG;
 		for (w = 0; ip[s+w]; w++);
 		lge = strlg(fbits(i), &ip[s], w) | sfmask(i) | AUTOLIG;
@@ -1138,7 +1159,7 @@ setnel(void)
 {
 	if (!nc) {
 		linep = line;
-		if (un1 >= 0) {
+		if (un1 >= 0 && (!pgwords || pglines)) {
 			un = un1;
 			un1 = -1;
 		}
@@ -1159,13 +1180,13 @@ getword(int x)
 	register int j, k = 0, w;
 	register tchar i = 0, *wp, nexti, gotspc = 0, t;
 	int noword, n, inword = 0;
-#if defined (EUC) && defined (NROFF)
+#if defined (EUC) && defined (NROFF) && defined (ZWDELIMS)
 	wchar_t *wddelim;
 	char mbbuf3[MB_LEN_MAX + 1];
 	char *mbbuf3p;
 	int wbf;
 	tchar m;
-#endif /* EUC && NROFF */
+#endif /* EUC && NROFF && ZWDELIMS */
 
 	noword = 0;
 	if (x)
@@ -1179,33 +1200,14 @@ getword(int x)
 	wordp = word;
 	over = wne = wch = 0;
 	hyoff = 0;
-#if defined (EUC) && defined (NROFF)
-	mtbufp = mtbuf;
-	if (pendmb) {
-		while(*mtbufp) {
-			switch(*mtbufp & MBMASK) {
-			case LASTOFMB:
-			case BYTE_CHR:
-				storeword(*mtbufp++, -1);
-				break;
-
-			default:
-				storeword(*mtbufp++, 0);
-			}
-		}
-		mtbufp = mtbuf;
-		pendmb = 0;
-		goto g1;
-	}
-#endif /* EUC && NROFF */
+	memset(wdpenal, 0, wdsize * sizeof *wdpenal);
 	n = 0;
 	while (1) {	/* picks up 1st char of word */
 		j = cbits(i = GETCH());
-#if defined (EUC) && defined (NROFF)
+#if defined (EUC) && defined (NROFF) && defined (ZWDELIMS)
 		if (multi_locale)
-			if (collectmb(i))
-				continue;
-#endif /* EUC && NROFF */
+			collectmb(i);
+#endif /* EUC && NROFF && ZWDELIMS */
 		if (j == '\n') {
 			wne = wch = 0;
 			noword = 1;
@@ -1252,7 +1254,7 @@ getword(int x)
 		break;
 	}
 	seflg = 0;
-#if defined (EUC) && defined (NROFF)
+#if defined (EUC) && defined (NROFF) && defined (ZWDELIMS)
 	if (!multi_locale)
 		goto a0;
 	if (wddlm && iswprint(wceoll) && iswprint(cwc) &&
@@ -1268,16 +1270,7 @@ getword(int x)
 				while (*wddelim) {
 					if ((n = wctomb(mbbuf3, *wddelim++))
 					    > 0) {
-						mbbuf3[n] = 0;
-						n--;
-						mbbuf3p = mbbuf3 + n;
-						while(n) {
-							m = *(mbbuf3p-- - n--) &
-							    0xff | MIDDLEOFMB |
-							    ZBIT;
-							storeword(m, 0);
-						}
-						m = *mbbuf3p & 0xff | LASTOFMB;
+						m = setuc0(wddelim[-1]);
 						storeword(m, -1);
 					} else {
 						storeword(' ' | chbits, sps);
@@ -1290,7 +1283,7 @@ getword(int x)
 		}
 	}
 a0:
-#endif /* EUC && NROFF */
+#endif /* EUC && NROFF && ZWDELIMS */
 	if (spbits && xflag) {
 		t = ' ' | spbits;
 		w = width(t);
@@ -1341,27 +1334,7 @@ g0:
 	}
 	j = width(i);
 	numtab[HP].val += j;
-#if !defined (EUC) || !defined (NROFF)
 	storeword(i, j);
-#else	/* EUC && NROFF */
-	if (multi_locale) {
-		mtbufp = mtbuf;
-		while(*mtbufp) {
-			switch(*mtbufp & MBMASK) {
-			case LASTOFMB:
-			case BYTE_CHR:
-				storeword(*mtbufp++, j);
-				break;
-
-			default:
-				storeword(*mtbufp++, 0);
-			}
-		}
-		mtbufp = mtbuf;
-	} else {
-		storeword(i, j);
-	}
-#endif /* EUC && NROFF */
 	if (1) {
 		int	oev = ev;
 		nexti = GETCH();
@@ -1380,11 +1353,10 @@ g1:		nexti = GETCH();
 	j = cbits(i = nexti);
 	if (!ismot(i) && j != ohc)
 		inword = 1;
-#if defined (EUC) && defined (NROFF)
+#if defined (EUC) && defined (NROFF) && defined (ZWDELIMS)
 	if (multi_locale)
-		if (collectmb(i))
-			goto g1;
-#endif /* EUC && NROFF */
+		collectmb(i);
+#endif /* EUC && NROFF && ZWDELIMS */
 	{
 		static int sentchar[] =
 			{ '.', '?', '!', ':', 0 }; /* sentence terminators */
@@ -1394,23 +1366,22 @@ g1:		nexti = GETCH();
 		transchar[5] = DAGGER;
 		if (j != '\n' && j != ' ' || ismot(i) || iszbit(i) ||
 				isadjspc(i))
-#if defined (EUC) && defined (NROFF)
+#if defined (EUC) && defined (NROFF) && defined (ZWDELIMS)
 			if (!multi_locale)
-#endif /* EUC && NROFF */
+#endif /* EUC && NROFF && ZWDELIMS */
 			goto g0;
-#if defined (EUC) && defined (NROFF)
+#if defined (EUC) && defined (NROFF) && defined (ZWDELIMS)
 			else {
 				if (!wdbdg || (iswascii(cwc) && iswascii(owc)))
 					goto g0;
 				if ((wbf = (*wdbdg)(owc, cwc, 1)) < 5) {
-					pendmb++;
 					storeword((wbf < 3) ? ZWDELIM(1) :
 						  ZWDELIM(2), 0);
 					*wordp = 0;
 					goto rtn;
 				} else goto g0;
 			}
-#endif /* EUC && NROFF */
+#endif /* EUC && NROFF && ZWDELIMS */
 		wp = wordp-1;	/* handle extra space at end of sentence */
 		sp = *sentch ? sentch : sentchar;
 		tp = *transch ? transch : transchar;
@@ -1433,9 +1404,9 @@ g1:		nexti = GETCH();
 		cont:;
 		}
 	}
-#if defined (EUC) && defined (NROFF)
+#if defined (EUC) && defined (NROFF) && defined (ZWDELIMS)
 	wceoll = owc;
-#endif /* EUC && NROFF */
+#endif /* EUC && NROFF && ZWDELIMS */
 	*wordp = 0;
 	numtab[HP].val += xflag ? width(i) : sps;
 rtn:
@@ -1467,16 +1438,20 @@ storeword(register tchar c, register int w)
 
 	if (wordp == NULL || wordp >= &word[wdsize - 3]) {
 		tchar	*k, **h;
-		int	j;
+		int	j, *pp, owdsize;
 		if (over)
 			return;
+		owdsize = wdsize;
 		wdsize += wdsize ? 100 : WDSIZE;
-		if ((k = realloc(word, wdsize * sizeof *word)) == NULL) {
+		if ((k = realloc(word, wdsize * sizeof *word)) == NULL ||
+				(pp = realloc(wdpenal,
+				    wdsize * sizeof *wdpenal)) == NULL) {
 			flusho();
 			errprint("Word overflow.");
 			over++;
 			c = LEFTHAND;
 			w = -1;
+			wdsize = owdsize;
 			goto s1;
 		}
 		j = (char *)k - (char *)word;
@@ -1485,8 +1460,15 @@ storeword(register tchar c, register int w)
 			if (*h)
 				*h = (tchar *)((char *)*h + j);
 		word = k;
+		wdpenal = pp;
+		memset(&wdpenal[owdsize], 0,
+				(wdsize - owdsize) * sizeof *wdpenal);
 	}
 s1:
+	if (isxfunc(c, PENALTY)) {
+		wdpenal[max(0, wordp - word - 1)] = sbits(c);
+		return;
+	}
 	if (w == -1)
 		w = width(c);
 	widthp = w;
@@ -1530,53 +1512,17 @@ tchar gettch(void)
 
 
 #endif
-#if defined (EUC) && defined (NROFF)
+#if defined (EUC) && defined (NROFF) && defined (ZWDELIMS)
 int
 collectmb(tchar i)
 {
-	int busy;
-
-	*mtbufp++ = i;
-	*mbbuf2p++ = i & BYTEMASK;
-	*mtbufp = *mbbuf2p = 0;
-	if (ismot(i)) {
-		mtbufp = mtbuf;
-		mbbuf2p = mbbuf2;
-		owc = 0;
-		cwc = 0;
-		return(busy = 0);
-	}
-	if ((i & MBMASK) == MIDDLEOFMB) {
-		if (mtbufp <= (mtbuf + mb_cur_max)) {
-			busy = 1;
-		} else {
-			*(mtbufp - 1) &= ~MBMASK;
-			goto gotmb;
-		}
-	} else {
-		if ((i & MBMASK) == LASTOFMB)
-			*(mtbufp - 1) &= ~MBMASK;
-gotmb:
-		mtbufp = mtbuf;
-		owc = cwc;
-		if ((*mbbuf2&~(wchar_t)0177) == 0) {
-			cwc = *mbbuf2;
-		} else if (mbtowc(&cwc, mbbuf2, mb_cur_max) <= 0) {
-			mtbufp = mtbuf;
-			while (*mtbufp) {
-				setcbits(*mtbufp, (*mtbufp & 0x1ff));
-				mtbufp++;
-			}
-			mtbufp = mtbuf;
-		}
-		mbbuf2p = mbbuf2;
-		busy = 0;
-	}
-	return(busy);
+	owc = cwc;
+	cwc = tr2un(cbits(i), fbits(i));
+	return(0);
 }
 
 
-#endif /* EUC && NROFF */
+#endif /* EUC && NROFF && ZWDELIMS */
 
 static tchar
 adjbit(tchar c)
@@ -1596,11 +1542,11 @@ sethtdp(void)
 }
 
 static void
-leftend(tchar c, int hang)
+leftend(tchar c, int hang, int dolpfx)
 {
 	int	k, w;
 
-	if (lpfx) {
+	if (dolpfx && lpfx) {
 		if (hang)
 			setlhang(lpfx[0]);
 		for (k = 0; lpfx[k]; k++) {
@@ -1746,3 +1692,541 @@ lspcomp(int idiff)
 	return idiff + diff;
 }
 #endif	/* !NROFF */
+
+/*
+ * A dynamic programming approach to line breaking over
+ * a paragraph as introduced by D. E. Knuth & M. F. Plass,
+ * "Breaking paragraphs into lines", Software - Practice
+ * and Experience, Vol. 11, Issue 12 (1981), pp. 1119-1184.
+ */
+
+static double
+penalty(int k, int s, int h, int h2, int h3)
+{
+	double	t, d;
+
+	t = nel - k;
+	t = t >= 0 ? t * 5 / 3 : -t;
+	if (ad && !admod) {
+		d = s;
+		if (k - s && (letsps || lshmin || lshmax))
+			d += (double)(k - s) / 100;
+		if (d)
+			t /= d;
+	} else
+		t /= nel / 10;
+	if (h && hypp)
+		t += hypp;
+	if (h2 && hypp2)
+		t += hypp2;
+	if (h3 && hypp3)
+		t += hypp3;
+	t = t * t * t;
+	if (t > MAXPENALTY)
+		t = MAXPENALTY;
+	return t;
+}
+
+static void
+parcomp(int start)
+{
+	double	*cost, *_cost;
+	long double	t;
+	int	*prevbreak, *hypc, *_hypc, *brcnt, *_brcnt;
+	int	i, j, k, m, h, v, s;
+
+	_cost = malloc((pgsize + 1) * sizeof *_cost);
+	cost = &_cost[1];
+	_hypc = calloc(pgsize + 1, sizeof *_hypc);
+	hypc = &_hypc[1];
+	_brcnt = calloc(pgsize + 1, sizeof *_brcnt);
+	brcnt = &_brcnt[1];
+	prevbreak = calloc(pgsize, sizeof *prevbreak);
+	for (i = -1; i < start; i++)
+		cost[i] = 0;
+	for (i = start; i < pgwords; i++)
+		cost[i] = HUGE_VAL;
+	for (i = start; i < pgwords; i++) {
+		if (pshapes) {
+			j = brcnt[i-1];
+			if (j < pshapes)
+				nel = pgll[j] - pgin[j];
+			else
+				nel = pgll[pshapes-1] - pgin[pshapes-1];
+		} else if (un != in) {
+			nel = ll;
+			nel -= i > start ? in : un;
+		}
+		k = pgwordw[i] + pglgsw[i];
+		m = pglsphc[i] + pglgsh[i];
+		s = 0;
+		for (j = i; j < pgwords; j++) {
+			if (j > i) {
+				k += pgspacw[j] + pgwordw[j];
+				m += pgadspc[j] + pglsphc[j];
+				s += pgspacw[j];
+			}
+			v = k + pghyphw[j] + pglgew[j];
+			if (v - m - pglgeh[j] <= nel) {
+				if (!spread && j == pgwords - 1 &&
+						pgpenal[j] == 0)
+					t = 0;
+				else
+					t = penalty(v, s, pghyphw[j],
+						pghyphw[j] && hypc[i-1],
+						pghyphw[j] && j >= pglastw);
+				t += pgpenal[j];
+				t += cost[i-1];
+				/*fdprintf(stderr, "%c%c%c%c to %c%c%c%c "
+				                 "t=%g cost[%d]=%g "
+						 "brcnt=%d oldbrcnt=%d\n",
+						(char)para[pgwordp[i]],
+						(char)para[pgwordp[i]+1],
+						(char)para[pgwordp[i]+2],
+						(char)para[pgwordp[i]+3],
+						(char)para[pgwordp[j+1]-4],
+						(char)para[pgwordp[j+1]-3],
+						(char)para[pgwordp[j+1]-2],
+						(char)para[pgwordp[j+1]-1],
+						t, j, cost[j],
+						1 + brcnt[i-1],
+						brcnt[j]
+					);*/
+				if ((double)t <= cost[j]) {
+					if (pghyphw[j])
+						h = hypc[i-1] + 1;
+					else
+						h = 0;
+					/*
+					 * This is not completely
+					 * correct: It might be
+					 * preferable to disallow
+					 * an earlier hyphenation
+					 * point. But it seems
+					 * good enough.
+					 */
+					if (hlm < 0 || h <= hlm) {
+						hypc[j] = h;
+						cost[j] = t;
+						prevbreak[j] = i;
+						brcnt[j] = 1 + brcnt[i-1];
+					}
+				}
+			} else {
+				if (j == i) {
+					t = 1 + cost[i-1];
+					cost[j] = t;
+					prevbreak[j] = i;
+					brcnt[j] = 1 + brcnt[i-1];
+				}
+				break;
+			}
+		}
+	}
+	/*for (i = 0; i < pgwords; i++)
+		fdprintf(stderr, "cost[%d] = %g %c%c%c%c to %c%c%c%c\n",
+				i, cost[i],
+				(char)para[pgwordp[prevbreak[i]]],
+				(char)para[pgwordp[prevbreak[i]]+1],
+				(char)para[pgwordp[prevbreak[i]]+2],
+				(char)para[pgwordp[prevbreak[i]]+3],
+				(char)para[pgwordp[i]],
+				(char)para[pgwordp[i]+1],
+				(char)para[pgwordp[i]+2],
+				(char)para[pgwordp[i]+3]
+			);*/
+	pglines = 0;
+	memset(&pgopt[pglnout], 0, (pgsize - pglnout) * sizeof *pgopt);
+	i = j = pgwords - 1;
+	do {
+		pglines++;
+		j = prevbreak[j];
+		pgopt[i--] = j--;
+	} while (j >= start && i >= pglnout);
+	memmove(&pgopt[pglnout+1], &pgopt[i+2], pglines * sizeof *pgopt);
+	pgopt[pglnout] = start;
+	free(_cost);
+	free(_hypc);
+	free(prevbreak);
+}
+
+void
+growpgsize(void)
+{
+	pgsize += 20;
+	pgwordp = realloc(pgwordp, pgsize * sizeof *pgwordp);
+	pgwordw = realloc(pgwordw, pgsize * sizeof *pgwordw);
+	pghyphw = realloc(pghyphw, pgsize * sizeof *pghyphw);
+	pgadspc = realloc(pgadspc, pgsize * sizeof *pgadspc);
+	pglsphc = realloc(pglsphc, pgsize * sizeof *pglsphc);
+	pgopt = realloc(pgopt, pgsize * sizeof *pgopt);
+	pgspacp = realloc(pgspacp, pgsize * sizeof *pgspacp);
+	pgspacw = realloc(pgspacw, pgsize * sizeof *pgspacw);
+	pglgsc = realloc(pglgsc, pgsize * sizeof *pglgsc);
+	pglgec = realloc(pglgec, pgsize * sizeof *pglgec);
+	pglgsw = realloc(pglgsw, pgsize * sizeof *pglgsw);
+	pglgew = realloc(pglgew, pgsize * sizeof *pglgew);
+	pglgsh = realloc(pglgsh, pgsize * sizeof *pglgsh);
+	pglgeh = realloc(pglgeh, pgsize * sizeof *pglgeh);
+	pgin = realloc(pgin, pgsize * sizeof *pgin);
+	pgll = realloc(pgll, pgsize * sizeof *pgll);
+	pgwdin = realloc(pgwdin, pgsize * sizeof *pgwdin);
+	pgwdll = realloc(pgwdll, pgsize * sizeof *pgwdll);
+	pglno = realloc(pglno, pgsize * sizeof *pglno);
+	pgpenal = realloc(pgpenal, pgsize * sizeof *pgpenal);
+	if (pgwordp == NULL || pgwordw == NULL || pghyphw == NULL ||
+			pgopt == NULL || pgspacw == NULL ||
+			pgadspc == NULL || pglsphc == NULL ||
+			pglgsc == NULL || pglgec == NULL ||
+			pglgsw == NULL || pglgew == NULL ||
+			pglgsh == NULL || pglgeh == NULL ||
+			pgin == NULL || pgll == NULL || pglno == NULL ||
+			pgpenal == NULL || pgwdin == NULL || pgwdin == NULL) {
+		errprint("out of memory justifying paragraphs");
+		done(02);
+	}
+}
+
+static void
+parlgzero(int i)
+{
+	pglgsc[i] = 0;
+	pglgec[i] = 0;
+	pglgsw[i] = 0;
+	pglgew[i] = 0;
+	pglgsh[i] = 0;
+	pglgeh[i] = 0;
+}
+
+static float
+makepgpenal(int p)
+{
+	p -= INFPENALTY0 + 1;
+	if (p >= INFPENALTY0)
+		return INFPENALTY;
+	else if (p <= -INFPENALTY0)
+		return -INFPENALTY;
+	else
+		return p * PENALSCALE;
+}
+
+static void
+parword(void)
+{
+	int	a, c, w, hc;
+	tchar	i, *wp;
+
+	if (pgwords + 1 >= pgsize)
+		growpgsize();
+	hc = shc ? shc : HYPHEN;
+	pglastw = pgwords;
+	wp = wordp;
+	a = w = 0;
+	pglno[pgwords] = numtab[CD].val;
+	pgspacp[pgwords] = pgspacs;
+	pgpenal[pgwords] = 0;
+	pgwdin[pgwords] = in;
+	pgwdll[pgwords] = ll;
+	un1 = -1;
+	while ((c = cbits(i = *wp++)) == ' ') {
+		if (iszbit(i))
+			break;
+		wch--;
+		minflg = minspsz && ad && !admod;
+		w += width(i);
+		a += minspc;
+		w += kernadjust(wp[-1], wp[0]);
+		if (pgspacs >= pgssize) {
+			pgssize += 60;
+			parsp = realloc(parsp, pgssize * sizeof *parsp);
+			if (parsp == NULL) {
+				errprint("no memory for spaces in paragraph");
+				done(02);
+			}
+		}
+		parsp[pgspacs++] = i;
+		if (wdpenal[wp-word-1])
+			pgpenal[pgwords] = makepgpenal(wdpenal[wp-word-1]);
+	}
+	pgspacp[pgwords+1] = pgspacs;
+	if (--wp > wordp && pgchars > 0)
+		w += kernadjust(para[pgchars-1], wordp[0]);
+	wne -= w;
+	pgspacw[pgwords] = pgwords ? w + a : 0;
+	pghyphw[pgwords] = 0;
+	pgadspc[pgwords] = pgwords ? a : 0;
+	pglsphc[pgwords] = 0;
+	pgwordw[pgwords] = 0;
+	pgwordp[pgwords] = pgchars;
+	pgne += pgspacw[pgwords];
+	parlgzero(pgwords);
+	parlgzero(pgwords+1);
+	if (!hyoff && hyf && hlm)
+		hyphen(wp);
+	hyp = hyptr;
+	nhyp = 0;
+	while (*hyp && *hyp <= wp)
+		hyp++;
+	while (wch) {
+		if (ishyp(wp) && !maybreak(wp[-1])) {
+			i = sfmask(wp[-1]) | hc;
+			w = width(i);
+			w += kernadjust(wp[-1], i);
+			pghyphw[pgwords] = w;
+#ifndef	NROFF
+			{
+			int	n, *ip;
+			tchar	e, s;
+
+			n = (intptr_t)(hyp[-1]) & 03;
+			ip = n ? lgrevtab[fbits(*wp)][cbits(*wp)] : NULL;
+			if (n != 0 && ip != NULL) {
+				pglgec[pgwords] = e =
+					strlg(fbits(*wp), ip, n) |
+						sfmask(*wp) | AUTOLIG;
+				for (w = 0; ip[n+w]; w++);
+				pglgsc[pgwords+1] = s =
+					strlg(fbits(*wp), &ip[n], w) |
+						sfmask(*wp) | AUTOLIG;
+				pglgew[pgwords] = width(e);
+				pglgeh[pgwords] = getlsh(e, rawwidth) *
+					lshmin / LAFACT;
+				pglgew[pgwords] += kernadjust(wp[-1], e);
+				pghyphw[pgwords] += kernadjust(e, i);
+				pghyphw[pgwords] -= kernadjust(wp[-1], i);
+				pglgsw[pgwords+1] = width(s);
+				pglgsh[pgwords+1] = getlsh(s, rawwidth) *
+					lshmin / LAFACT;
+				pglgsw[pgwords+1] -= width(*wp);
+				pglgsh[pgwords+1] -= getlsh(*wp, rawwidth) *
+					lshmin / LAFACT;
+				pglgsw[pgwords+1] += kernadjust(s, wp[1]);
+				pglgsw[pgwords+1] -= kernadjust(wp[0], wp[1]);
+			} }
+#endif	/* !NROFF */
+		}
+		if (pghyphw[pgwords] || wp > word && maybreak(wp[-1])) {
+			pghyphw[pgwords] -= kernadjust(wp[-1], wp[0]);
+			pgne += pgwordw[pgwords];
+			pgwordp[++pgwords] = pgchars;
+			if (pgwords + 1 >= pgsize)
+				growpgsize();
+			pglno[pgwords] = numtab[CD].val;
+			pgspacp[pgwords] = pgspacs;
+			pgspacp[pgwords+1] = pgspacs;
+			pgspacw[pgwords] = 0;
+			pgwordw[pgwords] = 0;
+			pghyphw[pgwords] = 0;
+			pgadspc[pgwords] = 0;
+			pglsphc[pgwords] = 0;
+			pgpenal[pgwords] = 0;
+			pgwdin[pgwords] = in;
+			pgwdll[pgwords] = ll;
+			parlgzero(pgwords+1);
+		}
+		i = *wp++;
+		w = width(i);
+		pglsphc[pgwords] += getlsh(i, rawwidth) * lshmin / LAFACT;
+		w += kernadjust(i, *wp);
+		wne -= w;
+		wch--;
+		pgwordw[pgwords] += w;
+		if (letsps)
+			pglsphc[pgwords] += getlsp(i) * lspmin / LAFACT;
+		if (pgchars + 1 >= pgcsize) {
+			pgcsize += 600;
+			para = realloc(para, pgcsize * sizeof *para);
+			if (para == NULL) {
+				errprint("no memory for characters "
+				         "in paragraph");
+				done(02);
+			}
+		}
+		para[pgchars++] = i;
+		if (wdpenal[wp-word-1])
+			pgpenal[pgwords] = makepgpenal(wdpenal[wp-word-1]);
+	}
+	pgne += pgwordw[pgwords];
+	pgwordp[++pgwords] = pgchars;
+	pgspacw[pgwords] = 0;
+	pgwordw[pgwords] = 0;
+	pghyphw[pgwords] = 0;
+	pgadspc[pgwords] = 0;
+	pglsphc[pgwords] = 0;
+	pgpenal[pgwords] = 0;
+	pgwdin[pgwords] = in;
+	pgwdll[pgwords] = ll;
+	parlgzero(pgwords);
+	if (spread)
+		tbreak();
+}
+
+static void
+pbreak(int sprd)
+{
+	struct s	*s;
+	int	j;
+
+	s = frame;
+	if (sprd)
+		adflg |= 5;
+	if (pshapes) {
+		j = pglnout < pshapes ? pglnout : pshapes - 1;
+		un = pgin[j];
+	}
+	nlflg = 1;
+	tbreak();
+	pglnout++;
+	if (trap) {
+		extern jmp_buf	sjbuf;
+		jmp_buf	savsjbuf;
+		if (setjmp(*s->jmp) == 0) {
+			nlflg = 1;
+			memcpy(&savsjbuf, &sjbuf, sizeof sjbuf);
+			mainloop();
+		}
+		memcpy(&sjbuf, &savsjbuf, sizeof sjbuf);
+		while (frame != s)
+			popi();
+	}
+}
+
+void
+parpr(void)
+{
+	int	i, j, k = 0, nw, w, stretches, _spread = spread, hc;
+	int	savll, savin, savcd, lastin, lastll, curin, curll, ignel = 0;
+	tchar	c, e, lastc, lgs;
+
+	savll = ll;
+	savin = in;
+	curin = 0;
+	lastin = 0;
+	curll = -1;
+	lastll = 0;
+	savcd = numtab[CD].val;
+	hc = shc ? shc : HYPHEN;
+	nw = 0;
+	for (i = 0; i < pgwords; i++) {
+		lgs = 0;
+		numtab[CD].val = pglno[i];
+		if (!ignel) {
+			lastin = pgwdin[i];
+			lastll = pgwdll[i];
+		}
+		if (k == 0 || pgopt[k] == i) {
+			if (k++ > 0) {
+				if (pghyphw[i-1]) {
+#ifndef	NROFF
+					if ((e = pglgec[i-1]) != 0) {
+						w = width(e);
+						storelsh(e, rawwidth);
+						w += kernadjust(para[pgwordp[i]-1], e);
+						storeline(e, w);
+						if (letsps)
+							storelsp(e, 0);
+						lgs = pglgsc[i];
+					} else
+#endif
+						e = para[pgwordp[i]-1];
+					c = sfmask(e) | hc;
+					w = width(c);
+					storelsh(c, rawwidth);
+					w += kernadjust(e, c);
+					storeline(c, w);
+					if (letsps)
+						storelsp(c, 0);
+				}
+				pbreak(1);
+			}
+			if (pshapes) {
+				if (k == 1)
+					parcomp(0);
+				j = k-1 < pshapes ? k-1 : pshapes - 1;
+				ll = pgll[j];
+				un = pgin[j];
+				nel = ll - un;
+			} else if (k > 1 && (in != curin || ll != curll)) {
+				curin = lastin = in;
+				curll = lastll = ll;
+				ignel = 1;
+				parcomp(i);
+			} else if (lastin != curin || lastll != curll) {
+				in = curin = lastin;
+				ll = curll = lastll;
+				if (k > 1)
+					un = in;
+				nel = ll - un;
+				parcomp(i);
+			}
+			nel = ll - un;
+			nw = nwd = 1;
+			leftend(para[pgwordp[i]], admod != 1 && admod != 2, 1);
+		} else {
+			for (j = pgspacp[i]; j < pgspacp[i+1]; j++) {
+				c = parsp[j];
+				minflg = minspsz && ad && !admod;
+				w = width(c);
+				adspc += minspc;
+				if (j == pgspacp[i] && i > 0 && nwd > 1)
+					w += kernadjust(para[pgwordp[i]-1], c);
+				if (j == pgspacp[i+1]-1)
+					w += kernadjust(c, para[pgwordp[i]]);
+				storeline(c, w);
+				spbits = sfmask(c);
+			}
+			nwd += pgspacp[i] != pgspacp[i+1];
+		}
+		stretches = 0;
+		lastc = 0;
+		for (j = pgwordp[i]; j < pgwordp[i+1]; j++) {
+			c = lgs ? lgs : para[j];
+			lgs = 0;
+			w = width(c);
+			storelsh(c, rawwidth);
+			if (j == pgwordp[i] && i > 0 && nw > 1 &&
+					pgspacp[i] == pgspacp[i+1])
+				w += kernadjust(para[j-1], c);
+			if (j < pgwordp[i+1]-1)
+				w += kernadjust(c, para[j+1]);
+			storeline(c, w);
+			if (cbits(c) == STRETCH && cbits(lastc) != STRETCH)
+				stretches++;
+			lastc = c;
+			if (letsps)
+				storelsp(c, 0);
+		}
+		nwd += stretches;
+		nw++;
+	}
+	pbreak(nel - adspc < 0 && nwd > 1 || _spread);
+	pgwords = pgchars = pgspacs = pglines = pgne = pglastw = 0;
+	ll = savll;
+	in = un = savin;
+	numtab[CD].val = savcd;
+}
+
+static void
+parfmt(void)
+{
+	int	_nlflg = nlflg;
+	int	_spread = spread;
+
+	if (pgchars == 0)
+		return;
+	setnel();
+	pglnout = 0;
+	nxf->jmp = malloc(sizeof *nxf->jmp);
+	pushi(-2, 0, FLAG_PARAGRAPH);
+	parpr();
+	ch = popi();
+	nlflg = _nlflg;
+	if (_spread == 1 && pshapes > pglnout) {
+		memmove(&pgin[0], &pgin[pglnout],
+			(pshapes - pglnout) * sizeof *pgin);
+		memmove(&pgll[0], &pgll[pglnout],
+			(pshapes - pglnout) * sizeof *pgll);
+		pshapes -= pglnout;
+	} else
+		pshapes = 0;
+}
