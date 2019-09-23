@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n10.c	1.32 (gritter) 11/14/06
+ * Sccsid @(#)n10.c	1.30 (gritter) 9/5/06
  */
 
 /*
@@ -60,10 +60,9 @@ Device interfaces
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/wait.h>
+#ifdef NROFF
 #include <stdlib.h>
-#ifdef EUC
-#include <wchar.h>
-#endif
+#endif /* NROFF */
 #include "tdef.h"
 #include "ext.h"
 #include "tw.h"
@@ -475,7 +474,6 @@ ptinit(void)
 					wc == 0x20AC) {
 			codestr = tab_utf8;
 			nread = sizeof tab_utf8 - 1;
-			csi_width[0] = 0;
 			utf8 = 1;
 		} else
 #endif	/* EUC */
@@ -765,11 +763,16 @@ ptout1(void)
 	register char	*codep;
 	char	*savep;
 #ifdef EUC
-	register char *qq;
+#ifdef NROFF
+	register int cnt = 0;
+	register tchar *qq;
+#endif /* NROFF */
 #endif /* EUC */
 	int	w, j, phyw;
 #ifdef EUC
+#ifdef NROFF
 	int jj;
+#endif /* NROFF */
 #endif /* EUC */
 	tchar * q, i;
 	static int oxfont = FT;	/* start off in roman */
@@ -801,23 +804,43 @@ ptout1(void)
 			continue;
 		}
 #ifdef EUC
-		if (multi_locale && (k >= nchtab + _SPECCHAR_ST)) {
-			jj = tr2un(k, fbits(i));
-			if ((jj = wcwidth(jj)) < 0)
-				jj = 0;
-			phyw = w = t.Char * csi_width[jj];
+#ifdef NROFF
+		if (multi_locale && ((k & MBMASK) || (k & CSMASK))) {
+			cnt = 0;
+			while ((*q & MBMASK1) && (cnt + 1 < mb_cur_max)) {
+				cnt++;
+				q++;
+			}
+			if ((cnt && !(*q & CSMASK)) || (*q & MBMASK1)) {
+				q -= cnt;
+				cnt = 0;
+				*q &= ~0xfe00;
+			}
+			k = cbits(i = *q);
+			phyw = w = t.Char * csi_width[cs(i)];
 		} else {
+#endif /* NROFF */
 #endif /* EUC */
 		phyw = w = t.Char * t.width[k];
 		if (iszbit(i))
 			w = 0;
 #ifdef EUC
+#ifdef NROFF
 		}
+#endif /* NROFF */
 #endif /* EUC */
 		if (esc || lead)
 			move();
 		esct += w;
+#ifndef EUC
 		xfont = fbits(i);
+#else
+#ifndef NROFF
+		xfont = fbits(i);
+#else
+#endif /* NROFF */
+		xfont = (fbits(*q) % NFONT);	/* for invalid code */
+#endif /* EUC */
 		if (xfont != oxfont) {
 			if (oxfont == ulfont || oxfont == BIFONT)
 				oputs(t.itoff);
@@ -873,19 +896,15 @@ ptout1(void)
 				oput(k);
 			}
 #ifdef EUC
-		} else if (multi_locale && (k >= nchtab + _SPECCHAR_ST)) {
-			int	n;
-			char	mb[MB_LEN_MAX+1];
-			jj = tr2un(k, fbits(i));
-			if ((n = wctomb(mb, jj)) > 0) {
-				for (qq = mb; qq < &mb[n];)
-					oput(*qq++);
-				while (--j > 0) {
-					for (jj = w / t.Char; jj > 0; jj--)
-						oput('\b');
-					for (qq = mb; qq < &mb[n];)
-						oput(*qq++);
-				}
+#ifdef NROFF
+		} else if (multi_locale && (k & CSMASK)) {
+			for (qq = q - cnt; qq <= q;)
+				oput(cbits(*qq++));
+			while (--j > 0) {
+				for (jj = w / t.Char; jj > 0; jj--)
+					oput('\b');
+				for (qq = q - cnt; qq <= q;)
+					oput(cbits(*qq++));
 			}
 		} else if (k < 256) {
 			/*
@@ -899,6 +918,7 @@ ptout1(void)
 				oput('\b');
 				oput(k);
 			}
+#endif /* NROFF */
 #endif /* EUC */
 		} else if (k >= nchtab + _SPECCHAR_ST) {
 			oput(k - nchtab - _SPECCHAR_ST);

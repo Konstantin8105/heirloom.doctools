@@ -43,13 +43,12 @@
 .\"
 .\"
 .\" Changes by Gunnar Ritter, Freiburg i. Br., Germany, February 2006.
-.\" Sccsid @(#)doc.tr	1.177 (gritter) 11/26/06
+.\" Sccsid @(#)doc.tr	1.171 (gritter) 11/6/06
 .\"
 .\" from file m.mac
 .do xflag 3
 .warn
 .mediasize letter
-.lc_ctype en_US.utf8
 .fps math,greek 1 R times ttf
 .fp 2 I timesi ttf
 .fp 3 B timesbd ttf
@@ -99,7 +98,7 @@
 .fallback BI BIE
 .flig BI 31
 ..
-.ds Sccsdate 11/26/06
+.ds Sccsdate 11/6/06
 .ds Str \*[Sccsdate]
 .substring Str 0 0
 .if '\*[Str]'%' \{\
@@ -1109,13 +1108,6 @@ A reverse-line postprocessor \fIcol\fP
 is available for multiple-column \*(NR output on terminals without reverse-line ability;
 \fIcol\fP expects the Model 37 Teletype
 escape sequences that \*(NR produces by default.
-\fIcol\fR can optionally also filter the backspace sequences
-which \*(NR emits for \T'c_nrofful'underlining\T and
-\T'bd'emboldening\T in order to produce a plain text file.
-Another option is the \fIul\fR postprocessor
-which converts backspace sequences to underline
-and reverse video escape sequences
-for \s-1CRT\s0 terminals.
 .pg
 The \fBdpost\fR postprocessor has a special role
 as it translates \*(TR intermediate output to \*(PS,
@@ -1406,7 +1398,7 @@ Line Length and Indenting
 .b1 0
 \T'ti'\fB&ti\fI|\(+-N\fR	\(en	ignored	B,E,\fBm\fR	Temporary indent.\T
 .b1 0
-\T'pshape'\fB&pshape\fI|\(+-I1|\(+-L1|\(+-I2|\(+-L2|\fR...|off	E,\fBm\fR	Define the shape of the current paragraph in \fBad p\fR mode.\T
+\T'pshape'\fB&pshape\fI|I1|L1|I2|L2|\fR...	off	E,\fBm\fR	Define the shape of the current paragraph in \fBad p\fR mode.\T
 .mht s_mac
 Macros, Strings, Diversion, and Position Traps
 .bt
@@ -1569,7 +1561,7 @@ Hyphenation.
 .b1
 \T'hlm'\fB&hlm\fI|N\fR	off	off	E	Maximum number of consecutive hyphenated lines.\T
 .b1
-\T'hypp'\fB&hypp\fI|N|M|L\fR	0|0|0	0|0|0	E	Define hyphenation penalties for \fBad p\fR mode.\T
+\T'hypp'\fB&hypp\fI|N|\fR[\fIM\fR]	0;|0	0;|0	E	Define hyphenation penalties for \fBad p\fR mode.\T
 .b1
 \T'breakchar'\fB&breakchar\fI|c.\fR	\fB\(hy\(em\fR	off	E	Optional line break characters.\T
 .b1
@@ -2171,7 +2163,6 @@ using \fB\ex\fI\'N\'\fR.\T
 \T'n._hylen'13\T	\T'n_.hylen'\fB&hylen\fR\T	\T'n_.hylen'Current minimum hyphenation word length.\T
 \T'n._hypp'13\T	\T'n_.hypp'\fB&hypp\fR\T	\T'n_.hypp'Penalty for hyphen in \fBad p\fR mode.\T
 \T'n._hypp2'13\T	\T'n_.hypp2'\fB&hypp2\fR\T	\T'n_.hypp2'Penalty for consecutive hyphens in \fBad\ p\fR mode.\T
-\T'n._hypp3'13\T	\T'n_.hypp3'\fB&hypp3\fR\T	\T'n_.hypp3'Penalty for hyphenating the last word of a paragraph in \fBad\ p\fR mode.\T
 \T'n_.H'11.1\T	\T'n_.H'\fB&H\fR\T	\T'n_.H'Available horizontal resolution in basic units.\T
 \T'n_.i'6\T	\T'n_.i'\fB&i\fR\T	\T'n_.i'Current indent as set by \fBin\fR.\T
 \T'n_.in'6\T	\T'n_.in'\fB&in\fR\T	\T'n_.in'Current indent including temporary indent, if any.\T
@@ -2393,10 +2384,6 @@ _
 \fBM\fR	1/100 Em	\fIS\fR/100	\fIC\fR/100
 \fBp\fR,\fBz\fR	Point = 1/72 inch	1000	240/72
 \fBu\fR,\fBs\fR	Basic unit	1	1
-\fBt\fR	Printer's point	72000\(mu100/7227	240\(mu100/7227
-\fBT\fR	Printer's pica	72000\(mu400/2409	240\(mu400/2409
-\fBD\fR	Didot point	72000\(mu24/1621	240\(mu24/1621
-\fBC\fR	Cicero	72000\(mu288/1621	240\(mu288/1621
 \fBv\fR	Vertical line space	\fIV\fR	\fIV\fR
 none	Default, see below
 .TE
@@ -2667,8 +2654,6 @@ and those that can reasonably be mapped
 into other printable characters.
 The exact behavior is determined by a driving
 table prepared for each device.
-In a \s-1UTF-\s+18 locale,
-combining characters are processed.
 The characters
 \fB\'\fR,
 \fB\`\fR,
@@ -3267,8 +3252,9 @@ The words are then split into lines
 such that the interword spaces
 are closest to the optimum setting
 across the entire paragraph.
-Ultimately, the lines so determined
-are printed.
+The lines so determined
+are written to a temporary \T'c_diversion'diversion\T.
+Ultimately, this diversion is printed.
 \T'c_trap'Traps\T, page breaks,
 and any positioning become effective only at this time.
 It is thus well possible that the current page number
@@ -3795,14 +3781,12 @@ The length of \fIthree-part titles\fR produced by \T'tl'\fBtl\fR\T
 \T's_titles'(see \(sc14)\T is \fIindependently\fR set by \T'lt'\fBlt\fR.\T
 .xx
 In \T'ad_p'\fBad\ p\fR\T mode,
-indent, temporary indent, and line length should be predefined
-for the entire paragraph
-at the time a \fIbreak\fR occurs.
-To achieve this with indent and line length varying inside a paragraph,
+indent and line length can only be set directly
+for an entire paragraph;
+a temporary indent can be specified only
+for the first line of a paragraph.
+To vary indent and line length inside a paragraph,
 a shape can be defined with \T'pshape'\fBpshape\fR\T.
-The \T'll'\fBll\fR\T and \T'in'\fBin\fR\T requests
-are also effective while formatting a paragraph
-but may result in less optimal line breaking decisions then.
 .h1
 .bta ll
 \fB&ll\fI|\(+-N\fR	6.5\|in	previous	E,\fBm\fR	Line length is set to \(+-\fIN\fR.
@@ -3820,7 +3804,7 @@ The current indent is not changed.
 .hylang en_US
 .minss 9
 .letadj 95 98 18 105 102
-\fB&pshape\fI|\(+-I1|\(+-L1|\(+-I2|\(+-L2|\fR...|off	E,\fBm\fR	Set a special shape for the current paragraph in \T'ad_p'\fBad\ p\fR\T mode.
+\fB&pshape\fI|I1|L1|I2|L2|\fR...	off	E,\fBm\fR	Set a special shape for the current paragraph in \T'ad_p'\fBad\ p\fR\T mode.
 \#.ds l 4m 6m 8m 10m 12m 14m 16m 18m 20m 22m 24m \
 \#22m 20m 18m 16m 14m 12m 10m 8m 6m 4m
 \#.ds s
@@ -3839,7 +3823,6 @@ The current indent is not changed.
 \#.\}
 \#.pshape \*s
 .nr l (\n(.lu-\n(.iu-7.4m)/3
-.nr h (\n(.lu-\n(.iu-5m)/2
 .nr t \nlu+3.7m
 .pshape \
 0 \n(.iu+\nlu-1m \
@@ -3857,26 +3840,9 @@ The current indent is not changed.
 \n(.lu-\nlu+.5m \n(.lu \
 \n(.lu-\nlu+.25m \n(.lu \
 \n(.lu-\nlu \n(.lu \
-\n(.iu \n(.lu \
-\n(.iu \n(.lu \
-\n(.iu \n(.lu \
-\n(.iu \n(.lu \
-\n(.iu \n(.iu+\nhu \
-\n(.iu \n(.iu+\nhu \
-\n(.iu \n(.iu+\nhu \
-\n(.iu \n(.iu+\nhu \
-\n(.iu \n(.iu+\nhu \
-\n(.iu \n(.iu+\nhu \
-\n(.iu+\nhu+5m \n(.lu \
-\n(.iu+\nhu+5m \n(.lu \
-\n(.iu+\nhu+5m \n(.lu \
-\n(.iu+\nhu+5m \n(.lu \
-\n(.iu+\nhu+5m \n(.lu \
-\n(.iu+\nhu+5m \n(.lu \
 \n(.iu \n(.lu
 .mk T
 .nr B \nTu+5v
-.nr C \nTu+15v
 .dt \nBu T2
 .de T2
 .ch T2
@@ -3886,35 +3852,25 @@ The current indent is not changed.
 .de T3
 .ch T3
 .sp |\nTu
-.dt \nCu T4
-.
-..
-.de T4
-.ch T4
-.sp |\nCu-6v
 ..
 At the next \fIbreak\fR when the paragraph gets formatted,
 its first line is indented by \fII1\fR and has length \fIL1\fR,
 its second line is indented by \fII2\fR and has length \fIL2\fR,
 and so forth.
-Relative numbers refer to the previous indent or line length pair,
-or to the values set
-by \T'in'\fBin\fR\T and \T'll'\fBll\fR\T
-for the first pair.
 The last of the indent and line length pairs stays effective
 if the paragraph has more lines
 than pairs are given.
-With an odd number of arguments,
-the standard line length as set by \T'll'\fBll\fR\T is used at the end.
+In the absence of a terminating line length measure,
+the standard line length as set by \T'll'\fBll\fR\T is used.
 Once the current paragraph has been printed,
 the shape specification is forgotten,
 and the standard indent and line length values are in effect again
 unless another \fBpshape\fR request occurs.
 As an exception, \T'e_p'\fB\ep\fR\T preserves the remaining part
 of the shape.
-To produce shapes with holes as in this example,
-\T'c_trap'diversion traps\T can be used
-to move formatted lines in vertical direction.
+Combine this mechanism with \T'c_trap'page or diversion traps\T
+to move lines in vertical direction
+as shown here.
 .br
 .di
 .ne \n(dnu
@@ -4958,7 +4914,7 @@ and an initial double-quote is discarded.
 .sc
 Transparent output.
 The sequence \A'e_X'\fB\eX\fI\'anything\'\fR copies \fIanything\fR
-to the \*(TR output,
+to the output,
 as a device control function in the form \fBx\ X\ \fIanything\fR
 \T's_output'(\(sc26).\T
 Escape sequences in \fIanything\fR are processed.
@@ -4970,7 +4926,6 @@ copies the contents of the string or macro
 to the output as a device control function
 without processing escape sequences.
 Newlines in the macro are embedded in the output.
-\*(NR discards transparent output sequences and their contents.
 .sc
 Comments and concealed newlines.
 An uncomfortably long input line that must stay
@@ -5393,20 +5348,15 @@ the current line is not hyphenated.
 The default is no limit.
 The current value is accessible in the \A'n_.hlm'\fB&hlm\fR number register.
 .bta hypp
-\fB&hypp\fI|N|M|L\fR	0|0|0	0|0|0	E	Define hyphenation penalties for \T'ad_p'\fBad p\fR\T mode.
+\fB&hypp\fI|N|\fR[\fIM\fR]	0;|0	0;|0	E	Define hyphenation penalties for \T'ad_p'\fBad p\fR\T mode.
 Every inserted hyphen is given a penalty of \fIN\fR
 when computing optimal break points;
 each hyphen that is followed by another hyphen
 gets an additional penalty of \fIM\fR.
-A hyphen that is inserted in the last word of a paragraph
-gets an additional penalty of \fIL\fR.
 A value of zero means no penalty.
 Effective penalties correspond to values between 10 and 200.
 The current values are available in the
-\A'n_.hypp'\fB&hypp\fR,
-\A'n_.hypp2'\fB&hypp2\fR, and
-\A'n_.hypp3'\fB&hypp3\fR
-number registers.
+\A'n_.hypp'\fB&hypp\fR and \A'n_.hypp2'\fB&hypp2\fR number registers.
 .bta breakchar
 \fB&breakchar\fI|c.\fR	\fB\(hy\(em\fR	off	E	Optional line break characters.
 A line may always be split after one of these characters.
@@ -6311,10 +6261,10 @@ text sweeps past the trap set by
 or when the \T'c_diversion'diversion\T is explicitly closed
 by \fBEP\fR.
 .xx
-\fBBP\fR is not recommended for text filling
+\fBBP\fR cannot be used for text filling
 in \T'ad_p'\fBad\ p\fR\T mode
 since its trap-based mechanism
-may result in less optimal output,
+cannot work properly then,
 and since it is not possible
 to define the shape of a complete paragraph
 with the information it has.
@@ -6389,7 +6339,6 @@ To generate such data,
 use the \fBPDFMark\fR device command of \fIdpost\fR
 with the \*(TR \T'e_X'\fB\eX\fR escape sequence\T, e.g.\&
 .x1
-.ne 2
 \fB\eX\'PDFMark: Author \fIMy Name\fB\'
 \fB\eX\'PDFMark: Keywords \fITypesetting, PDF documents\fB\'
 \fB\eX\'PDFMark: Subject \fItroff, dpost, and pdfmark\fB\'

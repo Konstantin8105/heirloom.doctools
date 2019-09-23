@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n5.c	1.123 (gritter) 11/26/06
+ * Sccsid @(#)n5.c	1.117 (gritter) 11/5/06
  */
 
 /*
@@ -52,10 +52,14 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <limits.h>
-#if defined (EUC)
+#if defined (EUC) && defined (NROFF)
 #include <stddef.h>
+#ifdef	__sun
+#include <widec.h>
+#else
 #include <wchar.h>
-#endif	/* EUC */
+#endif
+#endif	/* EUC && NROFF */
 #include <string.h>
 #include <unistd.h>
 #include "tdef.h"
@@ -341,34 +345,18 @@ casehypp(void)
 	float	t;
 
 	if (skip(0))
-		hypp = hypp2 = hypp3 = 0;
+		hypp = 0;
 	else {
 		t = atop();
 		if (!nonumb)
 			hypp = t;
 		if (skip(0))
-			hypp2 = hypp3 = 0;
+			hypp2 = 0;
 		else {
 			t = atop();
 			if (!nonumb)
 				hypp2 = t;
-			if (skip(0))
-				hypp3 = 0;
-			else {
-				t = atop();
-				if (!nonumb)
-					hypp3 = t;
-			}
 		}
-	}
-}
-
-static void
-chkin(int indent, int linelength, const char *note)
-{
-	if (indent > linelength - INCH / 10) {
-		if (warn & WARN_RANGE)
-			errprint("excess of %sindent", note);
 	}
 }
 
@@ -376,7 +364,6 @@ void
 casepshape(void)
 {
 	int	i, l;
-	int	lastin = in, lastll = ll;
 
 	pshapes = 0;
 	if (skip(0)) {
@@ -384,24 +371,23 @@ casepshape(void)
 		return;
 	}
 	do {
-		i = max(hnumb(&lastin), 0);
+		dfact = EM;
+		i = atoi();
 		if (nonumb)
 			break;
 		if (skip(0))
 			l = ll;
 		else {
-			l = max(hnumb(&lastll), INCH / 10);
+			dfact = EM;
+			l = atoi();
 			if (nonumb)
 				break;
 		}
 		if (pshapes >= pgsize)
 			growpgsize();
-		chkin(i, l, "");
 		pgin[pshapes] = i;
 		pgll[pshapes] = l;
 		pshapes++;
-		lastin = i;
-		lastll = l;
 	} while (!skip(0));
 }
 
@@ -539,8 +525,7 @@ casein(void)
 	tbreak();
 	in1 = in;
 	in = i;
-	chkin(in, ll, "");
-	if (!nc && !pgwords) {
+	if (!nc) {
 		un = in;
 		setnel();
 	}
@@ -558,7 +543,6 @@ casell(void)
 		i = max(hnumb(&ll), INCH / 10);
 	ll1 = ll;
 	ll = i;
-	chkin(in, ll, "");
 	setnel();
 }
 
@@ -587,7 +571,6 @@ caseti(void)
 	i = max(hnumb(&in), 0);
 	tbreak();
 	un1 = i;
-	chkin(i, ll, "temporary ");
 	setnel();
 }
 
@@ -790,16 +773,11 @@ casebp(void)
 	if (dip != d)
 		return;
 	savframe = frame;
-	if (skip(0))
-		i = -1;
-	else {
-		if ((i = inumb(&numtab[PN].val)) < 0)
-			i = 0;
-		if (nonumb)
-			i = -1;
-	}
+	skip(0);
+	if ((i = inumb(&numtab[PN].val)) < 0)
+		i = 0;
 	tbreak();
-	if (i >= 0) {
+	if (!nonumb) {
 		npn = i;
 		npnflg++;
 	} else if (dip->nls)
@@ -861,6 +839,7 @@ loop:	for (i = 0; i < NTM - 5 - mb_cur_max; ) {
 			break;
 		}
 	c:	j = cbits(c);
+#if !defined (NROFF) && defined (EUC)
 		if (iscopy(c)) {
 			int	n;
 			if ((n = wctomb(&tmbuf[i], j)) > 0) {
@@ -868,6 +847,7 @@ loop:	for (i = 0; i < NTM - 5 - mb_cur_max; ) {
 				continue;
 			}
 		}
+#endif	/* !NROFF && EUC */
 		if (xflag == 0) {
 			tmbuf[i++] = c;
 			continue;
@@ -1349,8 +1329,6 @@ evc(struct env *dp, struct env *sp)
 	dp->_pglgeh = NULL;
 	dp->_pgin = NULL;
 	dp->_pgll = NULL;
-	dp->_pgwdin = NULL;
-	dp->_pgwdll = NULL;
 	dp->_pglno = NULL;
 	dp->_pgpenal = NULL;
 	if (dp->_brnl < INT_MAX)
@@ -1468,10 +1446,6 @@ evcline(struct env *dp, struct env *sp)
 	memcpy(dp->_pgin, sp->_pgin, dp->_pgsize * sizeof *dp->_pgin);
 	dp->_pgll = malloc(dp->_pgsize * sizeof *dp->_pgll);
 	memcpy(dp->_pgll, sp->_pgll, dp->_pgsize * sizeof *dp->_pgll);
-	dp->_pgwdin = malloc(dp->_pgsize * sizeof *dp->_pgwdin);
-	memcpy(dp->_pgwdin, sp->_pgwdin, dp->_pgsize * sizeof *dp->_pgwdin);
-	dp->_pgwdll = malloc(dp->_pgsize * sizeof *dp->_pgwdll);
-	memcpy(dp->_pgwdll, sp->_pgwdll, dp->_pgsize * sizeof *dp->_pgwdll);
 	dp->_pglno = malloc(dp->_pgsize * sizeof *dp->_pglno);
 	memcpy(dp->_pglno, sp->_pglno, dp->_pgsize * sizeof *dp->_pglno);
 	dp->_pgpenal = malloc(dp->_pgsize * sizeof *dp->_pgpenal);
@@ -1531,10 +1505,6 @@ relsev(struct env *ep)
 	ep->_pgin = NULL;
 	free(ep->_pgll);
 	ep->_pgll = NULL;
-	free(ep->_pgwdin);
-	ep->_pgwdin = NULL;
-	free(ep->_pgwdll);
-	ep->_pgwdll = NULL;
 	free(ep->_pglno);
 	ep->_pglno = NULL;
 	free(ep->_pgpenal);
@@ -1638,6 +1608,13 @@ caseif(int x)
 		tryglf++;
 		if (!skip(1)) {
 			j = getch();
+#if defined (NROFF) && defined (EUC)
+			if (multi_locale && j & MBMASK) {
+				while ((j & MBMASK) != LASTOFMB)
+					j = getch();
+				true++;
+			} else
+#endif	/* NROFF && EUC */
 			true = !ismot(j) && cbits(j) && cbits(j) != ' ';
 		}
 		tryglf--;
@@ -1931,11 +1908,9 @@ int
 rdtty(void)
 {
 	char	onechar;
-#if defined (EUC)
-	int	i, n;
-
-loop:
-#endif /* EUC */
+#if defined (EUC) && defined (NROFF)
+	int	i, n, col_index;
+#endif /* EUC && NROFF */
 
 	onechar = 0;
 	if (read(0, &onechar, 1) == 1) {
@@ -1943,10 +1918,10 @@ loop:
 			tty++;
 		else 
 			tty = 1;
-#if !defined (EUC)
+#if !defined (EUC) || !defined (NROFF)
 		if (tty != 3)
 			return(onechar);
-#else	/* EUC */
+#else	/* EUC && NROFF */
 		if (tty != 3) {
 			if (!multi_locale)
 				return(onechar);
@@ -1954,27 +1929,39 @@ loop:
 			*mbbuf1p++ = i;
 			*mbbuf1p = 0;
 			if ((*mbbuf1&~(wchar_t)0177) == 0) {
+				twc = *mbbuf1;
+				i |= (BYTE_CHR);
+				setcsbits(i, 0);
 				twc = 0;
 				mbbuf1p = mbbuf1;
 			}
 			else if ((n = mbtowc(&twc, mbbuf1, mb_cur_max)) <= 0) {
 				if (mbbuf1p >= mbbuf1 + mb_cur_max) {
-					illseq(-1, mbbuf1, mbbuf1p-mbbuf1);
+					i &= ~(MBMASK | CSMASK);
 					twc = 0;
 					mbbuf1p = mbbuf1;
 					*mbbuf1p = 0;
-					i &= 0177;
 				} else {
-					goto loop;
+					i |= (MIDDLEOFMB);
 				}
 			} else {
-				i = twc | COPYBIT;
+				if (n > 1)
+					i |= (LASTOFMB);
+				else
+					i |= (BYTE_CHR);
+				if ((twc & ~(wchar_t)0177) == 0) {
+					col_index = 0;
+				} else {
+					if ((col_index = wcwidth(twc)) < 0)
+						col_index = 0;
+				}
+				setcsbits(i, col_index);
 				twc = 0;
 				mbbuf1p = mbbuf1;
 			}
 			return(i);
 		}
-#endif /* EUC */
+#endif /* EUC && NROFF */
 	}
 	popi();
 	tty = 0;
