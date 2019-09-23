@@ -18,10 +18,14 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)e.h	1.10 (gritter) 12/25/06
+ * Sccsid @(#)e.h	1.13 (gritter) 1/13/08
  */
 
 #include <stdio.h>
+#include <inttypes.h>
+
+typedef	intptr_t	YYSTYPE;
+#define	YYSTYPE	YYSTYPE
 
 #if defined (__GLIBC__) && defined (_IO_getc_unlocked)
 #undef	getc
@@ -37,6 +41,13 @@
 #define	ITAL	'1'
 #define	BLD	'1'
 #endif /* NEQN */
+
+#define	rom(c)	(((c) & 0177) == ROM)
+#define	ital(c)	(((c) & 0177) == ITAL)
+#define	bld(c)	(((c) & 0177) == BLD)
+
+#define	OP	0200
+#define	op(c)	((c) & OP)
 
 #ifndef NEQN
 #define	VERT(n)	(n)
@@ -72,9 +83,9 @@ extern int	ebase[100];
 #endif	/* NEQN */
 extern int	lfont[100];
 extern int	rfont[100];
-extern int	yyval;
-extern int	*yypv;
-extern int	yylval;
+extern YYSTYPE	yyval;
+extern YYSTYPE	*yypv;
+extern YYSTYPE	yylval;
 extern int	eqnreg, eqnht;
 extern int	lefteq, righteq;
 extern int	lastchar;	/* last character read by lex */

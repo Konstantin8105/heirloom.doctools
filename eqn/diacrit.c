@@ -18,7 +18,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)diacrit.c	1.5 (gritter) 10/19/06
+ * Sccsid @(#)diacrit.c	1.7 (gritter) 1/13/08
  */
 
 # include "e.h"
@@ -41,8 +41,11 @@ diacrit(int p1, int type) {
 	nrwid(p1, effps, p1);
 	printf(".nr 10 %gp\n", VERT(max(eht[p1]-ebase[p1]-EM(1,ps),0)));	/* vertical shift if high */
 	printf(".if \\n(ct>1 .nr 10 \\n(10+\\s%s.25m\\s0\n", tsize(effps));
-	printf(".nr %d \\s%s.1m\\s0\n", t, tsize(effps));	/* horiz shift if high */
-	printf(".if \\n(ct>1 .nr %d \\s%s.15m\\s0\n", t, tsize(effps));
+	if (type != HAT && type != TILDE) {
+		printf(".nr %d \\s%s.1m\\s0\n", t, tsize(effps));	/* horiz shift if high */
+		printf(".if \\n(ct>1 .nr %d \\s%s.15m\\s0\n", t, tsize(effps));
+	} else
+		printf(".nr %d 0\n", t);
 #endif /* NEQN */
 	switch(type) {
 		case VEC:	/* vec */
@@ -100,7 +103,7 @@ diacrit(int p1, int type) {
 		}
 	nrwid(c, ps, c);
 #ifndef NEQN
-	if (lfont[p1] != ITAL)
+	if (!ital(lfont[p1]))
 		printf(".nr %d 0\n", t);
 	printf(".as %d \\h'-\\n(%du-\\n(%du/2u+\\n(%du'\\v'0-\\n(10u'\\*(%d", 
 		p1, p1, c, t, c);
