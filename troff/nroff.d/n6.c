@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n6.c	1.23 (gritter) 12/6/05
+ * Sccsid @(#)n6.c	1.27 (gritter) 12/23/05
  */
 
 /*
@@ -126,23 +126,30 @@ tchar
 setch(int delim)
 {
 	register int j;
-	char	temp[10];
+	char	temp[40];
 	register char	*s;
 
 	s = temp;
 	if ((*s++ = getach()) == 0 || (*s++ = getach()) == 0)
 		return(0);
-	if (delim == '[' && getach() != ']') {
-		while (getach() != ']');
-		return(0);
+	if (delim == '[' && (j = getach()) != ']') {
+		*s++ = j;
+		while ((j = getach()) != ']' && j != 0)
+			if (s < &temp[sizeof temp - 1])
+				*s++ = j;
+		*s = '\0';
+		if (j != ']')
+			nodelim(']');
+		else if (warn & WARN_CHAR)
+			errprint("missing glyph [%s]", temp);
+		return ' ';
 	}
 	*s = '\0';
 	if ((j = findch(temp)) > 0)
 		return j | chbits;
 	else {
 		if (warn & WARN_CHAR)
-			errprint("missing glyph \\%c%s%s", delim, temp,
-					delim == '[' ? "]" : "");
+			errprint("missing glyph \\%c%s", delim, temp);
 		return 0;
 	}
 }
@@ -219,7 +226,8 @@ setps(void)
 		j = inumb(&apts);
 		if (nonumb)
 			return;
-		getch();
+		if (cbits(getch()) != i)
+			nodelim(i);
 	}
 }
 
@@ -252,7 +260,7 @@ setslant (void)		/* set slant from \S'...' */
 void
 caseft(void)
 {
-	skip();
+	skip(0);
 	setfont(1);
 }
 
@@ -321,6 +329,8 @@ setwd(void)
 		if ((k = base + emsz) > numtab[ST].val)
 			numtab[ST].val = k;
 	}
+	if (cbits(i) != delim)
+		nodelim(delim);
 	setn1(wid, 0, (tchar) 0);
 	numtab[HP].val = savhp;
 	apts = savapts;
@@ -356,16 +366,18 @@ mot(void)
 {
 	register int j, n;
 	register tchar i;
+	int	delim;
 
 	j = HOR;
-	getch(); /*eat delim*/
+	delim = cbits(getch()); /*eat delim*/
 	if (n = atoi()) {
 		if (vflag)
 			j = VERT;
 		i = makem(quant(n, j));
 	} else
 		i = 0;
-	getch();
+	if (cbits(getch()) != delim)
+		nodelim(delim);
 	vflag = 0;
 	dfact = 1;
 	return(i);
@@ -428,12 +440,22 @@ casefp(void)
 {
 	register int i, j;
 
-	skip();
+	skip(1);
 	if ((i = cbits(getch()) - '0') < 0 || i > nfonts)
 		return;
-	if (skip() || !(j = getrq()))
+	if (skip(1) || !(j = getrq()))
 		return;
+	if (j >= 256)
+		j = maybemore(j, 3);
 	fontlab[i] = j;
+}
+
+void
+casefps(void)
+{
+	skip(1);
+	getname();
+	casefp();
 }
 
 
@@ -450,7 +472,7 @@ casebd(void)
 
 	k = 0;
 bd0:
-	if (skip() || !(i = getrq()) || (j = findft(i)) == -1) {
+	if (skip(1) || !(i = getrq()) || (j = findft(i)) == -1) {
 		if (k)
 			goto bd1;
 		else 
@@ -465,7 +487,7 @@ bd0:
 		j = k;
 	}
 bd1:
-	skip();
+	skip(0);
 	noscale++;
 	bdtab[j] = atoi();
 	noscale = 0;
@@ -477,7 +499,7 @@ casevs(void)
 {
 	register int i;
 
-	skip();
+	skip(0);
 	vflag++;
 	dfact = INCH; /*default scaling is points!*/
 	dfactd = 72;

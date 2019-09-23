@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)t10.c	1.52 (gritter) 12/10/05
+ * Sccsid @(#)t10.c	1.58 (gritter) 12/22/05
  */
 
 /*
@@ -57,6 +57,7 @@
 #include "afm.h"
 #include "proto.h"
 #include "troff.h"
+#include "unimap.h"
 /*
  * troff10.c
  * 
@@ -165,6 +166,7 @@ ptinit(void)
 	char	*filebase, *p, *ap, *descp;
 
 	growfonts(NFONT+1);
+	uninit();
 	/* open table for device,
 	 * read in resolution, size info, font info, etc.
 	 * and set params
@@ -210,7 +212,8 @@ ptinit(void)
 			*ap = 0;
 			if (ap == &fontbase[i]->namefont[1])
 				fontlab[i] &= BYTEMASK;
-			loadafm(i, fontlab[i], fontbase[i]->namefont, NULL, 1);
+			loadafm(i, fontlab[i], fontbase[i]->namefont, NULL,
+					1, SPEC_NONE);
 		} else
 			makefont(i, p, p + nw, p + 2 * nw, p + 3 * nw, nw);
 		p += 3 * nw + dev.nchtab + 128 - 32;
@@ -666,11 +669,31 @@ ptsupplyfont(char *fontname, char *file)
 }
 
 void
-ptpapersize(int x, int y, int setmedia)
+ptpapersize(void)
+{
+	if (ascii || mediasize.flag == 0)
+		return;
+	fdprintf(ptid, "x X PaperSize %d %d %d\n",
+			mediasize.val[2], mediasize.val[3],
+			mediasize.flag&2?1:0);
+}
+
+static void
+cut1(const char *name, struct box *bp)
+{
+	if (bp->flag)
+		fdprintf(ptid, "x X %s %d %d %d %d\n", name,
+			bp->val[0], bp->val[1], bp->val[2], bp->val[3]);
+}
+
+void
+ptcut(void)
 {
 	if (ascii)
 		return;
-	fdprintf(ptid, "x X PaperSize %d %d %d\n", x, y, setmedia);
+	cut1("TrimAt", &trimat);
+	cut1("BleedAt", &bleedat);
+	cut1("CropAt", &cropat);
 }
 
 void
@@ -686,12 +709,15 @@ newpage(int n)	/* called at end of each output page (we hope) */
 	fdprintf(ptid, "p%d\n", n);	/* new page */
 	for (i = 0; i <= nfonts; i++)
 		if (afmtab && fontbase[i]->afmpos)
-			fdprintf(ptid, "x font %d %s\n", i,
-				afmtab[(fontbase[i]->afmpos)-1]->path);
+			fdprintf(ptid, "x font %d %s %d\n", i,
+				afmtab[(fontbase[i]->afmpos)-1]->path,
+				afmtab[(fontbase[i]->afmpos)-1]->spec);
 		else if (fontbase[i]->namefont && fontbase[i]->namefont[0])
 			fdprintf(ptid, "x font %d %s\n", i, fontbase[i]->namefont);
 	ptps();
 	ptfont();
+	ptpapersize();
+	ptcut();
 }
 
 void

@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n9.c	1.29 (gritter) 12/7/05
+ * Sccsid @(#)n9.c	1.34 (gritter) 12/23/05
  */
 
 /*
@@ -156,6 +156,8 @@ eat(register int c)
 
 	while ((i = cbits(getch())) != c &&  (i != '\n'))
 		;
+	if (c != ' ' && i != c)
+		nodelim(c);
 	return(i);
 }
 
@@ -174,6 +176,8 @@ setov(void)
 		o[k] = i;
 		w[k] = width(i);
 	}
+	if (j != delim)
+		nodelim(delim);
 	o[k] = w[k] = 0;
 	if (o[0])
 		for (j = 1; j; ) {
@@ -232,6 +236,8 @@ setbra(void)
 		*j++ = dwn;
 		cnt++;
 	}
+	if (k != delim)
+		nodelim(delim);
 	if (--cnt < 0)
 		return;
 	else if (!cnt) {
@@ -397,11 +403,11 @@ casefc(void)
 	gchtab[fc] &= ~FCBIT;
 	fc = IMP;
 	padc = ' ';
-	if (skip() || ismot(j = getch()) || (i = cbits(j)) == '\n')
+	if (skip(0) || ismot(j = getch()) || (i = cbits(j)) == '\n')
 		return;
 	fc = i;
 	gchtab[fc] |= FCBIT;
-	if (skip() || ismot(ch) || (ch = cbits(ch)) == fc)
+	if (skip(0) || ismot(ch) || (ch = cbits(ch)) == fc)
 		return;
 	padc = ch;
 }
@@ -411,13 +417,14 @@ tchar
 setfield(int x)
 {
 	register tchar ii, jj, *fp;
-	register int i, j;
+	register int i, j, k;
 	int length, ws, npad, temp, type;
 	tchar **pp, *padptr[NPP];
 	tchar fbuf[FBUFSZ];
 	int savfc, savtc, savlc;
-	tchar rchar = 0;
+	tchar rchar = 0, nexti = 0;
 	int savepos;
+	int oev;
 
 	if (x == tabch) 
 		rchar = tabc | chbits;
@@ -447,9 +454,19 @@ setfield(int x)
 	fp = fbuf;
 	pp = padptr;
 	if (x == savfc) {
+		nexti = getch();
 		while (1) {
-			j = cbits(ii = getch());
+			j = cbits(ii = nexti);
 			jj = width(ii);
+			oev = ev;
+			if (j != savfc && j != '\n' &&
+					pp < (padptr + NPP - 1) &&
+					fp < (fbuf + FBUFSZ - 3))
+				nexti = getch();
+			else
+				nexti = 0;
+			if (ev == oev)
+				jj += kernadjust(ii, nexti);
 			widthp = jj;
 			numtab[HP].val += jj;
 			if (j == padc) {
@@ -497,16 +514,32 @@ s1:
 	} else if (type == 0) {
 		/*plain tab or leader*/
 		if ((j = width(rchar)) > 0) {
-			int nchar = length / j;
+			int nchar;
+			k = kernadjust(rchar, rchar);
+			if (length < j)
+				nchar = 0;
+			else {
+				nchar = 1;
+				length -= j;
+				nchar += length / (k+j);
+				length %= k+j;
+			}
+			if (pbp >= pbsize-3)
+				growpbbuf();
+			pbbuf[pbp++] = FILLER;
 			while (nchar-->0) {
-				if (pbp >= pbsize-3)
+				if (pbp >= pbsize-4)
 					if (growpbbuf() == NULL)
 						break;
 				numtab[HP].val += j;
 				widthp = j;
+				if (nchar > 0) {
+					numtab[HP].val += k;
+					widthp += k;
+				}
 				pbbuf[pbp++] = rchar;
 			}
-			length %= j;
+			pbbuf[pbp++] = FILLER;
 		}
 		if (length)
 			jj = sabsmot(length) | MOT;
@@ -515,8 +548,15 @@ s1:
 	} else {
 		/*center tab*/
 		/*right tab*/
-		while (((j = cbits(ii = getch())) != savtc) &&  (j != '\n') && (j != savlc)) {
+		nexti = getch();
+		while (((j = cbits(ii = nexti)) != savtc) &&  (j != '\n') && (j != savlc)) {
 			jj = width(ii);
+			oev = ev;
+			if (fp < (fbuf + FBUFSZ - 3)) {
+				nexti = getch();
+				if (ev == oev)
+					jj += kernadjust(ii, nexti);
+			}
 			ws += jj;
 			numtab[HP].val += jj;
 			widthp = jj;
@@ -532,14 +572,25 @@ s1:
 			length -= ws / 2; /*CTAB*/
 		pushback(fbuf);
 		if ((j = width(rchar)) != 0 && length > 0) {
-			int nchar = length / j;
+			int nchar;
+			k = kernadjust(rchar, rchar);
+			if (length < j)
+				nchar = 0;
+			else {
+				nchar = 1;
+				length -= j;
+				nchar += length / (k+j);
+				length %= k+j;
+			}
+			if (pbp >= pbsize-3)
+				growpbbuf();
+			pbbuf[pbp++] = FILLER;
 			while (nchar-- > 0) {
 				if (pbp >= pbsize-3)
 					if (growpbbuf() == NULL)
 						break;
 				pbbuf[pbp++] = rchar;
 			}
-			length %= j;
 		}
 		length = (length / HOR) * HOR;
 		jj = makem(length);
@@ -616,7 +667,7 @@ caselc_ctype(void)
 	char	c, *buf = NULL;
 	int	i = 0, sz = 0;
 
-	skip();
+	skip(1);
 	do {
 		c = getach()&0377;
 		if (i >= sz)
@@ -740,7 +791,7 @@ casepsbb(void)
 	int	bb[4] = { 0, 0, 0, 0 };
 
 	lgf++;
-	skip();
+	skip(1);
 	do {
 		c = getach();
 		if (n >= sz)
@@ -763,11 +814,13 @@ static const struct {
 	{ WARN_CHAR,	"char" },
 	{ WARN_NUMBER,	"number" },
 	{ WARN_BREAK,	"break" },
+	{ WARN_DELIM,	"delim" },
 	{ WARN_EL,	"el" },
 	{ WARN_SCALE,	"scale" },
 	{ WARN_DI,	"di" },
 	{ WARN_MAC,	"mac" },
 	{ WARN_REG,	"reg" },
+	{ WARN_MISSING,	"missing" },
 	{ WARN_INPUT,	"input" },
 	{ WARN_ESCAPE,	"escape" },
 	{ WARN_SPACE,	"space" },
@@ -832,12 +885,12 @@ warn1(void)
 void
 casewarn(void)
 {
-	if (skip())
+	if (skip(0))
 		warn = -1;
 	else {
 		do
 			warn1();
-		while (!skip());
+		while (!skip(0));
 	}
 }
 
@@ -845,7 +898,25 @@ void
 nosuch(int rq)
 {
 	if (rq && rq != RIGHT && warn & WARN_MAC)
-		errprint("no such request %s", macname(rq));
+		errprint("%s: no such request", macname(rq));
+}
+
+void
+missing(void)
+{
+	if (warn & WARN_MISSING) {
+		if (lastrq)
+			errprint("%s: missing argument", macname(lastrq));
+		else
+			errprint("missing argument");
+	}
+}
+
+void
+nodelim(int delim)
+{
+	if (warn & WARN_DELIM)
+		errprint("%c delimiter missing", delim);
 }
 
 void

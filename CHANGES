@@ -1,3 +1,36 @@
+Release 051227
+* [nt]roff: A new extension level "3" is available. In this level, undefined
+  long requests whose first two characters form an existing short request
+  are ignored instead of being interpreted as short requests. Also string
+  and number register references are interpreted at any position of a
+  long request name in this level.
+* troff: Unicode mapping tables from OpenType and TrueType fonts are now
+  used for converting input characters.
+* troff: Locale-dependent input characters for which no matching glyph can
+  be found are now replaced by spaces.
+* troff: The ".fps" request has been introduced to map troff special
+  characters like "\(*a" or "\(+-" to a custom font.
+* [nt]roff: The warning category "missing" is now available; it includes
+  warnings about missing required arguments to requests.
+* [nt]roff: The warning category "delim" is now available; it includes
+  warnings about missing delimiters to escape sequences.
+* troff: The ".trimat", ".bleedat, and ".cropat" " requests have been added
+  to include advice about the "TrimBox", "BleedBox", and "CropBox" page
+  parameters to a PDF distiller command, particularly for PDF/X generation.
+* dpost: The "-M" option has been added. It can be used to print cut marks
+  ("-M cut"), registration marks ("-M registration"), or both cut marks and
+  registration marks ("-M cut:registration") in combination with the
+  ".trimat" troff request.
+* [nt]roff: The ".af" request now handles long register names correctly.
+* troff: Kerning now works correctly in combination with leaders and
+  fields.
+* troff: The ".tm" and ".write" requests now correctly handle locale-
+  dependent input characters as well as one-character escape sequences
+  that are interpreted in copy mode such as "\&".
+* [nt]roff: The "-msafe" macro now correctly removes the ".do pso",
+  ".do open", and ".do opena" requests in -x1 (default) mode. They
+  were previously removed in -x2 mode only.
+
 Release 051212
 * [nt]roff: The ".pso" request has been added; it reads the output of
   a command as input to troff.

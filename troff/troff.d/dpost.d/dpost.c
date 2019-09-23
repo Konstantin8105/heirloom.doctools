@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)dpost.c	1.112 (gritter) 12/10/05
+ * Sccsid @(#)dpost.c	1.121 (gritter) 12/22/05
  */
 
 /*
@@ -295,6 +295,7 @@
 char		*prologue = DPOST;	/* the basic PostScript prologue */
 char		*colorfile = COLOR;	/* things needed for color support */
 char		*drawfile = DRAW;	/* and drawing */
+char		*cutmarksfile = CUTMARKS;
 char		*formfile = FORMFILE;	/* stuff for multiple pages per sheet */
 char		*baselinefile = BASELINE;
 
@@ -590,10 +591,29 @@ static struct Bookmark {
 	int	closed;			/* the bookmark is closed initially */
 } *Bookmarks;
 static size_t	nBookmarks;
-static int	pagelength = 792;	/* lenght of page in points */
+static double	pagelength = 792;	/* lenght of page in points */
 #define	MAXBOOKMARKLEVEL	20
 
 static void	orderbookmarks(void);
+
+static struct box {
+	int	val[4];
+	int	flag;
+} mediasize, bleedat, trimat, cropat;
+
+/*
+ *
+ * For the -M option.
+ *
+ */
+
+static enum {
+	M_NONE	= 00,
+	M_CUT	= 01,
+	M_REG	= 02
+} Mflag;
+
+static void	setmarks(char *);
 
 
 /*
@@ -621,6 +641,7 @@ FILE		*tf = NULL;		/* PostScript output goes here */
 FILE		*gf = NULL;		/* global data goes here */
 FILE		*rf = NULL;		/* resource data goes here */
 FILE		*sf = NULL;		/* supplied resource comments go here */
+FILE		*pf = NULL;		/* elements of _custompagesetup */
 int		sfcount;		/* count of supplied resources */
 int		ostdout;		/* old standard output */
 FILE		*fp_acct = NULL;	/* accounting stuff written here */
@@ -641,6 +662,7 @@ char		temp[4096];
 /*****************************************************************************/
 
 static void	t_papersize(char *);
+static void	t_cutat(const char *, struct box *, char *);
 static void	t_track(char *);
 static void	t_strack(void);
 static void	t_pdfmark(char *);
@@ -692,6 +714,12 @@ main(int agc, char *agv[])
     unlink(tp);
     if (close(mkstemp(tp = strdup(template))) < 0 ||
 			    (sf = fopen(tp, "r+")) == NULL) {
+	    perror(tp);
+	    return 2;
+    }
+    unlink(tp);
+    if (close(mkstemp(tp = strdup(template))) < 0 ||
+			    (pf = fopen(tp, "r+")) == NULL) {
 	    perror(tp);
 	    return 2;
     }
@@ -831,6 +859,29 @@ pdfdate(time_t *tp, char *buf, size_t size)
 }
 /*****************************************************************************/
 
+static void
+pdfbox(const char *boxname, struct box *bp, FILE *fp, int perpage)
+{
+	double	llx, lly, urx, ury;
+
+	if (bp->flag == 0)
+		return;
+	llx = bp->val[0] * 72.0 / res;
+	lly = pagelength - ((bp->val[1] + bp->val[3]) * 72.0 / res);
+	urx = (bp->val[0] + bp->val[2]) * 72.0 / res;
+	ury = pagelength - (bp->val[1] * 72.0 / res);
+	fprintf(gf, "/_%s [%g %g %g %g] def\n",
+		boxname, llx, lly, urx, ury);
+	if (perpage)
+		fprintf(fp,
+			"[ {ThisPage} 1 dict dup /%s _%s put /PUT pdfmark\n",
+			boxname, boxname);
+	else
+		fprintf(gf, "[ /%s _%s /PAGES pdfmark\n", boxname, boxname);
+}
+
+/*****************************************************************************/
+
 void
 header(FILE *fp)
 
@@ -848,6 +899,7 @@ header(FILE *fp)
     struct Bookmark	*bp;
     time_t	now;
     int		n;
+    double	x, y;
     char	buf[4096];
     char	crdbuf[40];
 
@@ -912,12 +964,36 @@ header(FILE *fp)
 	    }
     }
 
+    fflush(pf);
+    rewind(pf);
+    fprintf(fp, "/_custompagesetup {\n");
+    pdfbox("TrimBox", &trimat, fp, 1);
+    pdfbox("BleedBox", &bleedat, fp, 1);
+    pdfbox("CropBox", &cropat, fp, 0);
+    while ((n = fread(buf, 1, sizeof buf, pf)) > 0)
+	    fwrite(buf, 1, n, fp);
+    fprintf(fp, "} def\n");
+    fprintf(fp, "/_marks {\n");
+    if (Mflag & M_CUT)
+	    fprintf(fp, "_cutmarks\n");
+    if (Mflag & M_REG)
+	    fprintf(fp, "_regmarks\n");
+    fprintf(fp, "} def\n");
 
     fflush(gf);
     rewind(gf);
     while ((n = fread(buf, 1, sizeof buf, gf)) > 0)
 	    fwrite(buf, 1, n, fp);
-
+    if (mediasize.flag) {
+	    x = mediasize.val[2] * 72.0 / res;
+	    y = mediasize.val[3] * 72.0 / res;
+	    fprintf(fp, "/pagebbox [0 0 %g %g] def\n", x, y);
+	    fprintf(fp, "userdict /gotpagebbox true put\n");
+	    if (mediasize.flag & 2)
+		fprintf(fp, "/setpagedevice where {pop "
+			"1 dict dup /PageSize [%g %g] put setpagedevice"
+			"} if\n", x, y);
+    }
     fprintf(fp, "mark\n");
 
     fflush(stdout);
@@ -939,7 +1015,7 @@ options(void)
 
 {
 
-    const char		optnames[] = "a:c:e:m:n:o:p:tw:x:y:A:C:J:F:H:L:OP:R:S:T:DI";
+    const char		optnames[] = "a:c:e:m:n:o:p:tw:x:y:A:C:J:F:H:L:M:OP:R:S:T:DI";
 
     int		ch;			/* name returned by getopt() */
 
@@ -1028,7 +1104,11 @@ options(void)
 		    break;
 
 	    case 'L':			/* PostScript prologue file */
-		    setpaths(optarg);	/* already been done in header() */
+		    setpaths(optarg);
+		    break;
+
+	    case 'M':			/* print cut marks */
+		    setmarks(optarg);
 		    break;
 
 	    case 'O':			/* turn picture inclusion off */
@@ -1075,6 +1155,13 @@ options(void)
 
     argc -= optind;			/* get ready for non-options args */
     argv += optind;
+
+    if (Mflag) {
+	    FILE	*otf = tf;
+	    tf = stdout;
+	    doglobal(cutmarksfile);
+	    tf = otf;
+    }
 
 }   /* End of options */
 
@@ -1126,9 +1213,41 @@ setpaths (
 	formfile = path;
     else if ( strncmp(name, "baseline", strlen("baseline")) == 0 )
 	baselinefile = path;
+    else if ( strncmp(name, "cutmarks", strlen("cutmarks")) == 0 )
+	cutmarksfile = path;
 
 }   /* End of setpaths */
 
+/*****************************************************************************/
+
+static int
+prefix(const char *str, const char *pfx)
+{
+	while (*pfx && *str == *pfx)
+		str++, pfx++;
+	return *str == 0;
+}
+
+static void
+setmarks(char *str)
+{
+	char	*sp;
+	int	c;
+
+	do {
+		for (sp = str; *sp && *sp != ':'; sp++);
+		c = *sp;
+		*sp = 0;
+		if (prefix(str, "cut"))
+			Mflag |= M_CUT;
+		else if (prefix(str, "registration"))
+			Mflag |= M_REG;
+		else
+			error(FATAL, "unknown mark: -M %s", str);
+		*sp = c;
+		str = &sp[1];
+	} while (c);
+}
 
 /*****************************************************************************/
 
@@ -1565,6 +1684,12 @@ devcntrl(
 		    t_supply(buf);
 		else if ( strcmp(str, "PaperSize") == 0 )
 		    t_papersize(buf);
+		else if ( strcmp(str, "TrimAt") == 0 )
+		    t_cutat("Trim size", &trimat, buf);
+		else if ( strcmp(str, "BleedAt") == 0 )
+		    t_cutat("Bleed size", &bleedat, buf);
+		else if ( strcmp(str, "CropAt") == 0 )
+		    t_cutat("Crop size", &cropat, buf);
 		else if ( strcmp(str, "Track") == 0 )
 		    t_track(buf);
 		else if ( strcmp(str, "PDFMark") == 0 )
@@ -1715,15 +1840,14 @@ loadfont (
 	strcpy(temp, s);
     else if (strstr(s, ".afm") != NULL)
 	snprintf(temp, sizeof temp, "%s/dev%s/%s", fontdir, devname, s);
-    else if ( s1 == NULL || s1[0] == '\0' )
-	snprintf(temp, sizeof temp, "%s/dev%s/%s.afm", fontdir, devname, s);
-    else snprintf(temp, sizeof temp, "%s/%s.afm", s1, s);
+    else snprintf(temp, sizeof temp, "%s/dev%s/%s.afm", fontdir, devname, s);
 
     if ( (fin = open(temp, O_RDONLY)) >= 0 )  {
 	struct afmtab	*a;
 	struct stat	st;
 	char	*contents;
 	int	i;
+	enum spec	spec;
 	if ((p = strrchr(s, '/')) == NULL)
 		p = s;
 	else
@@ -1731,8 +1855,10 @@ loadfont (
 	if (p[0] == 'S' && (p[1] == '\0' || digitchar(p[1]&0377) &&
 				p[2] == '\0' || p[2] == '.'))
 		forcespecial = 1;
+	spec = s1 && *s1 ? atoi(s1) : SPEC_NONE;
 	for (i = 0; i < afmcount; i++)
-		if (afmfonts[i] && strcmp(afmfonts[i]->path, temp) == 0) {
+		if (afmfonts[i] && strcmp(afmfonts[i]->path, temp) == 0 &&
+				afmfonts[i]->spec == spec) {
 			a = afmfonts[i];
 			close(fin);
 			goto have;
@@ -1749,6 +1875,7 @@ loadfont (
 	a->path = malloc(strlen(temp) + 1);
 	strcpy(a->path, temp);
 	a->file = s;
+	a->spec = spec;
 	if (afmget(a, contents, st.st_size) < 0) {
 		free(a);
 		free(contents);
@@ -2415,6 +2542,15 @@ t_dosupply(char *font)
 }
 
 /*****************************************************************************/
+
+static void
+boxcmp(const char *name, struct box *bp, int a, int b, int c, int d)
+{
+	if (bp->flag && (a != bp->val[0] || b != bp->val[1] ||
+				c != bp->val[2] || d != bp->val[3]))
+		error(NON_FATAL, "%s has changed, using new values", name);
+}
+
 static void
 t_papersize(char *buf)
 {
@@ -2422,15 +2558,26 @@ t_papersize(char *buf)
 
 	if (sscanf(buf, "%d %d %d", &x, &y, &setmedia) < 2)
 		return;
-	x = x * 72 / res;
-	y = y * 72 / res;
-	fprintf(gf, "/pagebbox [0 0 %d %d] def\n", x, y);
-	fprintf(gf, "userdict /gotpagebbox true put\n");
+	boxcmp("Media size", &mediasize, 0, 0, x, y);
+	mediasize.val[2] = x;
+	mediasize.val[3] = y;
+	mediasize.flag |= 1;
 	if (setmedia)
-		fprintf(gf, "/setpagedevice where {pop "
-			"1 dict dup /PageSize [%d %d] put setpagedevice"
-			"} if\n", x, y);
-	pagelength = y;
+		mediasize.flag |= 2;
+	pagelength = y * 72.0 / res;
+}
+
+static void
+t_cutat(const char *name, struct box *bp, char *buf)
+{
+	int	c[4], i;
+
+	if (sscanf(buf, "%d %d %d %d", &c[0], &c[1], &c[2], &c[3]) < 4)
+		return;
+	boxcmp(name, bp, c[0], c[1], c[2], c[3]);
+	for (i = 0; i < 4; i++)
+		bp->val[i] = c[i];
+	bp->flag |= 1;
 }
 
 /*****************************************************************************/
@@ -2467,6 +2614,7 @@ t_page (
 
     endtext();				/* print the last line? */
 
+    fprintf(tf, "_marks\n");
     fprintf(tf, "cleartomark\n");
     fprintf(tf, "showpage\n");
     fprintf(tf, "restore\n");
@@ -2728,6 +2876,7 @@ setfont (
 		n, n, n);
 
     font = n;
+    subfont = 0;
 
 }   /* End of setfont */
 
@@ -4113,10 +4262,10 @@ t_pdfmark(char *buf)
 			strcmp(buf, "BookmarkClosed") == 0;
 		endtext();
 		fprintf(tf, "[ /Dest /Bookmark$%d\n"
-			    "  /View [/FitH %d]\n"
+			    "  /View [/FitH %g]\n"
 			    "/DEST pdfmark\n",
 			nBookmarks - 1,
-			pagelength - (lasty >= 0 ? vpos * 72 / res : 0));
+			pagelength - (lasty >= 0 ? vpos * 72.0 / res : 0));
 	} else
 		error(NON_FATAL, "unknown PDFMark attribute %s", buf);
 }

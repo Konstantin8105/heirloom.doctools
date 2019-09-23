@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n3.c	1.62 (gritter) 12/10/05
+ * Sccsid @(#)n3.c	1.70 (gritter) 12/25/05
  */
 
 /*
@@ -130,6 +130,10 @@ growcontab(void)
 		addcon(i++, "close", (void(*)(int))caseclose);
 		addcon(i++, "spreadwarn", (void(*)(int))casespreadwarn);
 		addcon(i++, "warn", (void(*)(int))casewarn);
+		addcon(i++, "trimat", (void(*)(int))casetrimat);
+		addcon(i++, "bleedat", (void(*)(int))casebleedat);
+		addcon(i++, "cropat", (void(*)(int))casecropat);
+		addcon(i++, "fps", (void(*)(int))casefps);
 	} else {
 		for (i = 0; i < sizeof mhash / sizeof *mhash; i++)
 			if (mhash[i])
@@ -192,7 +196,7 @@ casern(void)
 	register int i, j;
 
 	lgf++;
-	skip();
+	skip(1);
 	if ((i = getrq()) == 0)
 		return;
 	if (i >= 256)
@@ -201,7 +205,7 @@ casern(void)
 		nosuch(i);
 		return;
 	}
-	skip();
+	skip(1);
 	j = getrq();
 	if (j >= 256)
 		j = maybemore(j, 1);
@@ -268,10 +272,10 @@ mrehash(void)
 void
 caserm(void)
 {
-	int j;
+	int j, cnt = 0;
 
 	lgf++;
-	while (!skip() && (j = getrq()) != 0) {
+	while (!skip(!cnt++) && (j = getrq()) != 0) {
 		if (j >= 256)
 			j = maybemore(j, 0);
 		clrmn(findmn(j));
@@ -314,7 +318,7 @@ casede(void)
 		wbfl();
 	req = '.';
 	lgf++;
-	skip();
+	skip(1);
 	if ((i = getrq()) == 0)
 		goto de1;
 	if (i >= 256)
@@ -423,13 +427,15 @@ finds(register int mn)
 
 
 int 
-skip (void)			/*skip over blanks; return nlflg*/
+skip (int required)		/*skip over blanks; return nlflg*/
 {
 	register tchar i;
 
 	while (cbits(i = getch()) == ' ')
 		;
 	ch = i;
+	if (nlflg && required)
+		missing();
 	return(nlflg);
 }
 
@@ -442,7 +448,7 @@ copyb(void)
 	int	req, k;
 	filep savoff = 0;
 
-	if (skip() || !(j = getrq()))
+	if (skip(0) || !(j = getrq()))
 		j = '.';
 	if (j >= 256)
 		maybemore(j, 1);
@@ -510,7 +516,7 @@ copys(void)
 	register tchar i;
 
 	copyf++;
-	if (skip())
+	if (skip(0))
 		goto c0;
 	if (cbits(i = getch()) != '"')
 		wbf(i);
@@ -850,7 +856,7 @@ collect(void)
 	copyf++;
 	nxf->nargs = 0;
 	savnxf = nxf;
-	if (skip())
+	if (skip(0))
 		goto rtn;
 
 	{
@@ -889,7 +895,7 @@ collect(void)
 		savnxf, nxf, argpp, strp, lim, enda);
 #endif
 	strflg = 0;
-	while ((argpp != argppend) && (!skip())) {
+	while ((argpp != argppend) && (!skip(0))) {
 		*argpp++ = strp;
 		quote = 0;
 		if (cbits(i = getch()) == '"')
@@ -978,7 +984,7 @@ caseshift(void)
 {
 	int	i, j;
 
-	if (skip())
+	if (skip(0))
 		i = 1;
 	else
 		i = atoi();
@@ -1007,7 +1013,7 @@ casedi(void)
 	register int *k;
 
 	lgf++;
-	if (skip() || (i = getrq()) == 0) {
+	if (skip(0) || (i = getrq()) == 0) {
 		if (dip != d)
 			wbt((tchar)0);
 		if (dilev > 0) {
@@ -1054,11 +1060,11 @@ casedt(void)
 {
 	lgf++;
 	dip->dimac = dip->ditrap = dip->ditf = 0;
-	skip();
+	skip(1);
 	dip->ditrap = vnumb((int *)0);
 	if (nonumb)
 		return;
-	skip();
+	skip(1);
 	dip->dimac = getrq();
 	if (dip->dimac >= 256)
 		dip->dimac = maybemore(dip->dimac, 1);
@@ -1076,7 +1082,7 @@ casetl(void)
 	int oev;
 
 	dip->nls = 0;
-	skip();
+	skip(1);
 	if (ismot(delim = getch())) {
 		ch = delim;
 		delim = '\'';
@@ -1154,7 +1160,7 @@ casechop(void)
 	int	i, j;
 	filep	savip, savoffset;
 
-	skip();
+	skip(1);
 	if ((i = getrq()) == 0)
 		return;
 	if (i >= 256)
@@ -1198,7 +1204,7 @@ casepm(void)
 	filep j;
 
 	kk = cnt = tcnt = 0;
-	tot = !skip();
+	tot = !skip(0);
 	for (i = 0; i < NM; i++) {
 		if ((xx = contab[i].rq) == 0 || contab[i].mx == 0)
 			continue;
@@ -1247,6 +1253,30 @@ macname(int rq)
 		return "???";
 }
 
+static tchar
+mgetach(void)
+{
+	static const char nmctab[] = {
+		000,000,000,000,000,000,000,000,
+		000,000,000,000,000,000,000,000,
+		001,001,001,000,001,001,000,001,
+		000,000,000,000,000,000,000,000,
+		000
+	};
+	tchar	i;
+	int	j;
+
+	lgf++;
+	j = cbits(i = getch());
+	if (ismot(i) || j == ' ' || j == '\n' || j >= 0200 ||
+			j < sizeof nmctab && nmctab[j]) {
+		ch = i;
+		j = 0;
+	}
+	lgf--;
+	return j & 0177;
+}
+
 /*
  * To handle requests with more than two characters, an additional
  * table is maintained. On places where more than two characters are
@@ -1266,7 +1296,7 @@ maybemore(int sofar, int flags)
 	buf[0] = sofar&BYTEMASK;
 	buf[1] = (sofar>>BYTE)&BYTEMASK;
 	do {
-		c = getch0();
+		c = xflag < 3 ? getch0() : mgetach();
 		if (i+1 >= sizeof buf) {
 			buf[i] = 0;
 			goto retn;
@@ -1283,18 +1313,19 @@ maybemore(int sofar, int flags)
 	if (n == hadn) {
 		if ((flags & 1) == 0) {
 		retn:	buf[i-1] = c;
-			cpushback(&buf[2]);
+			if (xflag < 3)
+				cpushback(&buf[2]);
 			raw = r;
 			if (flags & 2)
 				/*EMPTY*/;
-			else if (warn & WARN_SPACE && i > 3 &&
+			else if (warn & WARN_MAC && i > 3 && xflag >= 3) {
+				buf[i-1] = 0;
+				errprint("%s: no such request", buf);
+				sofar = 0;
+			} else if (warn & WARN_SPACE && i > 3 &&
 					findmn(sofar) >= 0) {
 				buf[i-1] = 0;
-				errprint("missing space at request %s", buf);
-			/*} else if (warn & WARN_MAC && i > 3 &&
-					findmn(sofar) < 0) {
-				buf[i-1] = 0;
-				errprint("no such request %s", buf);*/
+				errprint("%s: missing space", macname(sofar));
 			}
 			return sofar;
 		}
@@ -1305,7 +1336,8 @@ maybemore(int sofar, int flags)
 		hadn = n+1;
 	}
 	pb[0] = c;
-	cpushback(pb);
+	if (xflag < 3)
+		cpushback(pb);
 	raw = r;
 	return MAXRQ2 + n;
 }
@@ -1317,11 +1349,13 @@ getls(int termc)
 	int	i = 0, j = -1, n = -1;
 
 	do {
-		c = getach();
+		c = xflag < 3 ? getach() : mgetach();
 		if (i >= sizeof laststr)
 			return -1;
 		laststr[i++] = c;
 	} while (c && c != termc);
+	if (c != termc)
+		nodelim(termc);
 	laststr[--i] = 0;
 	if (i == 0 || c != termc)
 		j = 0;

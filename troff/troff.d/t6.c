@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)t6.c	1.103 (gritter) 12/10/05
+ * Sccsid @(#)t6.c	1.114 (gritter) 12/23/05
  */
 
 /*
@@ -87,6 +87,7 @@ int	**ftrtab;
 struct tracktab	*tracktab;
 int	sbold = 0;
 int	kern = 0;
+struct box	mediasize, bleedat, trimat, cropat;
 
 int
 width(register tchar j)
@@ -551,6 +552,10 @@ tchar setch(int delim)
 			break;
 		}
 	} while (c);
+	if (delim == '[' && c != ']') {
+		nodelim(']');
+		return ' ';
+	}
 	c = 0;
 	if (delim == '[') {
 		if ((c = postchar(temp, &f)) != 0) {
@@ -567,6 +572,8 @@ tchar setch(int delim)
 	if (c == 0 && warn & WARN_CHAR)
 		errprint("missing glyph \\%c%s%s", delim, temp,
 				delim == '[' ? "]" : "");
+	if (c == 0)
+		c = ' ';
 	return c;
 }
 
@@ -603,7 +610,7 @@ caseps(void)
 {
 	register int i;
 
-	if (skip())
+	if (skip(0))
 		i = apts1;
 	else {
 		dfact = INCH;
@@ -718,7 +725,8 @@ setps(void)
 		j = inumb(&apts);
 		if (nonumb)
 			return;
-		getch();
+		if (cbits(getch()) != i)
+			nodelim(i);
 	}
 	casps1(j);
 }
@@ -763,7 +771,7 @@ tchar setslant(void)		/* set slant from \S'...' */
 void
 caseft(void)
 {
-	skip();
+	skip(0);
 	setfont(1);
 }
 
@@ -832,6 +840,8 @@ setwd(void)
 		if ((k = base + emsz) > numtab[ST].val)
 			numtab[ST].val = k;
 	}
+	if (cbits(i) != delim)
+		nodelim(delim);
 	setn1(wid, 0, (tchar) 0);
 	numtab[HP].val = savhp;
 	apts = savapts;
@@ -864,16 +874,18 @@ tchar mot(void)
 {
 	register int j, n;
 	register tchar i;
+	int delim;
 
 	j = HOR;
-	getch(); /*eat delim*/
+	delim = cbits(getch()); /*eat delim*/
 	if (n = atoi()) {
 		if (vflag)
 			j = VERT;
 		i = makem(quant(n, j));
 	} else
 		i = 0;
-	getch();
+	if (cbits(getch()) != delim)
+		nodelim(delim);
 	vflag = 0;
 	dfact = 1;
 	return(i);
@@ -951,7 +963,7 @@ caselg(void)
 {
 
 	lg = 1;
-	if (skip())
+	if (skip(0))
 		return;
 	lg = atoi();
 }
@@ -961,10 +973,11 @@ caseflig(void)
 {
 	int	i, j;
 
-	skip();
+	if (skip(1))
+		return;
 	if ((i = getrq()) >= 256)
 		i = maybemore(i, 2);
-	if ((j = findft(i)) < 0 || skip())
+	if ((j = findft(i)) < 0 || skip(1))
 		return;
 	fontbase[j]->ligfont = atoi() & 037;
 	/*
@@ -984,33 +997,33 @@ caseflig(void)
 }
 
 void
-casefp(void)
+casefp(int spec)
 {
 	register int i, j;
 	char *file, *supply;
 
 	lgf++;
-	skip();
+	skip(0);
 	if ((i = xflag ? atoi() : cbits(getch()) - '0') < 0 || i > nfonts)
 	bad:	errprint("fp: bad font position %d", i);
-	else if (skip() || !(j = getrq()))
+	else if (skip(0) || !(j = getrq()))
 		errprint("fp: no font name");
 	else {
 		if (j >= 256)
 			j = maybemore(j, 3);
-		if (skip() || !getname()) {
+		if (skip(0) || !getname()) {
 			if (i == 0)
 				goto bad;
 			setfp(i, j, 0);
 		} else {		/* 3rd argument = filename */
 			file = malloc(strlen(nextf) + 1);
 			strcpy(file, nextf);
-			if (!skip() && getname()) {
+			if (!skip(0) && getname()) {
 				supply = malloc(strlen(nextf) + 1);
 				strcpy(supply, nextf);
 			} else
 				supply = NULL;
-			if (loadafm(i?i:-1, j, file, supply, 0) == 0) {
+			if (loadafm(i?i:-1, j, file, supply, 0, spec) == 0) {
 				if (i == 0) {
 					if (warn & WARN_FONT)
 						errprint("fp: cannot mount %s",
@@ -1022,6 +1035,45 @@ casefp(void)
 			free(supply);
 		}
 	}
+}
+
+void
+casefps(void)
+{
+	const struct {
+		enum spec	spec;
+		const char	*name;
+	} tab[] = {
+		{ SPEC_MATH,	"math" },
+		{ SPEC_GREEK,	"greek" },
+		{ SPEC_PUNCT,	"punct" },
+		{ SPEC_LARGE,	"large" },
+		{ SPEC_S1,	"S1" },
+		{ SPEC_S,	"S" },
+		{ SPEC_NONE,	NULL }
+	};
+	char	name[NC];
+	int	c, i;
+	enum spec	s = SPEC_NONE;
+
+	if (skip(1))
+		return;
+	do {
+		for (i = 0; i < sizeof name - 2; i++) {
+			if ((c = getach()) == 0 || c == ':' || c == ',')
+				break;
+			name[i] = c;
+		}
+		name[i] = 0;
+		for (i = 0; tab[i].name; i++)
+			if (strcmp(tab[i].name, name) == 0) {
+				s |= tab[i].spec;
+				break;
+			}
+		if (tab[i].name == NULL)
+			errprint("fps: unknown special set %s", name);
+	} while (c);
+	casefp(s);
 }
 
 int
@@ -1045,7 +1097,7 @@ setfp(int pos, int f, char *truename)	/* mount font f at position pos[0...nfonts
 		*ap = 0;
 		if (ap == &fontbase[pos]->namefont[1])
 			f &= BYTEMASK;
-		loadafm(pos, f, fontbase[pos]->namefont, NULL, 1);
+		loadafm(pos, f, fontbase[pos]->namefont, NULL, 1, SPEC_NONE);
 		free(fpout);
 	} else {
 		nw = fontbase[pos]->nwfont & BYTEMASK;
@@ -1092,16 +1144,17 @@ casecs(void)
 	register int i, j;
 
 	noscale++;
-	skip();
+	if (skip(1))
+		goto rtn;
 	if (!(i = getrq()))
 		goto rtn;
 	if (i >= 256)
 		i = maybemore(i, 2);
 	if ((i = findft(i)) < 0)
 		goto rtn;
-	skip();
+	skip(1);
 	cstab[i] = atoi();
-	skip();
+	skip(0);
 	j = atoi();
 	if (nonumb)
 		ccstab[i] = 0;
@@ -1120,7 +1173,7 @@ casebd(void)
 	zapwcache(0);
 	k = 0;
 bd0:
-	if (skip() || !(i = getrq()) ||
+	if (skip(1) || !(i = getrq()) ||
 			(i = i >= 256 ? maybemore(i, 2) : i,
 			(j = findft(i)) == -1)) {
 		if (k)
@@ -1137,7 +1190,7 @@ bd0:
 		j = k;
 	}
 bd1:
-	skip();
+	skip(0);
 	noscale++;
 	bdtab[j] = atoi();
 	noscale = 0;
@@ -1148,7 +1201,7 @@ casevs(void)
 {
 	register int i;
 
-	skip();
+	skip(0);
 	vflag++;
 	dfact = INCH; /* default scaling is points! */
 	dfactd = 72;
@@ -1168,13 +1221,13 @@ casess(void)
 	register int i, j;
 
 	noscale++;
-	skip();
+	skip(1);
 	if (i = atoi()) {
 		spacesz = i & 0177;
 		zapwcache(0);
 		sps = width(' ' | chbits);
 		if (xflag) {
-			skip();
+			skip(0);
 			j = atoi();
 			if (!nonumb)
 				ses = j;
@@ -1265,7 +1318,7 @@ getfontpath(char *file, char *type)
 }
 
 int
-loadafm(int nf, int rq, char *file, char *supply, int required)
+loadafm(int nf, int rq, char *file, char *supply, int required, enum spec spec)
 {
 	struct stat	st;
 	int	fd;
@@ -1283,7 +1336,8 @@ loadafm(int nf, int rq, char *file, char *supply, int required)
 	}
 	a = calloc(1, sizeof *a);
 	for (i = 0; i < nafm; i++)
-		if (strcmp(afmtab[i]->path, path) == 0) {
+		if (strcmp(afmtab[i]->path, path) == 0 &&
+				afmtab[i]->spec == spec) {
 			*a = *afmtab[i];
 			have = 1;
 			break;
@@ -1291,6 +1345,7 @@ loadafm(int nf, int rq, char *file, char *supply, int required)
 	a->path = path;
 	a->file = malloc(strlen(file) + 1);
 	strcpy(a->file, file);
+	a->spec = spec;
 	a->rq = rq;
 	a->Font.namefont[0] = rq&0377;
 	a->Font.namefont[1] = (rq>>8)&0377;
@@ -1382,7 +1437,7 @@ done:	afmtab = realloc(afmtab, (nafm+1) * sizeof *afmtab);
 int
 tracknum(void)
 {
-	skip();
+	skip(1);
 	dfact = INCH;
 	dfactd = 72;
 	res = VERT;
@@ -1394,7 +1449,8 @@ casetrack(void)
 {
 	int	i, j, s1, n1, s2, n2;
 
-	skip();
+	if (skip(1))
+		return;
 	if ((i = getrq()) >= 256)
 		i = maybemore(i, 2);
 	if ((j = findft(i)) < 0)
@@ -1424,13 +1480,14 @@ casefallback(void)
 	int	*fb = NULL;
 	int	i, j, n = 0;
 
-	skip();
+	if (skip(1))
+		return;
 	if ((i = getrq()) >= 256)
 		i = maybemore(i, 2);
 	if ((j = findft(i)) < 0)
 		return;
 	do {
-		skip();
+		skip(0);
 		if ((i = getrq()) >= 256)
 			i = maybemore(i, 2);
 		fb = realloc(fb, (n+2) * sizeof *fb);
@@ -1446,7 +1503,8 @@ casehidechar(void)
 	int	i, j, n, m;
 	tchar	k;
 
-	skip();
+	if (skip(1))
+		return;
 	if ((i = getrq()) >= 256)
 		i = maybemore(i, 2);
 	if ((j = findft(i)) < 0)
@@ -1476,12 +1534,13 @@ casefzoom(void)
 	int	n = 0, sz = 0;
 	float	f;
 
-	skip();
+	if (skip(1))
+		return;
 	if ((i = getrq()) >= 256)
 		i = maybemore(i, 2);
 	if ((j = findft(i)) < 0)
 		return;
-	skip();
+	skip(1);
 	do {
 		c = getach();
 		if (n >= sz)
@@ -1501,7 +1560,7 @@ casefzoom(void)
 void
 casekern(void)
 {
-	kern = skip() || atoi() ? 1 : 0;
+	kern = skip(0) || atoi() ? 1 : 0;
 }
 
 static void
@@ -1555,13 +1614,13 @@ setpapersize(int setmedia)
 	char	buf[NC];
 
 	lgf++;
-	if (skip())
+	if (skip(1))
 		return;
 	c = cbits(ch);
 	if (isdigit(c) || c == '(') {
 		x = atoi();
 		if (!nonumb) {
-			skip();
+			skip(1);
 			y = atoi();
 		}
 		if (nonumb || x == 0 || y == 0)
@@ -1591,7 +1650,13 @@ setpapersize(int setmedia)
 	po = x > 6 * PO ? PO : x / 8;
 	ll = ll1 = lt = lt1 = x - 2 * po;
 	setnel();
-	ptpapersize(x, y, setmedia);
+	mediasize.val[2] = x;
+	mediasize.val[3] = y;
+	mediasize.flag |= 1;
+	if (setmedia)
+		mediasize.flag |= 2;
+	if (realpage)
+		ptpapersize();
 }
 
 void
@@ -1607,6 +1672,45 @@ casemediasize(void)
 }
 
 static void
+cutat(struct box *bp)
+{
+	int	c[4], i;
+
+	for (i = 0; i < 4; i++) {
+		if (skip(1))
+			return;
+		dfact = INCH;
+		dfactd = 72;
+		c[i] = atoi();
+		if (nonumb)
+			return;
+	}
+	for (i = 0; i < 4; i++)
+		bp->val[i] = c[i];
+	bp->flag |= 1;
+	if (realpage)
+		ptcut();
+}
+
+void
+casetrimat(void)
+{
+	return cutat(&trimat);
+}
+
+void
+casebleedat(void)
+{
+	return cutat(&bleedat);
+}
+
+void
+casecropat(void)
+{
+	return cutat(&cropat);
+}
+
+static void
 hang(int **tp)
 {
 	int	i, j, n;
@@ -1614,14 +1718,15 @@ hang(int **tp)
 	tchar	k;
 
 	lgf++;
-	skip();
+	if (skip(1))
+		return;
 	if ((i = getrq()) >= 256)
 		i = maybemore(i, 2);
 	if ((j = findft(i)) < 0)
 		return;
 	font = font1 = j;
 	mchbits();
-	while (!skip() && (i = cbits(k = getch())) != '\n' && !skip()) {
+	while (!skip(0) && (i = cbits(k = getch())) != '\n' && !skip(1)) {
 		noscale++;
 		n = atoi();
 		noscale--;
@@ -1657,17 +1762,18 @@ casekernpair(void)
 	tchar	c, d;
 
 	lgf++;
-	skip();
+	if (skip(1))
+		return;
 	if ((i = getrq()) >= 256)
 		i = maybemore(i, 2);
 	if ((f = findft(i)) < 0)
 		return;
 	font = font1 = f;
 	mchbits();
-	if (skip())
+	if (skip(1))
 		goto done;
 	c = getch();
-	if (fbits(c) != f || skip())
+	if (fbits(c) != f || skip(1))
 		goto done;
 	if ((i = getrq()) >= 256)
 		i = maybemore(i, 2);
@@ -1675,10 +1781,10 @@ casekernpair(void)
 		goto done;
 	font = font1 = g;
 	mchbits();
-	if (skip())
+	if (skip(1))
 		goto done;
 	d = getch();
-	if (fbits(d) != g || skip())
+	if (fbits(d) != g || skip(1))
 		goto done;
 	noscale++;
 	n = atoi();
@@ -1709,16 +1815,17 @@ kernsingle(int **tp)
 	tchar	c;
 
 	lgf++;
-	skip();
+	if (skip(1))
+		return;
 	if ((i = getrq()) >= 256)
 		i = maybemore(i, 2);
 	if ((f = findft(i)) < 0)
 		return;
 	font = font1 = f;
 	mchbits();
-	while (!skip()) {
+	while (!skip(0)) {
 		c = getch();
-		if (skip())
+		if (skip(1))
 			break;
 		noscale++;
 		n = atoi();
@@ -1754,14 +1861,15 @@ caseftr(void)
 	tchar	k;
 
 	lgf++;
-	skip();
+	if (skip(1))
+		return;
 	if ((i = getrq()) >= 256)
 		i = maybemore(i, 2);
 	if ((f = findft(i)) < 0)
 		return;
 	font = font1 = f;
 	mchbits();
-	if (skip())
+	if (skip(1))
 		goto done;
 	while ((i = cbits(k=getch())) != '\n') {
 		if (ismot(k))
@@ -1785,7 +1893,7 @@ getfeature(struct afmtab *a, int f)
 	int	ch1, ch2, c, i, j, minus;
 	struct feature	*fp;
 
-	if (skip())
+	if (skip(0))
 		return 0;
 	switch (c = getach()) {
 	case '-':
@@ -1833,7 +1941,8 @@ casefeature(void)
 	int	f, i, j;
 
 	lgf++;
-	skip();
+	if (skip(1))
+		return;
 	if ((i = getrq()) >= 256)
 		i = maybemore(i, 2);
 	if ((f = findft(i)) < 0)
@@ -1853,9 +1962,28 @@ casefeature(void)
 
 #include "unimap.h"
 
+static int
+ufmap(int c, int f, int *fp)
+{
+	struct unimap	*up, ***um;
+	struct afmtab	*a;
+	int	i;
+
+	if ((c&~0xffff) == 0 &&
+			(i = (fontbase[f]->afmpos) - 1) >= 0 &&
+			(um = (a = afmtab[i])->unimap) != NULL &&
+			um[c>>8] != NULL &&
+			(up = um[c>>8][c&0377]) != NULL) {
+		*fp = f;
+		return up->u.code;
+	}
+	return 0;
+}
+
 int
 un2tr(int c, int *fp)
 {
+	struct unimap	*up;
 	int	i, j;
 
 	switch (c) {
@@ -1893,12 +2021,28 @@ un2tr(int c, int *fp)
 		*fp = font;
 		return FILLER;
 	default:
-		for (i = 0; unimap[i].psc; i++)
-			if (unimap[i].code == c)
-				if ((j = postchar(unimap[i].psc, fp)) != 0)
+		if ((i = ufmap(c, font, fp)) != 0)
+			return i;
+		if ((c&~0xffff) == 0 && unimap[c>>8] != NULL &&
+				(up = unimap[c>>8][c&0377]) != NULL)
+			do
+				if ((j = postchar(up->u.psc, fp)) != 0)
 					return j;
+			while ((up = up->next) != NULL);
+		if (fallbacktab[font])
+			for (j = 0; fallbacktab[font][j] != 0; j++) {
+				if ((i = findft(fallbacktab[font][j])) < 0)
+					continue;
+				if ((i = ufmap(c, i, fp)) != 0)
+					return i;
+			}
+		if (smnt)
+			for (i = smnt, j=0; j < nfonts; j++, i = i % nfonts + 1)
+				if ((i = ufmap(c, i, fp)) != 0)
+					return i;
 		illseq(c, NULL, 0);
-		return 0;
+		*fp = font;
+		return ' ';
 	}
 }
 
@@ -1914,13 +2058,15 @@ tr2un(tchar i, int f)
 		return i;
 	if ((n = (fontbase[f]->afmpos) - 1) >= 0) {
 		a = afmtab[n];
+		if (a->unitab && i < a->nunitab && a->unitab[i])
+			return a->unitab[i];
 		if (i - 32 >= nchtab + 128)
 			i -= nchtab + 128;
 		if ((n = a->fitab[i - 32]) < a->nchars &&
 				a->nametab[n] != NULL)
-			for (c = 0; unimap[c].psc; c++)
-				if (strcmp(unimap[c].psc, a->nametab[n]) == 0)
-					return unimap[c].code;
+			for (c = 0; rawunimap[c].psc; c++)
+				if (strcmp(rawunimap[c].psc, a->nametab[n])==0)
+					return rawunimap[c].code;
 	}
 	return -1;
 }
