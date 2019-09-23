@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n3.c	1.5 (gritter) 8/8/05
+ * Sccsid @(#)n3.c	1.15 (gritter) 8/15/05
  */
 
 /*
@@ -53,6 +53,8 @@
  */
 
 
+#include <stdlib.h>
+#include <string.h>
 #include "tdef.h"
 #ifdef NROFF
 #include "tw.h"
@@ -64,18 +66,75 @@
 #define	MHASH(x)	((x>>6)^x)&0177
 struct	contab *mhash[128];	/* 128 == the 0177 on line above */
 #define	blisti(i)	(((i)-ENV_BLK*BLK) / BLK)
-filep	blist[NBLIST];
+filep	*blist;
+int	nblist;
 tchar	*argtop;
 int	pagech = '%';
 int	strflg;
 
 #ifdef	INCORE
 	tchar *wbuf;
-	tchar corebuf[(ENV_BLK + NBLIST + 1) * BLK];
+	tchar *corebuf;
 #else
 	tchar wbuf[BLK];
 	tchar rbuf[BLK];
 #endif
+
+static int	getls(int);
+
+void *
+growcontab(void)
+{
+	int	i, inc = 130;
+	struct contab	*onc;
+
+	onc = contab;
+	if ((contab = realloc(contab, (NM+inc) * sizeof *contab)) == NULL)
+		return NULL;
+	memset(&contab[NM], 0, inc * sizeof *contab);
+	if (NM == 0) {
+		for (i = 0; initcontab[i].f; i++)
+			contab[i] = initcontab[i];
+	} else {
+		for (i = 0; i < sizeof mhash / sizeof *mhash; i++)
+			if (mhash[i])
+				mhash[i] += contab - onc;
+		for (i = 0; i < NM; i++)
+			if (contab[i].link)
+				contab[i].link += contab - onc;
+	}
+	NM += inc;
+	return contab;
+}
+
+void *
+growblist(void)
+{
+	int	inc = 512;
+#ifdef	INCORE
+	tchar	*ocb;
+#endif	/* INCORE */
+
+	if (nblist+inc > XBLIST)
+		return NULL;
+	if ((blist = realloc(blist, (nblist+inc) * sizeof *blist)) == NULL)
+		return NULL;
+	memset(&blist[nblist], 0, inc * sizeof *blist);
+#ifdef	INCORE
+	ocb = corebuf;
+	if ((corebuf = realloc(corebuf, (ENV_BLK+nblist+inc+1)
+					* BLK * sizeof *corebuf)) == NULL)
+		return NULL;
+	if (ocb == NULL)
+		memset(corebuf, 0, (ENV_BLK+1) * BLK * sizeof *corebuf);
+	memset(&corebuf[(ENV_BLK+nblist+1) * BLK], 0,
+			inc * BLK * sizeof *corebuf);
+	if (wbuf)
+		wbuf += corebuf - ocb;
+#endif	/* INCORE */
+	nblist += inc;
+	return blist;
+}
 
 void
 caseig(void)
@@ -99,10 +158,17 @@ casern(void)
 
 	lgf++;
 	skip();
-	if ((i = getrq()) == 0 || (oldmn = findmn(i)) < 0)
+	if ((i = getrq()) == 0)
+		return;
+	if (i >= 256)
+		i = maybemore(i, 0);
+	if ((oldmn = findmn(i)) < 0)
 		return;
 	skip();
-	clrmn(findmn(j = getrq()));
+	j = getrq();
+	if (j >= 256)
+		j = maybemore(j, 1);
+	clrmn(findmn(j));
 	if (j) {
 		munhash(&contab[oldmn]);
 		contab[oldmn].rq = j;
@@ -168,8 +234,11 @@ caserm(void)
 	int j;
 
 	lgf++;
-	while (!skip() && (j = getrq()) != 0)
+	while (!skip() && (j = getrq()) != 0) {
+		if (j >= 256)
+			j = maybemore(j, 0);
 		clrmn(findmn(j));
+	}
 	lgf--;
 }
 
@@ -211,6 +280,8 @@ casede(void)
 	skip();
 	if ((i = getrq()) == 0)
 		goto de1;
+	if (i >= 256)
+		i = maybemore(i, 1);
 	if ((offset = finds(i)) == 0)
 		goto de1;
 	if (ds)
@@ -291,7 +362,7 @@ finds(register int mn)
 			if (contab[i].rq == 0)
 				break;
 		}
-		if (i == NM || (nextb = alloc()) == 0) {
+		if (i == NM && growcontab() == NULL || (nextb = alloc()) == 0) {
 			app = 0;
 			if (macerr++ > 1)
 				done2(02);
@@ -336,6 +407,8 @@ copyb(void)
 
 	if (skip() || !(j = getrq()))
 		j = '.';
+	if (j >= 256)
+		maybemore(j, 1);
 	req = j;
 	k = j >> BYTE;
 	j &= BYTEMASK;
@@ -418,11 +491,13 @@ alloc (void)		/*return free blist[] block in nextb*/
 	register int i;
 	register filep j;
 
-	for (i = 0; i < NBLIST; i++) {
-		if (blist[i] == 0)
-			break;
-	}
-	if (i == NBLIST) {
+	do {
+		for (i = 0; i < nblist; i++) {
+			if (blist[i] == 0)
+				break;
+		}
+	} while (i == nblist && growblist() != NULL);
+	if (i == nblist) {
 		j = 0;
 	} else {
 		blist[i] = -1;
@@ -488,7 +563,7 @@ wbf (			/*store i into blist[offset] (?) */
 	if (!((++offset) & (BLK - 1))) {
 		wbfl();
 		j = blisti(--offset);
-		if (j < 0 || j >= NBLIST) {
+		if (j < 0 || j >= nblist && growblist() == NULL) {
 			errprint("Out of temp file space");
 			done2(01);
 		}
@@ -527,7 +602,7 @@ rbf (void)		/*return next char from blist[] block*/
 	register tchar i;
 	register filep j, p;
 
-	if (ip == NBLIST*BLK) {		/* for rdtty */
+	if (ip == XBLIST*BLK) {		/* for rdtty */
 		if (j = rdtty())
 			return(j);
 		else
@@ -695,6 +770,8 @@ getsn(void)
 		return(0);
 	if (i == '(')
 		return(getrq());
+	else if (i == '[')
+		return(getls(']'));
 	else 
 		return(i);
 }
@@ -815,11 +892,31 @@ rtn:
 void
 seta(void)
 {
-	register int i;
+	register int c, i;
+	char q[] = { 0, 0 };
 
-	i = cbits(getch()) - '0';
-	if (i > 0 && i <= APERMAC && i <= frame->nargs)
-		pushback(*(((tchar **)(frame + 1)) + i - 1));
+	switch (c = cbits(getch())) {
+	case '@':
+		q[0] = '"';
+		/*FALLTHRU*/
+	case '*':
+		if (xflag == 0)
+			goto dfl;
+		for (i = min(APERMAC, frame->nargs); i >= 1; i--) {
+			if (q[0])
+				cpushback(q);
+			pushback(*(((tchar **)(frame + 1)) + i - 1));
+			if (q[0])
+				cpushback(q);
+			if (i > 1)
+				cpushback(" ");
+		}
+		break;
+	default:
+	dfl:	i = c - '0';
+		if (i > 0 && i <= APERMAC && i <= frame->nargs)
+			pushback(*(((tchar **)(frame + 1)) + i - 1));
+	}
 }
 
 
@@ -858,6 +955,8 @@ casedi(void)
 		wbt((tchar)0);
 	diflg++;
 	dip = &d[dilev];
+	if (i >= 256)
+		i = maybemore(i, 1);
 	dip->op = finds(i);
 	dip->curd = i;
 	clrmn(oldmn);
@@ -881,6 +980,8 @@ casedt(void)
 		return;
 	skip();
 	dip->dimac = getrq();
+	if (dip->dimac >= 256)
+		dip->dimac = maybemore(dip->dimac, 1);
 }
 
 
@@ -1004,4 +1105,83 @@ stackdump (void)	/* dumps stack of macros in process */
 			fdprintf(stderr, "%c%c ", p->mname&0177, (p->mname>>BYTE)&0177);
 		fdprintf(stderr, "\n");
 	}
+}
+
+static char	**had;
+static int	hadn;
+static int	alcd;
+
+/*
+ * To handle requests with more than two characters, an additional
+ * table is maintained. On places where more than two characters are
+ * allowed, the characters collected are passed in "sofar", and "create"
+ * specifies whether the request is a new one. The routine returns an
+ * integer which is above the regular PAIR() values.
+ */
+int
+maybemore(int sofar, int create)
+{
+	char	c, *buf, pb[] = { '\n', 0 };
+	int	i = 2, n, sz, r = raw;
+
+	if (xflag == 0)
+		return sofar;
+	raw = 1;
+	buf = malloc((sz = 2) * sizeof *buf);
+	buf[0] = sofar&0377;
+	buf[1] = (sofar>>8)&0377;
+	do {
+		c = getch0() & 0377;
+		if (i+1 >= sz)
+			buf = realloc(buf, (sz += 8) * sizeof *buf);
+		buf[i++] = c;
+	} while (c && c != ' ' && c != '\n');
+	buf[i-1] = 0;
+	buf[i] = 0;
+	if (i == 3)
+		goto retn;
+	for (n = 0; n < hadn; n++)
+		if (strcmp(had[n], buf) == 0)
+			break;
+	if (n == hadn) {
+		if (create == 0) {
+		retn:	buf[i-1] = c;
+			cpushback(&buf[2]);
+			free(buf);
+			raw = r;
+			return sofar;
+		}
+		if (n >= alcd)
+			had = realloc(had, (alcd += 20) * sizeof *had);
+		had[n] = buf;
+		hadn = n+1;
+	}
+	pb[0] = c;
+	cpushback(pb);
+	raw = r;
+	return 0200000 + n;
+}
+
+static int
+getls(int termc)
+{
+	char	c, *buf = NULL;
+	int	i = 0, n, sz = 0;
+
+	do {
+		c = getch0() & 0377;
+		if (i >= sz)
+			buf = realloc(buf, (sz += 8) * sizeof *buf);
+		buf[i++] = c;
+	} while (c != termc);
+	buf[i-1] = 0;
+	if (i == 1)
+		goto not;
+	for (n = 0; n < hadn; n++)
+		if (strcmp(had[n], buf) == 0)
+			break;
+	if (n == hadn)
+	not:	n = -1;
+	free(buf);
+	return n >= 0 ? 0200000 + n : 0;
 }

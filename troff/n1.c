@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n1.c	1.9 (gritter) 8/13/05
+ * Sccsid @(#)n1.c	1.17 (gritter) 8/16/05
  */
 
 /*
@@ -118,8 +118,12 @@ main(int argc, char **argv)
 	int eileenct;		/*count to test for "Eileen's loop"*/
 	char	**oargv;
 
-	(void)setlocale(LC_CTYPE, "");
+	setlocale(LC_CTYPE, "");
+	mb_cur_max = MB_CUR_MAX;
 	progname = argv[0];
+	growblist();
+	growcontab();
+	grownumtab();
 	if (signal(SIGHUP, SIG_IGN) != SIG_IGN)
 		signal(SIGHUP, catch);
 	if (signal(SIGINT, catch) == SIG_IGN) {
@@ -222,6 +226,12 @@ main(int argc, char **argv)
 			strcpy(devname, &argv[0][2]);
 			dotT++;
 			continue;
+		case 'x':
+			xflag = 1;
+			continue;
+		case 'X':
+			xflag = 0;
+			continue;
 #ifdef NROFF
 		case 'h':
 			hflg++;
@@ -304,7 +314,9 @@ loop:
 			;
 		ch = i;
 		copyf--;
-		control(getrq(), 1);
+		if ((j = getrq()) >= 256)
+			j = maybemore(j, 0);
+		control(j, 1);
 		flushi();
 		goto loop;
 	}
@@ -404,8 +416,8 @@ init2(void)
 	nxf = frame + 1;
 #ifdef INCORE
 	for (i = 0; i < NEV; i++) {
-		extern tchar corebuf[];
-		*(struct env *)&corebuf[i * sizeof(env)/sizeof(tchar)] = env;
+		extern tchar *corebuf;
+		((struct env *)corebuf)[i] = env;
 	}
 #else
 	for (i = NEV; i--; )
@@ -899,8 +911,12 @@ gx:
 	case 'p':	/* spread */
 		spread++;
 		goto g0;
+	case '[':
+		if (xflag == 0)
+			goto dfl;
+		/*FALLTHRU*/
 	case '(':	/* special char name */
-		if ((i = setch()) == 0)
+		if ((i = setch(k)) == 0)
 			goto g0;
 		return(i);
 	case 's':	/* size indicator */
@@ -967,7 +983,7 @@ gx:
 	case 'd':	/* half em down */
 		return(sethl(k));
 	default:
-		return(j);
+	dfl:	return(j);
 	}
 	/* NOTREACHED */
 }
@@ -1015,7 +1031,7 @@ again:
 		i = *--pbp;
 	else if (ip) {
 #ifdef INCORE
-		extern tchar corebuf[];
+		extern tchar *corebuf;
 		i = corebuf[ip];
 		if (i == 0)
 			i = rbf();
@@ -1066,8 +1082,14 @@ g2:
 		if (!multi_locale) {
 			twc = 0;
 			mbbuf1p = mbbuf1;
-		} else if ((n = mbtowc(&twc, mbbuf1, MB_CUR_MAX)) <= 0) {
-			if (mbbuf1p >= mbbuf1 + MB_CUR_MAX) {
+		} else if ((*mbbuf1&~(wchar_t)0177) == 0) {
+			twc = *mbbuf1;
+			i |= (BYTE_CHR);
+			setcsbits(i, 0);
+			twc = 0;
+			mbbuf1p = mbbuf1;
+		} else if ((n = mbtowc(&twc, mbbuf1, mb_cur_max)) <= 0) {
+			if (mbbuf1p >= mbbuf1 + mb_cur_max) {
 				i &= ~(MBMASK | CSMASK);
 				twc = 0;
 				mbbuf1p = mbbuf1;
@@ -1191,7 +1213,7 @@ n1:
 	if (p[0] == '-' && p[1] == 0) {
 		ifile = 0;
 		strcpy(cfname[ifi], "<standard input>");
-	} else if ((ifile = open(p, 0)) < 0) {
+	} else if ((ifile = open(p, O_RDONLY)) < 0) {
 		errprint("cannot open file %s", p);
 		nfo -= mflg;
 		done(02);
@@ -1330,7 +1352,8 @@ caseso(void)
 
 	lgf++;
 	nextf[0] = 0;
-	if (skip() || !getname() || ((i = open(nextf, 0)) < 0) || (ifi >= NSO)) {
+	if (skip() || !getname() || ((i = open(nextf, O_RDONLY)) < 0) ||
+			(ifi >= NSO)) {
 		errprint("can't open file %s", nextf);
 		done(02);
 	}
@@ -1380,7 +1403,7 @@ casecf(void)
 	char	buf[512];
 	extern int hpos, esc, po;
 	nextf[0] = 0;
-	if (skip() || !getname() || (fd = open(nextf, 0)) < 0) {
+	if (skip() || !getname() || (fd = open(nextf, O_RDONLY)) < 0) {
 		errprint("can't open file %s", nextf);
 		done(02);
 	}

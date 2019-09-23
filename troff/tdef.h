@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)tdef.h	1.6 (gritter) 8/13/05
+ * Sccsid @(#)tdef.h	1.16 (gritter) 8/16/05
  */
 
 /*
@@ -62,6 +62,7 @@
 #	define	VERT	t.Vert
 #	define	INCH	240	/* increments per inch */
 #	define	SPS	INCH/10	/* space size */
+#	define	SES	SPS	/* sentence space size */
 #	define	SS	INCH/10	/* " */
 #	define	TRAILER	0
 #	define	PO	0 /* page offset */
@@ -80,6 +81,7 @@
 #	define	HOR	Hor	/* horizontal resolution in goobies */
 #	define	VERT	Vert	/* vertical resolution in goobies */
 #	define	SPS	(EM/3)	/* space size  */
+#	define	SES	SPS	/* sentence space size */
 #	define	SS	12	/* space size in 36ths of an em */
 #	define	PO	(INCH)	/* page offset 1 inch */
 /* #	define	EM	(POINT * pts) */
@@ -157,7 +159,7 @@
 
 #define	NFONT	10	/* maximum number of fonts (including specials) */
 #define	EXTRAFONT 500	/* extra space for swapping a font */
-#define	NN	400	/* number registers */
+extern	int	NN;	/* number registers */
 #define	NNAMES	15	 /* predefined reg names */
 #define	NIF	15	/* if-else nesting */
 #define	NS	128	/* name buffer */
@@ -166,7 +168,7 @@
 #define	EVLSZ	10	/* size of ev stack */
 #define	DSIZE	512	/* disk sector size in chars */
 
-#define	NM	500	/* requests + macros */
+extern	int	NM;	/* requests + macros */
 #define	DELTA	1024	/* delta core bytes */
 #define	NHYP	10	/* max hyphens per word */
 #define	NHEX	128	/* byte size of exception word list */
@@ -308,6 +310,10 @@ endif EUC
  * on non-swapping systems, since the core image
  * will be over 1Mb.
 
+ * Note: As of 8/14/05, NBLIST has gone, and filep is
+ * grown dynamically as needed. XBLIST is an just an
+ * uninteresting relict to pass a special value.
+
  * BLK must be a power of 2
  */
 
@@ -315,12 +321,7 @@ typedef unsigned int filep;	/* this is good for 32 bit machines */
 
 #define	BLK	128	/* alloc block in tchars */
 
-#ifdef SMALLER
-#	define	NBLIST	512
-#else
-#	define	NBLIST	1024	/* allocation list.  smallish machines use 512 */
-				/* machines with paging can use 2048 */
-#endif
+#define	XBLIST	077777777
 
 /* Other things are stored in the temp file or corebuf:
  *	a single block for .rd input, at offset RD_OFFSET
@@ -412,19 +413,21 @@ struct	s {	/* stack frame */
 };
 
 extern struct contab {
-	unsigned short	rq;
+	unsigned int	rq;
 	struct	contab *link;
 	void	(*f)(int);
 	unsigned mx;
-} contab[NM];
+} *contab;
+extern const struct contab initcontab[];
 
 extern struct numtab {
-	short	r;		/* name */
+	int	r;		/* name */
 	short	fmt;
 	short	inc;
 	int	val;
 	struct	numtab *link;
-} numtab[NN];
+} *numtab;
+extern const struct numtab initnumtab[];
 
 #define	PN	0
 #define	NL	1
@@ -446,6 +449,7 @@ extern struct numtab {
 
 #define	ics	env._ics
 #define	sps	env._sps
+#define	ses	env._ses
 #define	spacesz	env._spacesz
 #define	lss	env._lss
 #define	lss1	env._lss1
@@ -519,6 +523,7 @@ extern struct numtab {
 extern struct env {
 	int	_ics;
 	int	_sps;
+	int	_ses;
 	int	_spacesz;
 	int	_lss;
 	int	_lss1;
@@ -636,6 +641,8 @@ void done3(int);
 void edone(int);
 void casepi(void);
 /* n3.c */
+void *growcontab(void);
+void *growblist(void);
 void caseig(void);
 void casern(void);
 void maddhash(register struct contab *);
@@ -674,7 +681,9 @@ void casetl(void);
 void casepc(void);
 void casepm(void);
 void stackdump(void);
+int maybemore(int, int);
 /* n4.c */
+void *grownumtab(void);
 void setn(void);
 int wrc(int);
 void setn1(int, int, tchar);
@@ -716,6 +725,7 @@ void caselc(void);
 void casehy(void);
 void casenh(void);
 int max(int, int);
+int min(int, int);
 void casece(void);
 void casein(void);
 void casell(void);
@@ -795,7 +805,7 @@ int maplow(register int);
 int vowel(int);
 tchar *chkvow(tchar *);
 void digram(void);
-int dilook(int, int, char [26][13]);
+int dilook(int, int, const char [26][13]);
 /* n9.c */
 tchar setz(void);
 void setline(void);

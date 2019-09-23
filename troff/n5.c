@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n5.c	1.6 (gritter) 8/13/05
+ * Sccsid @(#)n5.c	1.10 (gritter) 8/15/05
  */
 
 /*
@@ -228,6 +228,15 @@ max(int aa, int bb)
 		return(bb);
 }
 
+int 
+min(int aa, int bb)
+{
+	if (aa < bb)
+		return(aa);
+	else 
+		return(bb);
+}
+
 
 void
 casece(void)
@@ -368,6 +377,8 @@ casewh(void)
 		return;
 	skip();
 	j = getrq();
+	if (j >= 256)
+		j = maybemore(j, 0);
 	if ((k = findn(i)) != NTRAP) {
 		mlist[k] = j;
 		return;
@@ -394,10 +405,13 @@ casech(void)
 	skip();
 	if (!(j = getrq()))
 		return;
-	else 
+	else  {
+		if (j >= 256)
+			j = maybemore(j, 0);
 		for (k = 0; k < NTRAP; k++)
 			if (mlist[k] == j)
 				break;
+	}
 	if (k == NTRAP)
 		return;
 	skip();
@@ -542,6 +556,8 @@ caseem(void)
 	lgf++;
 	skip();
 	em = getrq();
+	if (em >= 256)
+		em = maybemore(em, 1);
 }
 
 
@@ -586,9 +602,9 @@ e1:
 		return;
 #ifdef INCORE
 	{
-		extern tchar corebuf[];
-		*(struct env *)&corebuf[ev * sizeof(env)/sizeof(tchar)] = env;
-		env = *(struct env *)&corebuf[nxev * sizeof(env)/sizeof(tchar)];
+		extern tchar *corebuf;
+		((struct env *)corebuf)[ev] = env;
+		env = ((struct env *)corebuf)[nxev];
 	}
 #else
 	lseek(ibf, ev * (long)sizeof(env), 0);
@@ -810,7 +826,7 @@ caserd(void)
 	}
 	collect();
 	tty++;
-	pushi(NBLIST*BLK, PAIR('r','d'));
+	pushi(XBLIST*BLK, PAIR('r','d'));
 }
 
 
@@ -844,8 +860,15 @@ rdtty(void)
 			i = onechar & 0377;
 			*mbbuf1p++ = i;
 			*mbbuf1p = 0;
-			if ((n = mbtowc(&twc, mbbuf1, MB_CUR_MAX)) <= 0) {
-				if (mbbuf1p >= mbbuf1 + MB_CUR_MAX) {
+			if ((*mbbuf1&~(wchar_t)0177) == 0) {
+				twc = *mbbuf1;
+				i |= (BYTE_CHR);
+				setcsbits(i, 0);
+				twc = 0;
+				mbbuf1p = mbbuf1;
+			}
+			else if ((n = mbtowc(&twc, mbbuf1, mb_cur_max)) <= 0) {
+				if (mbbuf1p >= mbbuf1 + mb_cur_max) {
 					i &= ~(MBMASK | CSMASK);
 					twc = 0;
 					mbbuf1p = mbbuf1;
@@ -1025,8 +1048,11 @@ caseit(void)
 	skip();
 	i = atoi();
 	skip();
-	if (!nonumb && (itmac = getrq()))
+	if (!nonumb && (itmac = getrq())) {
+		if (itmac >= 256)
+			itmac = maybemore(itmac, 1);
 		it = i;
+	}
 	noscale = 0;
 }
 

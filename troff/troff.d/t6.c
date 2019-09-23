@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)t6.c	1.3 (gritter) 8/8/05
+ * Sccsid @(#)t6.c	1.6 (gritter) 8/16/05
  */
 
 /*
@@ -257,7 +257,7 @@ xbits(register tchar i, int bitf)
 	}
 }
 
-tchar setch(void)
+tchar setch(int delim)
 {
 	register int j;
 	char	temp[10];
@@ -269,6 +269,10 @@ tchar setch(void)
 	s = temp;
 	if ((*s++ = getach()) == 0 || (*s++ = getach()) == 0)
 		return(0);
+	if (delim == '[' && getach() != ']') {
+		while (getach() != ']');
+		return(0);
+	}
 	*s = '\0';
 	for (j = 0; j < nchtab; j++)
 		if (strcmp(&chname[chtab[j]], temp) == 0)
@@ -669,7 +673,7 @@ setfp(int pos, int f, char *truename)	/* mount font f at position pos[0...nfonts
 		shortname[2] = '\0';
 	}
 	sprintf(longname, "%s/dev%s/%s.out", fontfile, devname, shortname);
-	if ((k = open(longname, 0)) < 0) {
+	if ((k = open(longname, O_RDONLY)) < 0) {
 		errprint("Can't open %s", longname);
 		return(-1);
 	}
@@ -780,7 +784,7 @@ casevs(void)
 void
 casess(void)
 {
-	register int i;
+	register int i, j;
 
 	noscale++;
 	skip();
@@ -788,6 +792,12 @@ casess(void)
 		spacesz = i & 0177;
 		zapwcache(0);
 		sps = width(' ' | chbits);
+		if (xflag) {
+			skip();
+			j = atoi();
+			if (!nonumb)
+				ses = j;
+		}
 	}
 	noscale = 0;
 }

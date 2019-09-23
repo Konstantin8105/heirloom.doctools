@@ -11,8 +11,13 @@ The source code is known to compile on:
 Linux		glibc, diet libc
 Solaris		9 and above
 HP-UX		B.11.11 and above
+AIX		5.1
 FreeBSD		5.4
 NetBSD		2.0
+
+New releases of this project are announced on Freshmeat. If you want to
+get notified by email on each release, use their subscription service at
+<http://freshmeat.net/projects/doctools/>.
 
 To build and install, see the settings in the "mk.config" and adjust
 them if necessary. You can also build a RPM package with the command
@@ -24,15 +29,28 @@ the compilation process. It is thus not possible to cross-compile.
 In order to use the utilities for formatting manual pages, note the
 following:
 
-- You will almost exclusively want to use "nroff -Tlp". By default,
-  nroff generates output for a Teletype Model 37 with half-line
-  capabilities which will lead to weird results with any xterm or
-  CRT terminal.
+- You will normally want to use "nroff -Tlp". By default, nroff generates
+  output for a Teletype Model 37 with half-line capabilities which will
+  lead to weird results with any xterm or CRT terminal.
+
+- Another choice is "nroff -Tlocale". This will generate UTF-8 output if
+  permitted by the current setting of the LC_CTYPE locale, and the same
+  as "nroff -Tlp" otherwise. UTF-8 output looks nicer and helps to spot
+  out typesetting errors in manual pages like using "-" instead of "\-",
+  so it is recommended for developers. (End users might prefer to wait
+  some time until more of the many pages which do this wrong have been
+  fixed.)
+
+- Macro names are normally restricted to two characters for compatibility
+  with previous versions of nroff. With "nroff -x", long macro names are
+  accepted. You will normally want to enable this because you are much
+  more likely to encounter manual pages written with groff in mind than
+  manual pages that require strict Unix compatibility.
 
 - You need to filter the output of nroff through "col -x". 
 
-- The terminal description for "-Tlp" is now built-in with nroff.
-  For a small system distribution, it is thus not necessary to
+- The terminal descriptions for "-Tlp" and "-Tlocale" are built-in with
+  nroff. For a small system distribution, it is thus not necessary to
   install the "nterm" directory.
 
 - You need at least the "an" macro file to format manual pages. If
@@ -41,10 +59,10 @@ following:
   between the two macro packages.
 
 - Thus a complete pipeline to format manual pages for viewing is:
-  tbl input.1 | neqn | nroff -Tlp -mandoc | col -x
+  tbl input.1 | neqn | nroff -x -Tlp -mandoc | col -x
 
 - To print manual pages with troff, use
-  tbl input.1 | eqn | troff -mandoc | dpost | lp
+  tbl input.1 | eqn | troff -x -mandoc | dpost | lp
 
 - You should of course configure your "man" command such that it
   executes these pipelines automatically for you.
@@ -61,4 +79,4 @@ Gunnar Ritter
 Freiburg i. Br.
 Germany
 <http://heirloom.sourceforge.net>
-<gunnarr@acm.org>						8/13/05
+<gunnarr@acm.org>						8/16/05

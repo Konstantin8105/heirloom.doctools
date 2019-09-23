@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)t10.c	1.3 (gritter) 8/8/05
+ * Sccsid @(#)t10.c	1.5 (gritter) 8/16/05
  */
 
 /*
@@ -116,7 +116,7 @@ ptinit(void)
 	strcat(termtab, "/dev");
 	strcat(termtab, devname);
 	strcat(termtab, "/DESC.out");	/* makes "..../devXXX/DESC.out" */
-	if ((fin = open(termtab, 0)) < 0) {
+	if ((fin = open(termtab, O_RDONLY)) < 0) {
 		errprint("can't open tables for %s", termtab);
 		done3(1);
 	}
@@ -161,6 +161,7 @@ ptinit(void)
 	 * that now require code to be executed.
 	 */
 	sps = SPS;
+	ses = SES;
 	ics = ICS;
 	for (i = 0; i < 16; i++)
 		tabtab[i] = DTAB * (i + 1);
