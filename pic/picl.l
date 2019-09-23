@@ -10,7 +10,7 @@
  * Distributed under the terms of the Lucent Public License Version 1.02.
  */
 
-/*	Sccsid @(#)picl.l	1.5 (gritter) 10/25/05	*/
+/*	Sccsid @(#)picl.l	1.7 (gritter) 11/27/05	*/
 %}
 %Start A str def xsc br thru sh
 %e 1700
@@ -28,6 +28,7 @@
 /* #include <stdio.h> lex puts one out for us */
 #include <ctype.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include "pic.h"
 #include "y.tab.h"
 
@@ -95,7 +96,7 @@ WS	[ \t]
 			return(EOF);
 		  }
 		}
-<A>^".".*	{ yylval.p = tostring(yytext); return(TROFF); }
+<A>^['.].*	{ yylval.p = tostring(yytext); return(TROFF); }
 
 <A>print	return(yylval.i = PRINT);
 <A>box		return(yylval.i = BOX);

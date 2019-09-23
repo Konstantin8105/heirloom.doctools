@@ -1,3 +1,36 @@
+Release 051202
+* [nt]roff: When text is written to a diversion in nofill mode, spacing
+  characters are preserved. This allows the text in the diversion to be
+  adjusted later when it is actually printed. The "-X" option disables
+  the new behavior.
+* [nt]roff: The static limit on the number of if-else constructs has
+  been removed.
+* [nt]roff: The static limit on the number of nested diversions has been
+  removed.
+* [nt]roff: A maximum of 2000 characters (bytes) is now allowed as the
+  total of all arguments to a macro.
+* dpost: The inclusion of PostScript pictures has been fixed; it could
+  generate invalid PostScript programs since release 051025 under certain
+  circumstances.
+* dpost: A "x X PSSetup" device request to support a "\X'PSSetup: ...'"
+  escape sequence has been added. It can be used to include arbitrary
+  PostScript code in the setup section of the output file.
+* dpost/troff -mcolor: CMYK colors and arbitrary PostScript color spaces
+  can now be used. The "setcolor" procedure in "color.ps" has been renamed
+  to "_setcolor" in order to make this possible.
+* [nt]roff: A ".psbb" command is now available to retrieve the bounding box
+  of a PostScript document (particularly of an EPS image).
+* dpost: DSC comments of included EPS images are now preserved.
+* dpost: PostScript pictures that contain binary data can be included now.
+* pic: Troff commands that begin with a "'" are now passed through.
+* grap: Negative zeros in coordinate tick labels are now avoided.
+* -man macros: Fixed the output of a very long line following ".TP".
+* -mdoc macros: Changed the names of Courier fonts to \f(CW \f(CI to
+  match those of troff.
+* RPM package builds now require the new "Heirloom Development Tools"
+  package from <http://heirloom.sourceforge.net/devtools.html> to be
+  installed.
+
 Release 051107
 * The "checknr" utility has been added from OpenSolaris source code.
 * The "ptx" utility has been added from Unix 7th Edition source code.

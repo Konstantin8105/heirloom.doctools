@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)dpost.c	1.105 (gritter) 10/17/05
+ * Sccsid @(#)dpost.c	1.109 (gritter) 11/30/05
  */
 
 /*
@@ -325,7 +325,7 @@ int		realencoding = DFLTENCODING;
 int		maxencoding = MAXENCODING;
 int		eflag;
 
-static int	LanguageLevel;	/* PostScript output language level */
+int		LanguageLevel;	/* PostScript output language level */
 static int	Binary;		/* PostScript output contains binary data */
 
 /*
@@ -774,24 +774,6 @@ putstring(const char *sp, int n, FILE *fp)
 	return c;
 }
 
-/*****************************************************************************/
-int
-sget(char *buf, size_t size, FILE *fp)
-{
-	int	c, n = 0;
-
-	do
-		c = getc(fp);
-	while (spacechar(c));
-	if (c != EOF) do {
-		if (n+1 < size)
-			buf[n++] = c;
-		c = getc(fp);
-	} while (c != EOF && !spacechar(c));
-	ungetc(c, fp);
-	buf[n] = 0;
-	return n > 1 ? 1 : c == EOF ? EOF : 0;
-}
 /*****************************************************************************/
 
 
@@ -1345,7 +1327,7 @@ conv(
 		    if ( size != lastsize || size == FRACTSIZE &&
 				    fractsize != lastfractsize) {
 			subfont = 0;
-			t_sf();
+			t_sf(0);
 		    }
 		    switch ((c=getc(fp))) {
 			case 'p':	/* draw a path */
@@ -1608,8 +1590,10 @@ devcntrl(
 		    if (tracked)
 			    tracked = -1;
 		    subfont = 0;
-		    t_sf();
+		    t_sf(1);
 		    xymove(hpos, vpos);
+		} else if ( strcmp(str, "PSSetup") == 0 ) {
+		    fprintf(gf, "%s", buf);
 		} else if ( strcmp(str, "PS") == 0 || strcmp(str, "PostScript") == 0 )  {
 		    endtext();
 		    /* xymove(hpos, vpos); ul90-22006 */
@@ -2890,7 +2874,7 @@ printencvector(struct afmtab *a)
 
 
 void
-t_sf(void)
+t_sf(int forceflush)
 
 
 {
@@ -2926,7 +2910,7 @@ t_sf(void)
     }	/* End if */
 
     cmd = 'f';
-    if (encoding == 4 || encoding == 5) {
+    if (forceflush == 0 && (encoding == 4 || encoding == 5)) {
 	if (font == lastfont && subfont == lastsubfont)
 	    cmd = 's';
 	else if (size == lastsize && fractsize == lastfractsize)
@@ -3317,7 +3301,7 @@ put1 (
 	if (size != FRACTSIZE)
 	    lastw = widthfac * ((pw[i] * pstab[size-1] + unitwidth/2) / unitwidth);
 	else
-	    lastw = widthfac * ((pw[i] * fractsize + unitwidth/2) / unitwidth);
+	    lastw = widthfac * (int)((pw[i] * fractsize + unitwidth/2) / unitwidth);
 	if (track && (encoding == 0 || encoding == 4 || encoding == 5))
 		lastw += track;
 	oput(code);
@@ -3340,7 +3324,7 @@ oprep(void)
 
     if ( font != lastfont || size != lastsize || subfont != lastsubfont ||
 		    size == FRACTSIZE && fractsize != lastfractsize) {
-	t_sf();
+	t_sf(0);
     }
 
     if ( vpos != lasty )
@@ -3863,7 +3847,7 @@ charlib (
 			fontdir, realdev, name);
 	if ( access(temp, 04) == 0 && doglobal(temp) == TRUE )  {
 	    downloaded[lastc] = 1;
-	    t_sf();
+	    t_sf(0);
 	}   /* End if */
     }	/* End if */
 

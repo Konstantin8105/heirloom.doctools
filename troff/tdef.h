@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)tdef.h	1.52 (gritter) 10/22/05
+ * Sccsid @(#)tdef.h	1.55 (gritter) 11/29/05
  */
 
 /*
@@ -162,7 +162,7 @@
 #define	EXTRAFONT 500	/* extra space for swapping a font */
 extern	int	NN;	/* number registers */
 #define	NNAMES	15	 /* predefined reg names */
-#define	NIF	15	/* if-else nesting */
+extern	int	NIF;	/* if-else nesting */
 #define	NS	128	/* name buffer */
 #define	NTM	256	/* tm buffer */
 #define	NEV	3	/* environments */
@@ -177,7 +177,7 @@ extern	int	NM;	/* requests + macros */
 extern	int	NMF;	/* size of space for -m flags */
 #define	WDSIZE	540	/* word buffer size */
 #define	LNSIZE	680	/* line buffer size */
-#define	NDI	5	/* number of diversions */
+extern	int	NDI;	/* number of diversions */
 extern	int	NCHARS;	/* maximum size of troff character set */
 #define	NTRTAB	NCHARS	/* number of items in trtab[] */
 #define	NWIDCACHE NCHARS	/* number of items in widcache */
@@ -699,6 +699,7 @@ void stackdump(void);
 char *macname(int);
 int maybemore(int, int);
 tchar setuc(void);
+int makerq(const char *);
 /* n4.c */
 void *grownumtab(void);
 void setn(void);
@@ -717,6 +718,7 @@ int abc0(int, int (*)(tchar));
 long atoi0(void);
 long ckph(void);
 long atoi1(register tchar);
+void setnr(const char *, int, int);
 void caserr(void);
 void casenr(void);
 void caseaf(void);
@@ -838,4 +840,5 @@ void casefc(void);
 tchar setfield(int);
 void localize(void);
 void caselc_ctype(void);
+void casepsbb(void);
 void morechars(int);

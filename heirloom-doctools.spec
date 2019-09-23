@@ -1,9 +1,9 @@
 #
-# Sccsid @(#)heirloom-doctools.spec	1.15 (gritter) 10/31/05
+# Sccsid @(#)heirloom-doctools.spec	1.16 (gritter) 11/14/05
 #
 Summary: The Heirloom Documentation Tools.
 Name: heirloom-doctools
-Version: 051107
+Version: 051202
 Release: 1
 License: Other
 Source: %{name}-%{version}.tar.bz2
@@ -11,6 +11,7 @@ Group: System Environment/Base
 Vendor: Gunnar Ritter <gunnarr@acm.org>
 URL: <http://heirloom.sourceforge.net>
 BuildRoot: %{_tmppath}/%{name}-root
+BuildRequires: heirloom-devtools
 
 %define	bindir		/usr/ucb
 %define	mandir		/usr/share/man
@@ -28,8 +29,8 @@ BuildRoot: %{_tmppath}/%{name}-root
 %define	ccc		g++
 %define	cflags		'-O -fomit-frame-pointer'
 %define	cppflags	'-D__NO_STRING_INLINES -D_GNU_SOURCE'
-%define	yacc		'bison -y'
-%define	lex		flex
+%define	yacc		/usr/ccs/bin/yacc
+%define	lex		/usr/ccs/bin/lex
 
 #
 # Combine the settings defined above.

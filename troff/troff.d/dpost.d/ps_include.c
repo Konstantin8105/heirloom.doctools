@@ -28,7 +28,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)ps_include.c	1.5 (gritter) 8/13/05
+ * Sccsid @(#)ps_include.c	1.8 (gritter) 11/29/05
  */
 
 /*
@@ -41,8 +41,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include "gen.h"
-#include "ps_include.h"
+#include "ext.h"
+#include "path.h"
+#include "asciitype.h"
 
 
 #define var(x)		fprintf(fout, "/%s %g def\n", #x, x)
@@ -52,10 +55,10 @@
 			: calloc(n, sizeof(Section))))
 
 
-char	buf[512];
+static char	*buf;
+static size_t	bufsize;
 typedef struct {long start, end;} Section;
 
-static void print(FILE *, char **);
 static void copy(FILE *, FILE *, Section *);
 
 /*****************************************************************************/
@@ -65,6 +68,7 @@ void
 ps_include(
 
 
+    const char	*name,			/* file name */
     FILE	*fin, FILE *fout,	/* input and output files */
     int		page_no,		/* physical page number from *fin */
     int		whiteout,		/* erase picture area */
@@ -79,6 +83,7 @@ ps_include(
 
 {
 
+    static int	gotinclude;
 
     int		foundpage = 0;		/* found the page when non zero */
     int		nglobal = 0;		/* number of global defs so far */
@@ -91,6 +96,9 @@ ps_include(
     double	o = outline != 0;
     double	s = scaleboth != 0;
     int		i;			/* loop index */
+    int		lineno = 0;
+    int		epsf = 0;
+    char	*bp;
 
 
 /*
@@ -107,6 +115,10 @@ ps_include(
  *
  */
 
+	if (gotinclude == 0 && access(PSINCLUDEFILE, 04) == 0) {
+		doglobal(PSINCLUDEFILE);
+		gotinclude++;
+	}
 
 	llx = lly = 0;			/* default BoundingBox - 8.5x11 inches */
 	urx = 72 * 8.5;
@@ -117,9 +129,17 @@ ps_include(
 	prolog.start = prolog.end = 0;
 	page.start = page.end = 0;
 	trailer.start = 0;
-	fseek(fin, 0L, 0);
+	fseek(fin, 0L, SEEK_SET);
 
-	while ( fgets(buf, sizeof(buf), fin) != NULL )
+	while ( fgetline(&buf, &bufsize, NULL, fin) != NULL ) {
+		if (++lineno == 1 && strncmp(buf, "%!PS-", 5) == 0) {
+			for (bp = buf; !spacechar(*bp&0377); bp++);
+			while (*bp && *bp != '\n' && spacechar(*bp&0377))
+				bp++;
+			if (strncmp(bp, "EPSF-3.0", 8) == 0 &&
+					(bp[8] == 0 || spacechar(bp[8]&0377)))
+				epsf++;
+		}
 		if (!has("%%"))
 			continue;
 		else if (has("%%Page: ")) {
@@ -138,9 +158,15 @@ ps_include(
 			}
 			if (!foundpage)
 				page.start = ftell(fin);
-		} else if (has("%%BoundingBox:"))
+		} else if (has("%%BoundingBox:")) {
 			sscanf(buf, "%%%%BoundingBox: %lf %lf %lf %lf", &llx, &lly, &urx, &ury);
-		else if (has("%%EndProlog") || has("%%EndSetup") || has("%%EndDocumentSetup"))
+			if (epsf)
+				epsf++;
+		} else if (has("%%LanguageLevel:")) {
+			int	n;
+			sscanf(buf, "%%%%LanguageLevel: %d", &n);
+			LanguageLevel = MAX(LanguageLevel, n);
+		} else if (has("%%EndProlog") || has("%%EndSetup") || has("%%EndDocumentSetup"))
 			prolog.end = page.start = ftell(fin);
 		else if (has("%%Trailer"))
 			trailer.start = ftell(fin);
@@ -155,8 +181,9 @@ ps_include(
 		} else if (has("%%EndGlobal"))
 			if (page.end <= page.start)
 				global[nglobal++].end = ftell(fin);
+	}
 
-	fseek(fin, 0L, 2);
+	fseek(fin, 0L, SEEK_END);
 	if (trailer.start == 0)
 		trailer.start = ftell(fin);
 	trailer.end = ftell(fin);
@@ -173,16 +200,25 @@ fprintf(stderr, "trailer=(%d,%d)\n", trailer.start, trailer.end);
 */
 
 	/* all output here */
-	print(fout, PS_head);
+	fprintf(fout, "_ps_include_head\n");
 	var(llx); var(lly); var(urx); var(ury); var(w); var(o); var(s);
 	var(cx); var(cy); var(sx); var(sy); var(ax); var(ay); var(rot);
-	print(fout, PS_setup);
-	copy(fin, fout, &prolog);
-	for(i = 0; i < nglobal; i++)
-		copy(fin, fout, &global[i]);
-	copy(fin, fout, &page);
-	copy(fin, fout, &trailer);
-	print(fout, PS_tail);
+	fprintf(fout, "_ps_include_setup\n");
+	if (epsf == 2) {
+		size_t	len;
+		rewind(fin);
+		fprintf(fout, "%%%%BeginDocument: %s\n", name);
+		while (fgetline(&buf, &bufsize, &len, fin) != NULL)
+			fwrite(buf, 1, len, fout);
+		fprintf(fout, "%%%%EndDocument\n");
+	} else {
+		copy(fin, fout, &prolog);
+		for(i = 0; i < nglobal; i++)
+			copy(fin, fout, &global[i]);
+		copy(fin, fout, &page);
+		copy(fin, fout, &trailer);
+	}
+	fprintf(fout, "_ps_include_tail\n");
 
 	if(nglobal)
 		free(global);
@@ -190,20 +226,18 @@ fprintf(stderr, "trailer=(%d,%d)\n", trailer.start, trailer.end);
 }
 
 static void
-print(FILE *fout, char **s)
-{
-	while (*s)
-		fprintf(fout, "%s\n", *s++);
-}
-
-static void
 copy(FILE *fin, FILE *fout, Section *s)
 {
+	size_t	len;
+
 	if (s->end <= s->start)
 		return;
-	fseek(fin, s->start, 0);
-	while (ftell(fin) < s->end && fgets(buf, sizeof(buf), fin) != NULL)
-		if (buf[0] != '%')
-			fprintf(fout, "%s", buf);
+	fseek(fin, s->start, SEEK_SET);
+	while (ftell(fin) < s->end &&
+			fgetline(&buf, &bufsize, &len, fin) != NULL) {
+		if (buf[0] == '%')
+			putc(' ', fout);
+		fwrite(buf, 1, len, fout);
+	}
 }
 

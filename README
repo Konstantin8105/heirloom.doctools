@@ -33,6 +33,7 @@ HP-UX		B.11.11 and above
 AIX		5.1
 FreeBSD		5.4
 NetBSD		2.0
+DragonFlyBSD	1.3.7-DEVELOPMENT
 
 New releases of this project are announced on Freshmeat. If you want to
 get notified by email on each release, use their subscription service at
@@ -40,7 +41,9 @@ get notified by email on each release, use their subscription service at
 
 To build and install, see the settings in the "mk.config" and adjust
 them if necessary. You can also build a RPM package with the command
-"rpmbuild -tb heirloom-doctools-<version>.tar.bz2".
+"rpmbuild -tb heirloom-doctools-<version>.tar.bz2". Building the RPM
+package requires the "heirloom-devtools" package to be installed; it
+is available from <http://heirloom.sourceforge.net/devtools.html>.
 
 troff currently reads several binary files which are built during
 the compilation process. It is thus not possible to cross-compile.
@@ -53,6 +56,18 @@ The "pm" utility requires a C++ compiler. If such a compiler is not
 available, delete the "mpm" directory from the list of subdirectories
 to build in the top-level "makefile". The "pm" utility is rarely used,
 so it should not be too dramatic if it is missing.
+
+Several of the included yacc and lex programs need to access internals
+of the yacc and lex implementations beyond the respective POSIX
+specifications. This has been made to work with Unix yacc and lex as
+well as with many versions of Berkeley yacc, bison, and flex. However,
+recent changes in these programs may result in incompatibilities. If
+this happens, install the "Heirloom Development Tools" package first
+and use the yacc and lex versions provided with it. You could also fix
+the problem on your own, but now that portable Open Source versions of
+Unix yacc and lex are available, such changes can no longer be
+considered important, and will not be done as part of the regular
+maintenance of this project.
 
 In order to use the utilities for formatting manual pages, note the
 following:
@@ -93,7 +108,18 @@ following:
   tbl input.1 | eqn | troff -x -mandoc | dpost | lp
 
 - You should of course configure your "man" command such that it
-  executes these pipelines automatically for you.
+  executes these pipelines automatically for you. For the "man"
+  command from the Heirloom Toolchest, suitable entries in
+  "/etc/default/man" are:
+
+	NROFF=/usr/ucb/nroff -x -Tlocale
+	TROFF=/usr/ucb/troff -x
+	TBL=/usr/ucb/tbl
+	EQN=/usr/ucb/eqn
+	NEQN=/usr/ucb/neqn
+	TCAT=/usr/ucb/dpost
+	COL=col -x
+	MACSET=-mandoc
 
 The project homepage is currently at <http://heirloom.sourceforge.net>.
 
@@ -103,4 +129,4 @@ Gunnar Ritter
 Freiburg i. Br.
 Germany
 <http://heirloom.sourceforge.net>
-<gunnarr@acm.org>						10/30/05
+<gunnarr@acm.org>						11/22/05
