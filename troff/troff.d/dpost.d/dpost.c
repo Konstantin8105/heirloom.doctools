@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)dpost.c	1.149 (gritter) 7/11/06
+ * Sccsid @(#)dpost.c	1.153 (gritter) 8/12/06
  */
 
 /*
@@ -374,7 +374,7 @@ char		*realdev = DEVNAME;	/* a good description of target printer */
 
 
 struct dev	dev;			/* DESC starts this way */
-struct Font	*fontbase[NFONT+1];	/* FONT files begin this way */
+struct Font	**fontbase;		/* FONT files begin this way */
 int		*pstab;			/* list of available sizes */
 int		nsizes = 1;		/* and the number of sizes in that list */
 int		smnt;			/* index of first special font */
@@ -429,9 +429,6 @@ int		lasttrack = 0;		/* previous tracking hint */
 int		tracked;		/* records need to flush track */
 int		lastc = 0;		/* and its name (or index) */
 
-float		fontheight = 0;		/* points from x H ... */
-int		fontslant = 0;		/* angle from x S ... */
-
 int		res;			/* resolution assumed in input file */
 float		widthfac = 1.0;		/* for emulation = res/dev.res */
 float		horscale = 1.0;		/* horizontal font scaling */
@@ -474,6 +471,9 @@ struct  {
 	struct afmtab	*afm;		/* AFM data, if any */
 	char	*name;			/* name of the font loaded here */
 	int	number;			/* its internal number */
+	float	fontheight;		/* points from x H ... */
+	int	fontslant;		/* angle from x S ... */
+
 
 } fontname[NFONT+1] = {NULL, 0};
 
@@ -1474,6 +1474,7 @@ conv(
 		    }
 		    switch ((c=getc(fp))) {
 			case 'p':	/* draw a path */
+			case 'P':	/* should be solid */
 			    while (fscanf(fp, "%d %d", &n, &m) == 2)
 				drawline(n, m);
 			    lineno++;
@@ -1486,11 +1487,13 @@ conv(
 			    break;
 
 			case 'c':	/* circle */
+			case 'C':	/* should be filled */
 			    fscanf(fp, "%d", &n);
 			    drawcirc(n);
 			    break;
 
 			case 'e':	/* ellipse */
+			case 'E':	/* should be filled */
 			    fscanf(fp, "%d %d", &m, &n);
 			    drawellip(m, n);
 			    break;
@@ -1508,6 +1511,18 @@ conv(
 
 			case '~':	/* wiggly line */
 			    drawspline(fp, 2);
+			    lineno++;
+			    break;
+
+			case 't':	/* set line width, ignore */
+			    fscanf(fp, "%d %d", &m, &n);
+			    hgoto(hpos + m);
+			    lineno++;
+			    break;
+
+			case 'F':	/* color scheme, ignore */
+			case 'f':	/* filling color, ignore */
+			    fgets(str, sizeof str, fp);
 			    lineno++;
 			    break;
 
@@ -1604,8 +1619,8 @@ devcntrl(
 {
 
 
-    char	str[4096], buf[4096], str1[4096];
-    int		c, n;
+    char	str[4096], *buf, str1[4096];
+    int		c, n, size;
 
 
 /*
@@ -1619,6 +1634,7 @@ devcntrl(
  */
 
 
+    buf = malloc(size = 4096);
     sget(str, sizeof str, fp);		/* get the control function name */
 
     switch ( str[0] )  {		/* only the first character counts */
@@ -1661,7 +1677,7 @@ devcntrl(
 	case 'f':			/* load font in a position */
 		fscanf(fp, "%d", &n);
 		sget(str, sizeof str, fp);
-		fgets(buf, sizeof buf, fp);	/* in case there's a filename */
+		fgets(buf, size, fp);	/* in case there's a filename */
 		ungetc('\n', fp);	/* fgets() goes too far */
 		str1[0] = '\0';		/* in case there's nothing to come in */
 		sscanf(buf, "%s", str1);
@@ -1698,8 +1714,19 @@ devcntrl(
 		str[n] = 0;
 		if (c != ':')
 			ungetc(c, fp);
-		fgets(buf, sizeof(buf), fp);
-		ungetc('\n', fp);
+		n = 0;
+		for (;;) {
+			fgets(&buf[n], size - n, fp);
+			if ((c = getc(fp)) != '+') {
+				ungetc(c, fp);
+				break;
+			}
+			while (buf[n])
+				n++;
+			if (size - n < 4096)
+				buf = realloc(buf, size += 4096);
+			lineno++;
+		}
 		if ( strcmp(str, "PI") == 0 || strcmp(str, "PictureInclusion") == 0 )
 		    picture(buf);
 		else if ( strcmp(str, "InlinePicture") == 0 )
@@ -1760,10 +1787,12 @@ devcntrl(
 		    /* xymove(hpos, vpos); ul90-22006 */
 		    fprintf(tf, "%s", buf);
 		}   /* End else */
-		break;
+		goto done;
     }	/* End switch */
 
     while ( (c = getc(fp)) != '\n'  &&  c != EOF ) ;
+done:
+    free(buf);
 
 }   /* End of devcntrl */
 
@@ -1823,6 +1852,7 @@ fontinit(void)
     fontab = calloc(NFONT+1, sizeof *fontab);
     codetab = calloc(NFONT+1, sizeof *codetab);
     kerntab = calloc(NFONT+1, sizeof *kerntab);
+    fontbase = calloc(NFONT+1, sizeof *fontbase);
 
     for ( i = 1; i <= NFONT; i++ )  {	/* so loadfont() knows nothing's there */
 	fontbase[i] = NULL;
@@ -3195,11 +3225,11 @@ t_sf(int forceflush)
 	    fprintf(tf, "%g ", horscale);
     fprintf(tf, "%c\n", cmd);
 
-    if ( fontheight != 0 || fontslant != 0 ) {
+    if ( fontname[font].fontheight != 0 || fontname[font].fontslant != 0 ) {
 	if (size != FRACTSIZE)
-	    fprintf(tf, "%d %g changefont\n", fontslant, (fontheight != 0) ? (double)fontheight : pstab[size-1]);
+	    fprintf(tf, "%d %g changefont\n", fontname[font].fontslant, (fontname[font].fontheight != 0) ? (double)fontname[font].fontheight : pstab[size-1]);
 	else
-	    fprintf(tf, "%d %g changefont\n", fontslant, (fontheight != 0) ? (double)fontheight : (double)fractsize);
+	    fprintf(tf, "%d %g changefont\n", fontname[font].fontslant, (fontname[font].fontheight != 0) ? (double)fontname[font].fontheight : (double)fractsize);
     }
 
     if (tracked < 0)
@@ -3228,9 +3258,9 @@ t_charht (
  */
 
     if (n == FRACTSIZE)
-        fontheight = f;
+        fontname[font].fontheight = f;
     else
-    	fontheight = (n == pstab[size-1]) ? 0 : n;
+    	fontname[font].fontheight = (n == pstab[size-1]) ? 0 : n;
     lastfont = lastsubfont = -1;
 
 }   /* End of t_charht */
@@ -3255,7 +3285,7 @@ t_slant (
  *
  */
 
-    fontslant = n;
+    fontname[font].fontslant = n;
     lastfont = lastsubfont = -1;
 
 }   /* End of t_slant */

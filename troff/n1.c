@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n1.c	1.83 (gritter) 7/16/06
+ * Sccsid @(#)n1.c	1.113 (gritter) 8/12/06
  */
 
 /*
@@ -97,20 +97,25 @@ char	*cfname[NSO+1];		/*file name stack*/
 int	cfline[NSO];		/*input line count stack*/
 static int	cfpid[NSO+1];	/* .pso process IDs */
 char	*progname;	/* program name (troff) */
+static int	defcf;
 #ifdef	EUC
 char	mbbuf1[MB_LEN_MAX + 1];
 char	*mbbuf1p = mbbuf1;
 wchar_t	twc = 0;
 #endif	/* EUC */
 
-static void initg(void);
-static void printlong(long, int);
-static void printn(long, long);
-static char *sprintlong(char *s, long, int);
-static char *sprintn(char *s, long n, int b);
+static void	initg(void);
+static void	printlong(long, int);
+static void	printn(long, long);
+static char	*sprintlong(char *s, long, int);
+static char	*sprintn(char *s, long n, int b);
 #define	vfdprintf	xxvfdprintf
-static void vfdprintf(int fd, const char *fmt, va_list ap);
-static void _setenv(void);
+static void	vfdprintf(int fd, const char *fmt, va_list ap);
+static tchar	setyon(void);
+static void	_setenv(void);
+static tchar	setZ(void);
+static int	setgA(void);
+static int	setgB(void);
 
 #ifdef	DEBUG
 int	debug = 0;	/*debug flag*/
@@ -300,7 +305,7 @@ start:
 	eileenct = 0;		/*reset count for "Eileen's loop"*/
 loop:
 	xflag = _xflag;
-	copyf = lgf = nb = nflush = nlflg = 0;
+	defcf = charf = clonef = copyf = lgf = nb = nflush = nlflg = 0;
 	if (ip && rbf0(ip) == 0 && dip == d && ejf &&
 			frame->pframe->tail_cnt <= ejl) {
 		nflush++;
@@ -332,7 +337,7 @@ loop:
 		copyf--;
 		goto loop;
 	}
-	if (j == cc || j == c2) {
+	if (j == cc || j == c2 || isxfunc(i, CC)) {
 		if (j == c2)
 			nb++;
 		copyf++;
@@ -340,11 +345,11 @@ loop:
 			;
 		ch = i;
 		copyf--;
-		j = getrq(0);
+		j = getrq(4);
 		if (xflag != 0 && j == PAIR('d', 'o')) {
 			xflag = 3;
 			skip(1);
-			j = getrq(0);
+			j = getrq(4);
 		}
 		control(j, 1);
 		flushi();
@@ -421,8 +426,11 @@ init2(void)
 	ptinit();
 	mchbits();
 	cvtime();
+	setnr(".g", gflag, 0);
 	numtab[PID].val = getpid();
 	spreadlimit = 3*EM;
+	olinesz = LNSIZE;
+	oline = malloc(olinesz * sizeof *oline);
 	olinep = oline;
 	ioff = 0;
 	numtab[HP].val = init = 0;
@@ -511,7 +519,7 @@ verrprint(const char *s, va_list ap)
 	fdprintf(stderr, "\n");
 	stackdump();
 #ifdef	DEBUG
-	if (debug)
+	if (debug & DB_ABRT)
 		abort();
 #endif	/* DEBUG */
 }
@@ -858,8 +866,8 @@ control(register int a, register int b)
 
 #ifdef	DEBUG
 	if (debug & DB_MAC)
-		fdprintf(stderr, "control: macro %c%c, contab[%d]\n",
-			a&0177, (a>>BYTE)&0177 ? (a>>BYTE)&0177 : ' ', j);
+		fdprintf(stderr, "control: macro %s, contab[%d]\n",
+			macname(a), j);
 #endif	/* DEBUG */
 	if (contab[j].f == 0) {
 		nxf->nargs = 0;
@@ -884,6 +892,8 @@ control(register int a, register int b)
 			free(frame);
 			frame = p;
 		}
+		contab[j].flags |= FLAG_USED;
+		frame->contp = j;
 		tailflg = 0;
 		return newip;
 	} else if (b) {
@@ -894,12 +904,23 @@ control(register int a, register int b)
 }
 
 
+static int
+rgetach(void)
+{
+	extern const char	nmctab[];
+	int	i;
+
+	if ((i = getach()) == 0 || xflag && i < ' ' && nmctab[i])
+		return(0);
+	return(i);
+}
+
 int
 getrq2(void)
 {
 	register int i, j;
 
-	if (((i = getach()) == 0) || ((j = getach()) == 0))
+	if (((i = rgetach()) == 0) || ((j = rgetach()) == 0))
 		goto rtn;
 	i = PAIR(i, j);
 rtn:
@@ -958,7 +979,7 @@ g0:
 #ifdef	DEBUG
 		if (debug & DB_GETC)
 			fdprintf(stderr, "getch: ch is %x (%c)\n",
-				ch, (ch&0177) < 040 ? 0177 : ch&0177);
+				(int)ch, (ch&0177) < 040 ? 0177 : ch&0177);
 #endif	/* DEBUG */
 		if (cbits(i) == '\n') {
 			nlflg++;
@@ -979,15 +1000,16 @@ g0:
 #ifdef	DEBUG
 	if (debug & DB_GETC)
 		fdprintf(stderr, "getch: getch0 returns %x (%c)\n",
-			i, (i&0177) < 040 ? 0177 : i&0177);
+			(int)i, (i&0177) < 040 ? 0177 : i&0177);
 #endif	/* DEBUG */
 	if (ismot(i))
 		return(i);
 	k = cbits(i);
 	if (k != ESC) {
-		if (i & MBMASK || gchtab[k]==0)
+		if (i & MBMASK || k >= NCHARS || gchtab[k]==0)
 			return(i);
 		if (k == '\n') {
+		nl:
 			if (cbits(i) == '\n') {
 				nlflg++;
 				tailflg = istail(i);
@@ -1010,40 +1032,35 @@ g0:
 		}
 		if (!copyf) {
 			if (gchtab[k]&LGBIT && !isdi(i) && lg && !lgf) {
-				i = getlg(i);
-				return(i);
+				k = cbits(i = getlg(i));
+				goto chartest;
 			}
 			if (k == fc || k == tabch || k == ldrch) {
 				if ((i = setfield(k)) == 0)
 					goto g0; 
-				else 
+				else
 					return(i);
 			}
 			if (k == '\b') {
 				i = makem(-width(' ' | chbits));
 				return(i);
 			}
+		chartest:
+			if (!lgf && !charf && chartab[trtab[k]] != NULL)
+				i = setchar(i);
+			return(i);
 		}
 		return(i);
 	}
+ge:
 	k = cbits(j = getch0());
 	if (ismot(j))
 		return(j);
 	switch (k) {
 
-	case 'X':	/* \X'...' for copy through */
-		setxon();
-		goto g0;
 	case '\n':	/* concealed newline */
-		goto g0;
-	case 'n':	/* number register */
-		setn();
-		goto g0;
-	case '*':	/* string indicator */
-		setstr();
-		goto g0;
-	case '$':	/* argument indicator */
-		seta();
+		if (fmtchar)
+			goto nl;
 		goto g0;
 	case '{':	/* LEFT */
 		i = LEFT;
@@ -1063,9 +1080,6 @@ g0:
 		nlflg++;
 		tailflg = istail(i);
 		return(i);
-	case ESC:	/* double backslash */
-		i = eschar;
-		goto gx;
 	case 'e':	/* printable version of current eschar */
 		i = PRESC;
 		goto gx;
@@ -1092,6 +1106,11 @@ g0:
 	case '&':	/* filler */
 		i = FILLER;
 		goto gx;
+	case ')':	/* transparent filler */
+		if (xflag == 0)
+			break;
+		i = FILLER|TRANBIT;
+		goto gx;
 	case 'c':	/* to be continued */
 		i = CONT;
 		goto gx;
@@ -1112,12 +1131,44 @@ g0:
 			break;
 		i = OHC | BLBIT;
 		return(i);
+	}
+	if (clonef) {
+		pbbuf[pbp++] = j;
+		return(eschar);
+	}
+	switch (k) {
+
+	case 'X':	/* \X'...' for copy through */
+		setxon();
+		goto g0;
+	case 'Y':	/* \Y(xx for indirect copy through */
+		if (xflag == 0)
+			break;
+		i = setyon();
+		return(i);
+	case 'n':	/* number register */
+		setn();
+		goto g0;
+	case '*':	/* string indicator */
+		setstr();
+		goto g0;
+	case '$':	/* argument indicator */
+		seta();
+		goto g0;
+	case ESC:	/* double backslash */
+		i = eschar;
+		goto gx;
 	case 'g':	/* return format of a number register */
 		setaf();
 		goto g0;
 	case 'N':	/* absolute character number */
 		i = setabs();
 		goto gx;
+	case 'P':	/* output line trap */
+		if (xflag == 0)
+			break;
+		i = setolt();
+		return(i);
 	case 'V':	/* environment variable */
 		if (xflag == 0)
 			break;
@@ -1130,31 +1181,36 @@ gx:
 		return(i);
 	}
 	if (copyf) {
+copy:
 		pbbuf[pbp++] = j;
 		return(eschar);
 	}
 	switch (k) {
 
 	case '[':
+		if (defcf)
+			goto copy;
 		if (xflag == 0)
 			goto dfl;
 		/*FALLTHRU*/
 	case 'C':
 	case '(':	/* special char name */
+		if (defcf)
+			goto copy;
 		if ((i = setch(k)) == 0 && !tryglf)
 			goto g0;
-		return(i);
+		k = cbits(i);
+		goto chartest;
 	case 'U':	/* Unicode character */
 		if (xflag == 0)
 			goto dfl;
 		if ((i = setuc()) == 0 && !tryglf)
 			goto g0;
 		return(i);
-	case 'E':	/* printable version of current eschar */
+	case 'E':	/* eschar out of copy mode */
 		if (xflag == 0)
 			goto dfl;
-		i = PRESC;
-		goto gx;
+		goto ge;
 	}
 	if (tryglf) {
 		pbbuf[pbp++] = j;
@@ -1204,17 +1260,31 @@ gx:
 		setov();
 		goto g0;
 	case 'k':	/* mark hor place */
-		if ((k = findr(getsn())) != -1) {
+		if ((k = findr(getsn(1))) != -1) {
 			numtab[k].val = numtab[HP].val;
+			prwatchn(k);
 		}
 		goto g0;
 	case '0':	/* number space */
 		return(makem(width('0' | chbits)));
 #ifdef NROFF
+	case '/':
+	case ',':
+		if (gflag == 0)
+			goto dfl;
+		goto g0;
 	case '|':
 	case '^':
 		goto g0;
 #else
+	case '/':
+		if (gflag == 0)
+			goto dfl;
+		return(makem((int)(EM)/12));	/* italic correction */
+	case ',':
+		if (gflag == 0)
+			goto dfl;
+		return(makem(0));	/* left italic correction */
 	case '|':	/* narrow space */
 		return(makem((int)(EM)/6));
 	case '^':	/* half narrow space */
@@ -1229,9 +1299,31 @@ gx:
 	case 'd':	/* half em down */
 		return(sethl(k));
 	case 'A':	/* set anchor */
-		if (xflag == 0 || (j = setanchor()) == 0)
+		if (gflag) {	/* acceptable as name: fake as true */
+			i = setgA() + '0';
+			goto gx;
+		}
+		if (xflag == 0)
+			goto dfl;
+		if ((j = setanchor()) == 0)
 			goto g0;
 		return(j);
+	case 'B':
+		if (gflag) {	/* acceptable as expression */
+			i = setgB() + '0';
+			goto gx;
+		}
+		goto dfl;
+	case 'F':
+	case 'm':
+	case 'M':
+		if (gflag) {	/* font family, color */
+			if ((i = getsn(0)) > 0 && warn & WARN_ESCAPE)
+				errprint("\\%c[%s] unimplemented",
+						k, macname(i));
+			goto g0;
+		}
+		goto dfl;
 	case 'T':
 		if (xflag == 0 || (j = setlink()) == 0)
 			goto g0;
@@ -1240,14 +1332,20 @@ gx:
 		if (xflag)
 			setr();
 		goto g0;
+	case 'Z':
+		if (xflag && (j = setZ()) != 0)
+			return(j);
+		goto g0;
 	case ';':	/* ligature suppressor (only) */
 		if (xflag)
 			goto g0;
 		/*FALLTHRU*/
 	default:
+	dfl:	if (defcf)
+			goto copy;
 		if (warn & WARN_ESCAPE)
 			errprint("undefined escape sequence \\%c", k);
-	dfl:	return(j);
+		return(j);
 	}
 	/* NOTREACHED */
 }
@@ -1257,22 +1355,33 @@ setxon(void)	/* \X'...' for copy through */
 {
 	tchar xbuf[NC];
 	register tchar *i;
-	tchar c;
-	int delim, k;
+	tchar c, delim;
+	int k;
 
 	if (ismot(c = getch()))
 		return;
-	delim = cbits(c);
+	delim = c;
 	i = xbuf;
 	*i++ = XON;
-	while ((k = cbits(c = getch())) != delim && k != '\n' && i < xbuf+NC-1) {
+	charf++;
+	while (k = cbits(c = getch()), !issame(c, delim) && k != '\n' && i < xbuf+NC-1) {
 		if (k == ' ')
 			setcbits(c, UNPAD);
 		*i++ = c | ZBIT;
 	}
+	if (!issame(c, delim))
+		nodelim(delim);
+	charf--;
 	*i++ = XOFF;
 	*i = 0;
 	pushback(xbuf);
+}
+
+static tchar
+setyon(void)	/* \Y(xx for indirect copy through */
+{
+	storerq(getsn(0));
+	return mkxfunc(YON, 0);
 }
 
 
@@ -1595,15 +1704,26 @@ getach(void)
 	register int j;
 
 	lgf++;
-	j = cbits(i = getch());
+	i = getch();
+	while (isxfunc(i, CHAR))
+		i = charout[sbits(i)].ch;
+	j = cbits(i);
 #if !defined (EUC) || !defined (NROFF)
-	if (ismot(i) || j == ' ' || j == '\n' || j & 0200) {
-		if (j >= 0200)
+	if (ismot(i) || j == XFUNC && fbits(i) || j == ' ' || j == '\n' ||
+			j & 0200) {
+		if (!ismot(i) && j >= 0200)
 #else	/* EUC && NROFF */
-	if (ismot(i) || j == ' ' || j == '\n' || j > 0200) {
-		if (j > 0200)
+	if (ismot(i) || j == XFUNC && fbits(i) || j == ' ' || j == '\n' ||
+			j > 0200) {
+		if (!ismot(i) && j > 0200)
 #endif	/* EUC && NROFF */
 			illseq(j, NULL, -3);
+		else if (WARN_INPUT) {
+			if (ismot(i) && !isadjmot(i))
+				errprint("motion terminates name");
+			else if (j == XFUNC && fbits(i))
+				errprint("illegal character terminates name");
+		}
 
 		ch = i;
 		j = 0;
@@ -1971,17 +2091,370 @@ casexflag(void)
 {
 	int	i;
 
+#ifndef	NROFF
+	if (gflag == 1)
+		zapwcache(1);
+#endif
+	gflag = 0;
+	setnr(".g", gflag, 0);
 	skip(1);
+	noscale++;
 	i = atoi();
+	noscale--;
 	if (!nonumb)
 		_xflag = xflag = i & 3;
+}
+
+void
+casecp(void)
+{
+	if (xflag) {
+#ifndef	NROFF
+		if (gflag == 0)
+			zapwcache(1);
+#endif
+		gflag = 1;
+		noscale++;
+		if (skip(1) || atoi() && !nonumb)
+			xflag = 1;
+		else
+			xflag = 3;
+		noscale--;
+		_xflag = xflag;
+		setnr(".g", gflag, 0);
+		setnr(".C", xflag == 1, 0);
+		setnr(".x", 1, 0);
+		setnr(".y", 18, 0);
+	}
 }
 
 void
 caserecursionlimit(void)
 {
 	skip(1);
+	noscale++;
 	max_recursion_depth = atoi();
 	skip(0);
 	max_tail_depth = atoi();
+	noscale--;
+}
+
+void
+casechar(int flag)
+{
+	extern int	ps2cc(const char *);
+	extern int	nchtab;
+	char	name[NC];
+	int	i, k, size = 0;
+	tchar	c, *tp = NULL;
+
+	defcf++;
+	charf++;
+	if (skip(1))
+		return;
+	c = getch();
+	while (isxfunc(c, CHAR))
+		c = charout[sbits(c)].ch;
+	if ((k = cbits(c)) == eschar) {
+		switch (cbits(c = getch())) {
+		case '(':
+			name[0] = getch();
+			name[1] = getch();
+			name[2] = 0;
+			break;
+		case '[':
+			for (i = 0; cbits(c = getch()) != ']'; i++)
+				if (i < sizeof name - 1)
+					name[i] = c;
+			name[i] = 0;
+			break;
+		default:
+			errprint("mapping of escape sequences not permitted");
+			return;
+		}
+#ifndef	NROFF
+		k = ps2cc(name) + nchtab + 128 + 32 + 128 - 32 + nchtab;
+#else
+		if ((k = findch(name)) <= 0) {
+			errprint("invalid character name \\[%s]", name);
+			return;
+		}
+#endif
+	} else if (iscopy(c))
+		k = cbits(c = setuc0(k));
+	if (k <= ' ') {
+		errprint("mapping of special characters not permitted");
+		return;
+	}
+	defcf--;
+	charf--;
+	copyf++;
+	size = 10;
+	tp = malloc(size * sizeof *tp);
+	i = 0;
+	if (skip(0))
+		tp[i++] = FILLER;
+	else {
+		if (cbits(c = getch()) != '"')
+			ch = c;
+		while (c = getch(), !nlflg) {
+			if (i + 3 >= size) {
+				size += 10;
+				tp = realloc(tp, size * sizeof *tp);
+			}
+			tp[i++] = c;
+		}
+	}
+	tp[i++] = '\n';
+	tp[i] = 0;
+	free(chartab[k]);
+	chartab[k] = tp;
+	gchtab[k] |= CHBIT;
+	copyf--;
+#ifndef	NROFF
+	if (flag)
+		fchartab[k] = 1;
+	else
+		fchartab[k] = 0;
+#endif
+}
+
+void
+casefchar(void)
+{
+#ifndef	NROFF
+	casechar(1);
+#endif
+}
+
+void
+caserchar(void)
+{
+	tchar	c;
+	int	k;
+
+	lgf++;
+	if (skip(1))
+		return;
+	do {
+		c = getch();
+		k = cbits(c);
+		free(chartab[k]);
+		chartab[k] = NULL;
+		gchtab[k] &= ~CHBIT;
+	} while (!skip(0));
+}
+
+struct fmtchar {
+	struct d	newd, *savedip;
+	struct env	saveev;
+	int	savvflag;
+	int	savvpt;
+	int	savhp;
+	tchar	*csp;
+	int	charcount;
+};
+
+static int
+prepchar(struct fmtchar *fp)
+{
+	static int	charcount;
+	filep	startb;
+	tchar	t;
+
+	if ((startb = alloc()) == 0) {
+		errprint("out of space");
+		return -1;
+	}
+	t = 0;
+	setsbits(t, charcount);
+	charcount = sbits(t);
+	if (dip != d)
+		wbt(0);
+	if (charcount >= charoutsz) {
+		charoutsz += 32;
+		charout = realloc(charout, charoutsz * sizeof *charout);
+	}
+	memset(&charout[charcount], 0, sizeof *charout);
+	fp->savedip = dip;
+	memset(&fp->newd, 0, sizeof fp->newd);
+	dip = &fp->newd;
+	offset = dip->op = startb;
+	charout[charcount].op = startb;
+	fp->savvflag = vflag;
+	vflag = 0;
+	fp->savvpt = vpt;
+	vpt = 0;
+	fp->savhp = numtab[HP].val;
+	fp->saveev = env;
+	evc(&env, &env);
+	in = in1 = 0;
+	fi = 0;
+	return charcount++;
+}
+
+static void
+restchar(struct fmtchar *fp, int keepf)
+{
+	wbt(0);
+	dip = fp->savedip;
+	offset = dip->op;
+	free(env._line);
+	free(env._word);
+	free(env._hcode);
+	if (keepf) {
+		fp->saveev._apts = apts;
+		fp->saveev._apts1 = apts1;
+		fp->saveev._pts = pts;
+		fp->saveev._pts1 = pts1;
+		fp->saveev._font = font;
+		fp->saveev._font1 = font1;
+		fp->saveev._chbits = chbits;
+		fp->saveev._spbits = spbits;
+	}
+	env = fp->saveev;
+	vflag = fp->savvflag;
+	vpt = fp->savvpt;
+	numtab[HP].val = fp->savhp;
+}
+
+tchar
+setchar(tchar c)
+{
+	struct fmtchar	f;
+	int	k = cbits(c);
+	tchar	*csp;
+	int	charcount;
+	int	savxflag;
+	int	saveschar;
+
+#ifndef	NROFF
+	if (fchartab[k] && onfont(c))
+		return c;
+#endif
+	if (iszbit(c))
+		return c;
+	if ((charcount = prepchar(&f)) < 0)
+		return ' ';
+	fmtchar++;
+	savxflag = xflag;
+	xflag = 3;
+	saveschar = eschar;
+	eschar = '\\';
+	csp = chartab[k];
+	chartab[k] = NULL;
+	pushback(csp);
+	text();
+	tbreak();
+	nlflg = 0;
+	charout[charcount].ch = c;
+	if (iszbit(c))
+		charout[charcount].width = 0;
+	else {
+		charout[charcount].width = dip->maxl - lasttrack;
+		width(' ' | sfmask(c));
+		charout[charcount].width += lasttrack;
+	}
+	charout[charcount].height = maxcht;
+	charout[charcount].depth = maxcdp;
+	restchar(&f, 0);
+	chartab[k] = csp;
+	eschar = saveschar;
+	xflag = savxflag;
+	fmtchar--;
+	return mkxfunc(CHAR, charcount);
+}
+
+static tchar
+setZ(void)
+{
+	struct fmtchar	f;
+	int	charcount;
+	tchar	i;
+
+	if (ismot(i = getch()))
+		return 0;
+	if ((charcount = prepchar(&f)) < 0)
+		return 0;
+	stopch = i;
+	charout[charcount].ch = FILLER | sfmask(stopch);
+	text();
+	if (nlflg)
+		nodelim(stopch);
+	charout[charcount].ch = 0;
+	restchar(&f, 1);
+	return mkxfunc(CHAR, charcount);
+}
+
+tchar
+sfmask(tchar t)
+{
+	while (isxfunc(t, CHAR))
+		t = charout[sbits(t)].ch;
+	if (t == XFUNC || t == SLANT || (t & SFMASK) == 0)
+		return chbits;
+	return t & SFMASK;
+}
+
+int
+issame(tchar c, tchar d)
+{
+	if (ismot(c) || ismot(d))
+		return 0;
+	while (isxfunc(c, CHAR))
+		c = charout[sbits(c)].ch;
+	while (isxfunc(d, CHAR))
+		d = charout[sbits(d)].ch;
+	if (cbits(c) != cbits(d))
+		return 0;
+	if (cbits(c) == XFUNC && cbits(d) == XFUNC)
+		return fbits(c) == fbits(d);
+	return 1;
+}
+
+static int
+setgA(void)
+{
+	extern const char	nmctab[];
+	tchar	c, delim;
+	int	k, y = 1;
+
+	lgf++;
+	delim = getch();
+	if (ismot(delim)) {
+		lgf--;
+		return 0;
+	}
+	while (k = cbits(c = getch()), !issame(c, delim) && !nlflg)
+		if (ismot(c) || k < ' ' && nmctab[k] || k == ' ' || k >= 0200)
+			y = 0;
+	if (nlflg)
+		y = 0;
+	lgf--;
+	return y;
+}
+
+static int
+setgB(void)
+{
+	tchar	c, delim;
+	int	y = 1;
+
+	lgf++;
+	delim = getch();
+	if (ismot(delim)) {
+		lgf--;
+		return 0;
+	}
+	atoi0();
+	if (nonumb)
+		y = 0;
+	do {
+		c = getch();
+		if (!ismot(c) && issame(c, delim))
+			break;
+		y = 0;
+	} while (!nlflg);
+	lgf--;
+	return y;
 }

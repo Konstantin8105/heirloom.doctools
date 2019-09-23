@@ -18,7 +18,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)tg.c	1.7 (gritter) 2/26/06
+ * Sccsid @(#)tg.c	1.9 (gritter) 8/6/06
  */
 
  /* tg.c: process included text blocks */
@@ -41,7 +41,7 @@ if (textflg==0)
 	textflg=1;
 	}
 fprintf(tabout, ".eo\n");
-fprintf(tabout, ".am %02d\n", icol+80);
+fprintf(tabout, ".am %02d 00\n", icol+80);
 fprintf(tabout, ".br\n");
 if (texct2 < 0)
 	fprintf(tabout, ".di %c+\n", texname);
@@ -88,7 +88,7 @@ else
 	fprintf(tabout, ".do nr %d| \\n(dn\n", texct2);
 	fprintf(tabout, ".do nr %d- \\n(dl\n", texct2);
 	}
-fprintf(tabout, "..\n");
+fprintf(tabout, ".00\n");
 fprintf(tabout, ".ec \\\n");
 /* copy remainder of line */
 if (line[2])

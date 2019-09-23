@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)ni.c	1.30 (gritter) 7/11/06
+ * Sccsid @(#)ni.c	1.37 (gritter) 8/12/06
  */
 
 /*
@@ -102,6 +102,7 @@ int	oldbits = -1;
 int	init = 1;
 int	fc = IMP;	/* field character */
 int	eschar = '\\';
+int	ecs = '\\';
 #ifdef	NROFF
 int	pl = 11*INCH;
 int	po = PO;
@@ -159,6 +160,7 @@ const struct contab initcontab[] = {
 	C(PAIR('n', 'e'), casene),
 	C(PAIR('n', 'f'), casenf),
 	C(PAIR('c', 'e'), casece),
+	C(PAIR('r', 'j'), caserj),
 	C(PAIR('f', 'i'), casefi),
 	C(PAIR('i', 'n'), casein),
 	C(PAIR('l', 'l'), casell),
@@ -226,11 +228,13 @@ const struct contab initcontab[] = {
 	C(PAIR('l', 'f'), caself),
 	C(PAIR('d', 'b'), casedb),
 /*	C(PAIR('!', 0), casesy), */	/* synonym for .sy */
+	C(PAIR(XFUNC, 0), caseif),	/* while loop execution */
+	C(PAIR('c', 'p'), casecp),
 	C(0,              0)
 };
 
 
-tchar oline[3*LNSIZE+1];
+tchar *oline;
 
 /*
  * troff environment block
@@ -241,6 +245,7 @@ struct	env env = {
 /* int	sps	 */	0,
 /* int	ses	 */	0,
 /* int	spacesz	 */	0,
+/* int	sesspsz  */	0,
 #ifndef	NROFF
 /* int	minsps	 */	0,
 /* int	minspsz  */	0,
@@ -304,6 +309,7 @@ struct	env env = {
 /* int	adspc	 */	0,
 /* tchar	*wordp	 */	0,
 /* int	spflg	 */	0,	/* probably to indicate space after punctuation needed */
+/* int	seflg	 */	0,
 /* tchar	*linep	 */	0,
 /* tchar	*wdend	 */	0,
 /* tchar	*wdstart	 */	0,
@@ -318,6 +324,7 @@ struct	env env = {
 /* int	ul	 */	0,
 /* int	cu	 */	0,
 /* int	ce	 */	0,
+/* int	rj	 */	0,
 /* int	in	 */	0,
 /* int	in1	 */	0,
 /* int	un	 */	0,
@@ -330,5 +337,6 @@ struct	env env = {
 /* int	it	 */	0,
 /* int	itc	 */	0,
 /* int	itmac	 */	0,
-/* int	lnsize	 */	LNSIZE,
+/* int	lnsize	 */	0,
+/* int	wdsize	 */	0,
 };

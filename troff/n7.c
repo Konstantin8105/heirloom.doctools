@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n7.c	1.74 (gritter) 7/16/06
+ * Sccsid @(#)n7.c	1.93 (gritter) 8/12/06
  */
 
 /*
@@ -92,13 +92,23 @@ int	brflg;
 #undef	iswascii
 #define	iswascii(c)	(((c) & ~(wchar_t)0177) == 0)
 
+static tchar	adjbit(tchar);
+static void	sethtdp(void);
 #ifndef	NROFF
 #define	nroff		0
+extern int	lastrst;
+extern int	lastrsb;
+static void	setlhang(tchar);
+static void	setrhang(void);
 static void	letshrink(void);
 static int	letgrow(void);
 static int	lspcomp(int);
 #else	/* NROFF */
 #define	nroff		1
+#define	lastrst		0
+#define	lastrsb		0
+#define	setlhang(a)
+#define	setrhang()
 #define	storelsp(a, b)
 #define	storelsh(a, b)
 #define	letshrink()
@@ -148,6 +158,7 @@ tbreak(void)
 	lastl = ne;
 	if (brflg != 1) {
 		totout = 0;
+		hlc = 0;
 	} else if (ad) {
 		if ((lastl = ll - un + rhang + lsplast) < ne)
 			lastl = ne;
@@ -177,12 +188,14 @@ tbreak(void)
 	adrem = (adrem / resol) * resol;
 	for (i = line; nc > 0; ) {
 		if ((c = cbits(j = *i++) & ~MBMASK) == ' ' || c == STRETCH) {
-			if (xflag && !fi && dilev || iszbit(j))
+			if (xflag && !fi && dilev || iszbit(j) || isadjspc(j))
 				goto std;
 			pad = 0;
-			if (i > line)
+			if (i > &line[1])
 				pad += kernadjust(i[-2], i[-1]);
 			do {
+				if (xflag)
+					pchar(adjbit(j));
 				minflg = _minflg;
 				pad += width(j);
 				nc--;
@@ -205,20 +218,22 @@ tbreak(void)
 			horiz(pad);
 		} else {
 		std:
-			if (!ismot(j) && cbits(j) == XFUNC &&
-					fbits(j) == FLDMARK)
+			if (!ismot(j) && isxfunc(j, FLDMARK))
 				fldcnt--;
 			else if (fldcnt == 0 && nc && !ismot(j) &&
-					!iszbit(j) && cbits(j) > ' ') {
-				if (lspcur) {
-					k = (int)sbits(j) / 2 * lspcur / LAFACT;
+					!iszbit(j)) {
+				if (lspcur && (cbits(j) > ' ' ||
+							isxfunc(j, CHAR))) {
+					for (c = j; isxfunc(c, CHAR);
+						c = charout[sbits(c)].ch);
+					k = (int)sbits(c) / 2 * lspcur / LAFACT;
 					if (k >= 0)
 						c = mkxfunc(LETSP, k);
 					else
 						c = mkxfunc(NLETSP, -k);
 					pchar(c);
 				}
-				if (lshcur) {
+				if (lshcur && cbits(j) > ' ') {
 					k = lshcur;
 					if (k >= 0)
 						c = mkxfunc(LETSH, k);
@@ -231,6 +246,8 @@ tbreak(void)
 			nc--;
 		}
 	}
+	if (hlc)
+		pchar(mkxfunc(HYPHED, 0));
 	if (ic) {
 		if ((k = ll - un - lastl + ics) > 0)
 			horiz(k);
@@ -307,7 +324,7 @@ text(void)
 		return;
 	}
 	setnel();
-	if (ce || !fi) {
+	if (ce || rj || !fi) {
 		nofill();
 		return;
 	}
@@ -324,8 +341,11 @@ text(void)
 	while ((c = cbits(i = GETCH())) == ' ' || c == STRETCH) {
 		if (iszbit(i))
 			break;
+		if (isadjspc(i))
+			continue;
 		spcnt++;
 		widthp = xflag ? width(i) : sps;
+		sethtdp();
 		numtab[HP].val += widthp;
 		lasti = i;
 	}
@@ -369,22 +389,7 @@ t5:
 adj:
 	adsp = adrem = 0;
 	if (ad) {
-		if (!nroff && nc > 0) {
-			int	j;
-			c = line[nc-1];
-			width(c);
-			j = lasttrack;
-			j += kernadjust(c, ' ' | c&SFMASK);
-			if (admod != 1 && rhangtab != NULL && !ismot(c) &&
-					rhangtab[xfont] != NULL &&
-					(k = rhangtab[xfont][cbits(c)]) != 0) {
-				rhang = (k * u2pts(xpts) + (Unitwidth / 2))
-					/ Unitwidth;
-				j += rhang;
-			}
-			ne -= j;
-			nel += j;
-		}
+		setrhang();
 		if (admod == 0 && lspcur == 0 && lshcur == 0 &&
 				nel < 0 && lspnc)
 			letshrink();
@@ -439,15 +444,11 @@ nofill(void)
 		nwd = 10000;
 	}
 	nexti = GETCH();
-	if (!nroff && !ce && !pendnf && lhangtab != NULL &&
-			cbits(nexti) != SLANT &&
-			!ismot(nexti) && lhangtab[fbits(nexti)] != NULL &&
-			(k = lhangtab[fbits(nexti)][cbits(nexti)]) != 0) {
-		width(nexti);	/* set xpts */
-		k = (k * u2pts(xpts) + (Unitwidth / 2)) / Unitwidth;
-		storeline(makem(k), 0);
-	}
+	if (!ce && !rj && !pendnf)
+		setlhang(nexti);
 	while ((j = (cbits(i = nexti))) != '\n') {
+		if (stopch && issame(i, stopch))
+			break;
 		if (j == ohc) {
 			nexti = GETCH();
 			continue;
@@ -461,6 +462,7 @@ nofill(void)
 		}
 		j = width(i);
 		widthp = j;
+		sethtdp();
 		numtab[HP].val += j;
 		storeline(i, j);
 		oev = ev;
@@ -476,6 +478,12 @@ nofill(void)
 		ce--;
 		if ((i = quant(nel / 2, HOR)) > 0)
 			un += i;
+	}
+	if (rj) {
+		rj--;
+		setrhang();
+		if (nel > 0)
+			un += nel;
 	}
 	if (!nc)
 		storeline((tchar)FILLER, 0);
@@ -520,8 +528,12 @@ ckul(void)
 int
 storeline(register tchar c, int w)
 {
-	if (linep >= line + lnsize - 1) {
-		if (!over) {
+	if (linep == NULL || linep >= line + lnsize - 4) {
+		tchar	*k;
+		if (over)
+			return 0;
+		lnsize += lnsize ? 100 : LNSIZE;
+		if ((k = realloc(line, lnsize * sizeof *line)) == NULL) {
 			flusho();
 			errprint("Line overflow.");
 			over++;
@@ -529,7 +541,8 @@ storeline(register tchar c, int w)
 			w = -1;
 			goto s1;
 		}
-		return 0;
+		linep += k - line;
+		line = k;
 	}
 s1:
 	if (w == -1) {
@@ -552,13 +565,15 @@ storelsp(tchar c, int neg)
 
 	if (!ad || admod || ismot(c))
 		return;
-	if (cbits(c) == XFUNC && fbits(c) == FLDMARK) {
+	if (isxfunc(c, FLDMARK)) {
 		lsplow = lsphigh = lspnc = 0;
 		fldcnt += neg ? -1 : 1;
 		return;
 	}
-	if (iszbit(c) || cbits(c) <= ' ')
+	if (iszbit(c) || cbits(c) <= ' ' && !isxfunc(c, CHAR))
 		return;
+	while (isxfunc(c, CHAR))
+		c = charout[sbits(c)].ch;
 	s = sbits(c) / 2;
 	if (neg)
 		s = -s;
@@ -572,7 +587,7 @@ storelsh(tchar c, int w)
 {
 	if (!ad || admod || ismot(c))
 		return;
-	if (cbits(c) == XFUNC && fbits(c) == FLDMARK) {
+	if (isxfunc(c, FLDMARK)) {
 		lshlow = lshhigh = lshwid = 0;
 		return;
 	}
@@ -649,6 +664,7 @@ nl1:
 		numtab[PN].val = npn;
 		npn = npnflg = 0;
 	}
+	prwatchn(PN);
 nlpn:
 	if (numtab[PN].val == pfrom) {
 		print++;
@@ -670,18 +686,24 @@ nlpn:
 	}
 nl2:
 	trap = 0;
+	if (nolt && dip == d) {
+		for (i = 0; i < nolt; i++)
+			trap |= control(olt[i], 0);
+		nolt = 0;
+		free(olt);
+	}
 	if (vpt <= 0)
 		/*EMPTY*/;
 	else if (numtab[NL].val == 0) {
 		if ((j = findn(0)) != NTRAP)
-			trap = control(mlist[j], 0);
+			trap |= control(mlist[j], 0);
 	} else if ((i = findt(numtab[NL].val - nlss)) <= nlss) {
 		if ((j = findn1(numtab[NL].val - nlss + i)) == NTRAP) {
 			flusho();
 			errprint("Trap botch.");
 			done2(-5);
 		}
-		trap = control(mlist[j], 0);
+		trap |= control(mlist[j], 0);
 	}
 }
 
@@ -793,12 +815,54 @@ e1:
 }
 
 
+static int
+maybreak(tchar c)
+{
+	int	i, k = cbits(c);
+
+	if (c & BLBIT)
+		return 1;
+	switch (breakch[0]) {
+	case IMP:
+		return 0;
+	case 0:
+		return k == '-' || k == EMDASH;
+	default:
+		for (i = 0; breakch[i] && i < NSENT; i++)
+			if (breakch[i] == k)
+				return 1;
+		return 0;
+	}
+}
+
+static int
+nhychar(tchar c)
+{
+	int	i, k = cbits(c);
+
+	switch (nhych[0]) {
+	case IMP:
+		return 0;
+	case 0:
+		if (hyext)
+			return 0;
+		return k == '-' || k == EMDASH;
+	default:
+		for (i = 0; nhych[i] && i < NSENT; i++)
+			if (nhych[i] == k)
+				return 1;
+		return 0;
+	}
+}
+
+
 int
 movword(void)
 {
 	register int w;
 	register tchar i, *wp, c, *lp, *lastlp, lasti = 0, *tp;
 	int	savwch, hys, stretches = 0, wholewd = 0, mnel, hyphenated = 0;
+	int	hc;
 #ifndef	NROFF
 	tchar	lgs = 0, lge = 0, optlgs = 0, optlge = 0;
 	int	*ip, s, lgw = 0, optlgw = 0, lgr = 0, optlgr = 0;
@@ -820,19 +884,14 @@ movword(void)
 				break;
 			wch--;
 			wne -= xflag ? width(i) : sps;
+			if (xflag && linep > line)
+				storeline(adjbit(i), 0);
 		}
 		wp--;
 		if (wp > wordp)
 			wne -= kernadjust(wp[-1], wp[0]);
-		if (!nroff && admod != 1 && admod != 2 && lhangtab != NULL &&
-				cbits(*wp) != SLANT && !ismot(*wp) &&
-				lhangtab[fbits(*wp)] != NULL &&
-				(w = lhangtab[fbits(*wp)][cbits(*wp)]) != 0) {
-			width(*wp);	/* set xpts */
-			w = (w * u2pts(xpts) + (Unitwidth / 2)) / Unitwidth;
-			nel -= w;
-			storeline(makem(w), 0);
-		}
+		if (admod != 1 && admod != 2)
+			setlhang(*wp);
 	}
 	if (wne > nel - adspc && !hyoff && hyf && (hlm < 0 || hlc < hlm) &&
 	   (!nwd || nel + lsplow + lshlow - adspc >
@@ -864,7 +923,7 @@ movword(void)
 		w = width(i);
 		storelsh(i, rawwidth);
 		adspc += minspc;
-		w += kernadjust(i, *wp ? *wp : ' ' | (spbits?spbits:i&SFMASK));
+		w += kernadjust(i, *wp ? *wp : ' ' | (spbits?spbits:sfmask(i)));
 		wne -= w;
 		wch--;
 		if (cbits(i) == STRETCH && cbits(lasti) != STRETCH)
@@ -890,10 +949,11 @@ movword(void)
 		return(0);	/* line didn't fill up */
 	}
 m0:
+	hc = shc ? shc : HYPHEN;
 #ifndef NROFF
-	xbits((tchar)HYPHEN, 1);
+	xbits((tchar)hc, 1);
 #endif
-	hys = width((tchar)HYPHEN);
+	hys = width((tchar)hc);
 	if (wholewd)
 		goto m1a;
 m1:
@@ -913,9 +973,9 @@ m1:
 		i = *(linep + 1);
 		if ((ip = lgrevtab[fbits(i)][cbits(i)]) == NULL)
 			goto m5;
-		lgs = strlg(fbits(i), ip, s) | i & SFMASK | AUTOLIG;
+		lgs = strlg(fbits(i), ip, s) | sfmask(i) | AUTOLIG;
 		for (w = 0; ip[s+w]; w++);
-		lge = strlg(fbits(i), &ip[s], w) | i & SFMASK | AUTOLIG;
+		lge = strlg(fbits(i), &ip[s], w) | sfmask(i) | AUTOLIG;
 		lgw = width(lgs);
 		lgr = rawwidth;
 		if (linep - 1 >= wordp) {
@@ -977,14 +1037,13 @@ m2:
 		storelsh(lgs, lgr);
 	}
 #endif	/* !NROFF */
-	if ((i = cbits(*(linep - 1))) != '-' && i != EMDASH &&
-			(*(linep - 1) & BLBIT) == 0) {
-		*linep = (*(linep - 1) & SFMASK) | HYPHEN;
+	if (!maybreak(*(linep - 1))) {
+		*linep = sfmask(*(linep - 1)) | hc;
 		w = -kernadjust(*(linep - 1), *(linep + 1));
 		w += kernadjust(*(linep - 1), *linep);
 		w += width(*linep);
 		storelsh(*linep, rawwidth);
-		w += kernadjust(*linep, ' ' | *linep & SFMASK);
+		w += kernadjust(*linep, ' ' | sfmask(*linep));
 		nel -= w;
 		ne += w;
 		if (letsps)
@@ -1012,7 +1071,7 @@ m5:
 	storelsh(*linep, -rawwidth);
 	adspc -= minspc;
 	for (lp = &linep[1]; lp < lastlp && cbits(*lp) == IMP; lp++);
-	w += kernadjust(*linep, *lp ? *lp : ' ' | *linep&SFMASK);
+	w += kernadjust(*linep, *lp ? *lp : ' ' | sfmask(*linep));
 	ne -= w;
 	nel += w;
 	wne += w;
@@ -1048,6 +1107,7 @@ setnel(void)
 		lsplow = lsphigh = lspcur = lsplast = lspnc = fldcnt = 0;
 		lshwid = lshhigh = lshlow = lshcur = 0;
 #endif	/* !NROFF */
+		cht = cdp = 0;
 	}
 }
 
@@ -1057,12 +1117,12 @@ getword(int x)
 {
 	register int j, k = 0, w;
 	register tchar i = 0, *wp, nexti, gotspc = 0, t;
-	int noword;
+	int noword, n;
 #if defined (EUC) && defined (NROFF)
 	wchar_t *wddelim;
 	char mbbuf3[MB_LEN_MAX + 1];
 	char *mbbuf3p;
-	int wbf, n;
+	int wbf;
 	tchar m;
 #endif /* EUC && NROFF */
 
@@ -1097,6 +1157,7 @@ getword(int x)
 		goto g1;
 	}
 #endif /* EUC && NROFF */
+	n = 0;
 	while (1) {	/* picks up 1st char of word */
 		j = cbits(i = GETCH());
 #if defined (EUC) && defined (NROFF)
@@ -1114,16 +1175,31 @@ getword(int x)
 			continue;
 		}
 		if (j == ' ' && !iszbit(i)) {
-			if (spbits && xflag) {
+			n++;
+			if (isadjspc(i))
+				w = 0;
+			else if (xflag && seflg && sesspsz == 0) {
+				i |= ZBIT;
+				w = 0;
+			} else if (xflag && seflg && sesspsz && n == 1) {
+				if (spbits) {
+					i = ' ' | SENTSP | spbits;
+					w = width(i);
+				} else
+					w = ses;
+			} else if (spbits && xflag) {
 				i = ' ' | spbits;
 				w = width(i);
 			} else
 				w = sps;
+			cht = cdp = 0;
 			storeword(i, w);
 			numtab[HP].val += w;
-			widthp = w;
-			gotspc = i;
-			spbits = i & SFMASK;
+			if (!isadjspc(j)) {
+				widthp = w;
+				gotspc = i;
+				spbits = sfmask(i);
+			}
 			continue;
 		}
 		if (gotspc) {
@@ -1134,6 +1210,7 @@ getword(int x)
 		}
 		break;
 	}
+	seflg = 0;
 #if defined (EUC) && defined (NROFF)
 	if (!multi_locale)
 		goto a0;
@@ -1180,10 +1257,11 @@ a0:
 		t = ' ' | chbits;
 		w = sps;
 	}
+	cdp = cht = 0;
 	storeword(t, w + k);
 	if (spflg) {
 		if (xflag == 0 || ses != 0)
-			storeword(t, w);
+			storeword(t | SENTSP, ses);
 		spflg = 0;
 	}
 g0:
@@ -1203,14 +1281,16 @@ g0:
 				wordp[-1] |= BLBIT;
 			goto g1;
 		}
-		if (j == '-' || j == EMDASH)
+		if (maybreak(j))
 			if (wordp > word + 1) {
-				if (!hyext)
+				if (!xflag)
 					hyoff = 2;
 				*hyp++ = wordp + 1;
 				if (hyp > (hyptr + NHYP - 1))
 					hyp = hyptr + NHYP - 1;
 			}
+		if (xflag && nhychar(j))
+			hyoff = 2;
 	}
 	j = width(i);
 	numtab[HP].val += j;
@@ -1256,9 +1336,15 @@ g1:		nexti = GETCH();
 		if (collectmb(i))
 			goto g1;
 #endif /* EUC && NROFF */
-	if (j != ' ' || iszbit(i)) {
-		static char *sentchar = ".?!:";	/* sentence terminators */
-		if (j != '\n')
+	{
+		static int sentchar[] =
+			{ '.', '?', '!', ':', 0 }; /* sentence terminators */
+		int	*sp, *tp;
+		static int transchar[] =
+			{ '"', '\'', ')', ']', '*', 0, 0 };
+		transchar[5] = DAGGER;
+		if (j != '\n' && j != ' ' || ismot(i) || iszbit(i) ||
+				isadjspc(i))
 #if defined (EUC) && defined (NROFF)
 			if (!multi_locale)
 #endif /* EUC && NROFF */
@@ -1277,16 +1363,25 @@ g1:		nexti = GETCH();
 			}
 #endif /* EUC && NROFF */
 		wp = wordp-1;	/* handle extra space at end of sentence */
-		while (wp >= word) {
+		sp = *sentch ? sentch : sentchar;
+		tp = *transch ? transch : transchar;
+		while (sp[0] != IMP && wp >= word) {
 			j = cbits(*wp--);
-			if (j=='"' || j=='\'' || j==')' || j==']' || j=='*' || j==DAGGER)
-				continue;
-			for (k = 0; sentchar[k]; k++)
-				if (j == sentchar[k]) {
-					spflg++;
+			if (istrans(wp[1]))
+				goto cont;
+			for (k = 0; tp[0] != IMP && tp[k] && k < NSENT; k++)
+				if (j == tp[k])
+					goto cont;
+			for (k = 0; sp[k] && k < NSENT; k++)
+				if (j == sp[k]) {
+					if (nlflg)
+						spflg++;
+					else
+						seflg++;
 					break;
 				}
 			break;
+		cont:;
 		}
 	}
 #if defined (EUC) && defined (NROFF)
@@ -1296,12 +1391,12 @@ g1:		nexti = GETCH();
 	numtab[HP].val += xflag ? width(i) : sps;
 rtn:
 	if (i & SFMASK)
-		spbits = i & SFMASK;
+		spbits = sfmask(i);
 	else if (i == '\n')
 		spbits = chbits;
 	for (wp = word; *wp; wp++) {
 		j = cbits(*wp);
-		if ((j == ' ' || j == STRETCH) && !iszbit(j))
+		if ((j == ' ' || j == STRETCH) && !iszbit(j) && !isadjspc(j))
 			continue;
 		if (!ischar(j) || (!isdigit(j) && j != '-'))
 			break;
@@ -1321,8 +1416,12 @@ void
 storeword(register tchar c, register int w)
 {
 
-	if (wordp >= &word[WDSIZE - 3]) {
-		if (!over) {
+	if (wordp == NULL || wordp >= &word[wdsize - 3]) {
+		tchar	*k, **h;
+		if (over)
+			return;
+		wdsize += wdsize ? 100 : WDSIZE;
+		if ((k = realloc(word, wdsize * sizeof *word)) == NULL) {
 			flusho();
 			errprint("Word overflow.");
 			over++;
@@ -1330,12 +1429,17 @@ storeword(register tchar c, register int w)
 			w = -1;
 			goto s1;
 		}
-		return;
+		wordp += k - word;
+		for (h = hyptr; h < hyp; h++)
+			if (*h)
+				*h += k - word;
+		word = k;
 	}
 s1:
 	if (w == -1)
 		w = width(c);
 	widthp = w;
+	sethtdp();
 	wne += w;
 	*wordp++ = c;
 	wch++;
@@ -1423,7 +1527,65 @@ gotmb:
 
 #endif /* EUC && NROFF */
 
+static tchar
+adjbit(tchar c)
+{
+	if (cbits(c) == ' ')
+		setcbits(c, WORDSP);
+	return(c | ADJBIT);
+}
+
+static void
+sethtdp(void)
+{
+	if ((cht = lastrst) > maxcht)
+		maxcht = cht;
+	if ((cdp = -lastrsb) > maxcdp)
+		maxcdp = cdp;
+}
+
 #ifndef	NROFF
+static void
+setlhang(tchar c)
+{
+	int	k;
+
+	if (lhangtab != NULL && !ismot(c) && cbits(c) != SLANT &&
+			cbits(c) != XFUNC &&
+			lhangtab[fbits(c)] != NULL &&
+			(k = lhangtab[fbits(c)][cbits(c)]) != 0) {
+		width(c);	/* set xpts */
+		k = (k * u2pts(xpts) + (Unitwidth / 2)) / Unitwidth;
+		nel -= k;
+		storeline(makem(k), 0);
+	}
+}
+
+static void
+setrhang(void)
+{
+	int	j, k;
+	tchar	c;
+
+	if (nc > 0) {
+		c = 0;
+		for (j = nc - 1; j >= 0; j--)
+			if ((c = line[j]) != IMP)
+				break;
+		width(c);
+		j = lasttrack;
+		j += kernadjust(c, ' ' | sfmask(c));
+		if (admod != 1 && rhangtab != NULL && !ismot(c) &&
+				rhangtab[xfont] != NULL &&
+				(k = rhangtab[xfont][cbits(c)]) != 0) {
+			rhang = (k * u2pts(xpts) + (Unitwidth / 2)) / Unitwidth;
+			j += rhang;
+		}
+		ne -= j;
+		nel += j;
+	}
+}
+
 static void
 letshrink(void)
 {
@@ -1496,9 +1658,11 @@ lspcomp(int idiff)
 	diff = 0;
 	for (i = 0; i < nc; i++)
 		if (!ismot(c = line[i])) {
-			if (cbits(c) == XFUNC && fbits(c) == FLDMARK)
+			if (isxfunc(c, FLDMARK))
 				diff = lsplast = 0;
-			else if (cbits(c) > ' ') {
+			else if (cbits(c) > ' ' || isxfunc(c, CHAR)) {
+				while (isxfunc(c, CHAR))
+					c = charout[sbits(c)].ch;
 				lsplast = (int)sbits(c) / 2 * lspcur / LAFACT;
 				diff += lsplast;
 			}

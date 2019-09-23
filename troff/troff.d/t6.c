@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)t6.c	1.155 (gritter) 7/12/06
+ * Sccsid @(#)t6.c	1.171 (gritter) 8/13/06
  */
 
 /*
@@ -93,8 +93,12 @@ struct box	mediasize, bleedat, trimat, cropat;
 int	psmaxcode;
 struct ref	*anchors, *links;
 static int	_minflg;
+int	lastrst;
+int	lastrsb;
+int	spacewidth;
 
 static void	kernsingle(int **);
+static int	_ps2cc(const char *name, int create);
 
 int
 width(register tchar j)
@@ -103,7 +107,11 @@ width(register tchar j)
 
 	_minflg = minflg;
 	minflg = minspc = 0;
+	lasttrack = 0;
 	rawwidth = 0;
+	lastrst = lastrsb = 0;
+	if (isadjspc(j))
+		return(0);
 	if (j & (ZBIT|MOT)) {
 		if (iszbit(j))
 			return(0);
@@ -122,7 +130,14 @@ width(register tchar j)
 			i = eschar;
 		else if (iscontrol(i))
 			return(0);
-	}
+		else if (isxfunc(j, CHAR)) {
+			k = charout[sbits(j)].width + lettrack;
+			lastrst = charout[sbits(j)].height;
+			lastrsb = -charout[sbits(j)].depth;
+			goto set;
+		}
+	} else if (i == ' ' && issentsp(j))
+		return(ses);
 	if (i==ohc)
 		return(0);
 	i = trtab[i];
@@ -136,9 +151,11 @@ width(register tchar j)
 	} else 
 		xbits(j, 0);
 	if (widcache[i-32].fontpts == xfont + (xpts<<8) && !setwdf &&
-			!_minflg && !horscale)
+			!_minflg && !horscale) {
 		k = rawwidth = widcache[i-32].width;
-	else {
+		lastrst = widcache[i-32].rst;
+		lastrsb = widcache[i-32].rsb;
+	} else {
 		if (_minflg && i == 32 && cbits(j) != 32)
 			_minflg = 0;
 		k = getcw(i-32);
@@ -147,9 +164,9 @@ width(register tchar j)
 			minspc = getcw(0) - k;
 		}
 		_minflg = 0;
-		if (bd)
+	set:	if (bd && !fmtchar)
 			k += (bd - 1) * HOR;
-		if (cs)
+		if (cs && !fmtchar)
 			k = cs;
 	}
 	widthp = k;
@@ -180,8 +197,9 @@ getcw(register int i)
 	register int	x, j;
 	int nocache = 0;
 	int	ofont = xfont;
-	int	s;
-	float	z = 1;
+	int	s, t;
+	float	z = 1, zv;
+	struct afmtab	*a;
 
 	bd = 0;
 	if (i >= nchtab + 128-32) {
@@ -198,7 +216,14 @@ getcw(register int i)
 			nocache = 1;
 		} else
 			j = spacesz;
-		k = (fontab[xfont][0] * j + 6) / 12;
+		if (fontbase[xfont]->cspacewidth >= 0)
+			k = fontbase[xfont]->cspacewidth;
+		else if (spacewidth || gflag)
+			k = fontbase[xfont]->spacewidth;
+		else
+			k = fontab[xfont][0];
+		k = (k * j + 6) / 12;
+		lastrst = lastrsb = 0;
 		/* this nonsense because .ss cmd uses 1/36 em as its units */
 		/* and default is 12 */
 		goto g1;
@@ -243,6 +268,17 @@ getcw(register int i)
 						xfont = ii;
 				found:	p = fontab[ii];
 					k = *(p + j);
+					if (afmtab &&
+					    (t=fontbase[ii]->afmpos-1)>=0) {
+						a = afmtab[t];
+						if (a->bbtab[j]) {
+							lastrst = a->bbtab[j][3];
+							lastrsb = a->bbtab[j][1];
+						} else {
+							lastrst = a->ascender;
+							lastrsb = a->descender;
+						}
+					}
 					if (xfont == sbold)
 						bd = bdtab[ii];
 					if (setwdf)
@@ -252,20 +288,37 @@ getcw(register int i)
 			}
 		}
 		k = fontab[xfont][0];	/* leave a space-size space */
+		lastrst = lastrsb = 0;
 		goto g1;
 	}
  g0:
 	p = fontab[xfont];
 	if (setwdf)
-		numtab[CT].val |= kerntab[ofont][j];
+		numtab[CT].val |= kerntab[xfont][j];
+	if (afmtab && (t = fontbase[xfont]->afmpos-1) >= 0) {
+		a = afmtab[t];
+		if (a->bbtab[j]) {
+			lastrst = a->bbtab[j][3];
+			lastrsb = a->bbtab[j][1];
+		} else {
+			/*
+			 * Avoid zero values by all means. In many use
+			 * cases, endless loops will result unless values
+			 * are non-zero.
+			 */
+			lastrst = a->ascender;
+			lastrsb = a->descender;
+		}
+	}
 	k = *(p + j);
 	if (dev.anysize == 0 || xflag == 0 || (z = zoomtab[xfont]) == 0)
 		z = 1;
+ g1:
+	zv = z;
 	if (horscale) {
 		z *= horscale;
 		nocache = 1;
 	}
- g1:
 	if (!bd)
 		bd = bdtab[ofont];
 	if (cs = cstab[ofont]) {
@@ -277,6 +330,8 @@ getcw(register int i)
 		cs = (cs * EMPTS(x)) / 36;
 	}
 	k = (k * z * u2pts(xpts) + (Unitwidth / 2)) / Unitwidth;
+	lastrst = (lastrst * zv * u2pts(xpts) + (Unitwidth / 2)) / Unitwidth;
+	lastrsb = (lastrsb * zv * u2pts(xpts) + (Unitwidth / 2)) / Unitwidth;
 	rawwidth = k;
 	s = xpts;
 	lasttrack = 0;
@@ -303,6 +358,8 @@ getcw(register int i)
 	else {
 		widcache[i].fontpts = xfont + (xpts<<8);
 		widcache[i].width = k;
+		widcache[i].rst = lastrst;
+		widcache[i].rsb = lastrsb;
 	}
 	return(k);
 	/* Unitwidth is Units/Point, where
@@ -324,6 +381,24 @@ abscw(int n)	/* return index of abs char n in fontab[], etc. */
 		if (codetab[xfont][i] == n)
 			return i;
 	return 0;
+}
+
+int
+onfont(tchar c)
+{
+	int	k = cbits(c);
+	int	f = fbits(c);
+
+	if (k <= ' ')
+		return 1;
+	k -= 32;
+	if (k >= nchtab + 128-32) {
+		if (afmtab && fontbase[f]->afmpos - 1 >= 0)
+			k -= nchtab + 128;
+		else
+			return abscw(k + 32 - (nchtab+128)) != 0;
+	}
+	return fitab[f][k] != 0;
 }
 
 static int
@@ -479,6 +554,10 @@ getkw(tchar c, tchar d)
 	int	f, g, i, j, k, n, s, I, J;
 	float	z;
 
+	if (isxfunc(c, CHAR))
+		c = charout[sbits(c)].ch;
+	if (isxfunc(d, CHAR))
+		d = charout[sbits(d)].ch;
 	lastkern = 0;
 	if (!kern || iszbit(c) || iszbit(d) || ismot(c) || ismot(d))
 		return 0;
@@ -565,9 +644,11 @@ postchar1(const char *temp, int f)
 		a = afmtab[i];
 		np = afmnamelook(a, temp);
 		if (np->afpos != 0) {
-			if (np->fival[0] >= 0)
+			if (np->fival[0] >= 0 &&
+					fitab[f][np->fival[0]])
 				return np->fival[0] + 32 + nchtab + 128;
-			else if (np->fival[1] >= 0)
+			else if (np->fival[1] >= 0 &&
+					fitab[f][np->fival[1]])
 				return np->fival[1] + 32 + nchtab + 128;
 			else
 				return 0;
@@ -589,7 +670,7 @@ postchar(const char *temp, int *fp)
 		for (j = 0; fallbacktab[font][j] != 0; j++) {
 			if ((i = findft(fallbacktab[font][j], 0)) < 0)
 				continue;
-			if ((c = postchar1(temp, i)) != 0) {
+			if ((c = postchar1(temp, i)) != 0 && fchartab[c] == 0) {
 				*fp = i;
 				return c;
 			}
@@ -599,7 +680,7 @@ postchar(const char *temp, int *fp)
 		for (i=smnt, j=0; j < nfonts; j++, i=i % nfonts + 1) {
 			if (fontbase[i] == NULL)
 				continue;
-			if ((c = postchar1(temp, i)) != 0) {
+			if ((c = postchar1(temp, i)) != 0 && fchartab[c] == 0) {
 				*fp = i;
 				return c;
 			}
@@ -657,6 +738,16 @@ tchar setch(int delim)
 				c = j + 128 | chbits;
 				break;
 			}
+	if (c == 0 && delim == '(')
+		if ((c = postchar(temp, &f)) != 0) {
+			c |= chbits & ~FMASK;
+			setfbits(c, f);
+		}
+	if (c == 0 && (c = _ps2cc(temp, 0)) != 0) {
+		c += nchtab + 128 + 32 + 128 - 32 + nchtab;
+		if (chartab[c] == NULL)
+			c = 0;
+	}
 	if (c == 0 && warn & WARN_CHAR)
 		errprint("missing glyph \\%c%s%s%s%s", delim, d, temp, d,
 				delim == '[' ? "]" : "");
@@ -673,7 +764,7 @@ tchar setabs(void)		/* set absolute char from \C'...' */
 	n = 0;
 	n = inumb(&n);
 	getch();
-	if (nonumb)
+	if (nonumb || n + nchtab + 128 >= NCHARS)
 		return 0;
 	return n + nchtab + 128;
 }
@@ -688,7 +779,7 @@ findft(register int i, int required)
 
 	if ((k = i - '0') >= 0 && k <= nfonts && k < smnt && fontbase[k])
 		return(k);
-	for (k = 0; fontlab[k] != i; k++)
+	for (k = 0; k > nfonts || fontlab[k] != i; k++)
 		if (k > nfonts) {
 			mn = macname(i);
 			if ((k = strtol(mn, &mp, 10)) >= 0 && *mp == 0 &&
@@ -774,18 +865,26 @@ mchbits(void)
 	chbits = 0;
 	setsbits(chbits, ++j);
 	setfbits(chbits, font);
+	zapwcache(1);
 	if (minspsz) {
 		k = spacesz;
 		spacesz = minspsz;
 		minsps = width(' ' | chbits);
 		spacesz = k;
+		zapwcache(1);
 	}
 	if (letspsz) {
 		k = spacesz;
 		spacesz = letspsz;
 		letsps = width(' ' | chbits);
 		spacesz = k;
+		zapwcache(1);
 	}
+	k = spacesz;
+	spacesz = sesspsz;
+	ses = width(' ' | chbits);
+	spacesz = k;
+	zapwcache(1);
 	sps = width(' ' | chbits);
 	zapwcache(1);
 }
@@ -902,7 +1001,7 @@ setfont(int a)
 	if (a)
 		i = getrq(3);
 	else 
-		i = getsn();
+		i = getsn(1);
 	if (!i || i == 'P') {
 		j = font1;
 		goto s0;
@@ -923,13 +1022,16 @@ setwd(void)
 {
 	register int base, wid;
 	register tchar i;
-	int	delim, emsz, k;
+	tchar	delim, lasti = 0;
+	int	emsz, k;
 	int	savhp, savapts, savapts1, savfont, savfont1, savpts, savpts1;
+	int	savlgf;
+	int	rst = 0, rsb = 0;
 
-	base = numtab[ST].val = numtab[ST].val = wid = numtab[CT].val = 0;
+	base = numtab[SB].val = numtab[ST].val = wid = numtab[CT].val = 0;
 	if (ismot(i = getch()))
 		return;
-	delim = cbits(i);
+	delim = i;
 	savhp = numtab[HP].val;
 	numtab[HP].val = 0;
 	savapts = apts;
@@ -938,9 +1040,13 @@ setwd(void)
 	savfont1 = font1;
 	savpts = pts;
 	savpts1 = pts1;
+	savlgf = lgf;
+	lgf = 0;
 	setwdf++;
-	while (cbits(i = getch()) != delim && !nlflg) {
+	while (i = getch(), !issame(i, delim) && !nlflg) {
 		k = width(i);
+		k += kernadjust(lasti, i);
+		lasti = i;
 		wid += k;
 		numtab[HP].val += k;
 		if (!ismot(i)) {
@@ -957,10 +1063,19 @@ setwd(void)
 			numtab[SB].val = base;
 		if ((k = base + emsz) > numtab[ST].val)
 			numtab[ST].val = k;
+		if (lastrst > rst)
+			rst = lastrst;
+		if (lastrsb < rsb)
+			rsb = lastrsb;
 	}
-	if (cbits(i) != delim)
+	if (!issame(i, delim))
 		nodelim(delim);
 	setn1(wid, 0, (tchar) 0);
+	prwatchn(CT);
+	prwatchn(SB);
+	prwatchn(ST);
+	setnr("rst", rst, 0);
+	setnr("rsb", rsb, 0);
 	numtab[HP].val = savhp;
 	apts = savapts;
 	apts1 = savapts1;
@@ -968,6 +1083,7 @@ setwd(void)
 	font1 = savfont1;
 	pts = savpts;
 	pts1 = savpts1;
+	lgf = savlgf;
 	mchbits();
 	setwdf = 0;
 }
@@ -992,17 +1108,18 @@ tchar mot(void)
 {
 	register int j, n;
 	register tchar i;
-	int delim;
+	tchar c, delim;
 
 	j = HOR;
-	delim = cbits(getch()); /*eat delim*/
+	delim = getch(); /*eat delim*/
 	if (n = atoi()) {
 		if (vflag)
 			j = VERT;
 		i = makem(quant(n, j));
 	} else
 		i = 0;
-	if (cbits(getch()) != delim)
+	c = getch();
+	if (!issame(c, delim))
 		nodelim(delim);
 	vflag = 0;
 	dfact = 1;
@@ -1363,7 +1480,7 @@ casefp(int spec)
 		errprint("fp: no font name");
 	else {
 		if (skip(0) || !getname()) {
-			if (i == 0 || i > nfonts)
+			if (i == 0)
 				goto bad;
 			setfp(i, j, 0);
 		} else {		/* 3rd argument = filename */
@@ -1443,6 +1560,10 @@ setfp(int pos, int f, char *truename)	/* mount font f at position pos[0...nfonts
 			fontfile, devname, shortname);
 	if ((fpout = readfont(longname, &dev, warn & WARN_FONT)) == NULL)
 		return(-1);
+	if (pos >= Nfont)
+		growfonts(pos+1);
+	if (pos > nfonts)
+		nfonts = pos;
 	fontbase[pos] = (struct Font *)fpout;
 	if ((ap = strstr(fontbase[pos]->namefont, ".afm")) != NULL) {
 		*ap = 0;
@@ -1517,7 +1638,7 @@ casecs(void)
 		goto rtn;
 	if ((i = findft(i, 1)) < 0)
 		goto rtn;
-	skip(1);
+	skip(0);
 	cstab[i] = atoi();
 	skip(0);
 	j = atoi();
@@ -1572,6 +1693,11 @@ casevs(void)
 	i = inumb(&lss);
 	if (nonumb)
 		i = lss1;
+	if (xflag && i < 0) {
+		if (warn & WARN_RANGE)
+			errprint("negative vertical spacing ignored");
+		i = lss1;
+	}
 	if (i < VERT) 
 		i = VERT;
 	lss1 = lss;
@@ -1582,30 +1708,33 @@ void
 casess(int flg)
 {
 	register int i, j;
-	int _spacesz, _sps;
 
 	noscale++;
 	if (skip(flg == 0))
 		minsps = minspsz = 0;
-	else if (i = atoi()) {
-		_spacesz = spacesz;
-		spacesz = i & 0177;
-		zapwcache(0);
-		_sps = width(' ' | chbits);
-		if (xflag && flg == 0) {
-			skip(0);
+	else if ((i = atoi()) != 0 && !nonumb) {
+		if (xflag && flg == 0 && !skip(0)) {
 			j = atoi();
-			if (!nonumb)
-				ses = j;
+			if (!nonumb) {
+				sesspsz = j & 0177;
+				spacesz = sesspsz;
+				zapwcache(1);
+				ses = width(' ' | chbits);
+			}
 		}
 		if (flg) {
-			minsps = _sps;
-			minspsz = spacesz;
-			spacesz = _spacesz;
+			j = spacesz;
+			minspsz = i & 0177;
+			spacesz = minspsz;
+			zapwcache(1);
+			minsps = width(' ' | chbits);
+			spacesz = j;
 			zapwcache(0);
 			sps = width(' ' | chbits);
 		} else {
-			sps = _sps;
+			spacesz = i & 0177;
+			zapwcache(0);
+			sps = width(' ' | chbits);
 			if (minspsz > spacesz)
 				minsps = minspsz = 0;
 		}
@@ -1667,8 +1796,6 @@ ret:
 void
 casefspacewidth(void)
 {
-	struct namecache	*np;
-	struct afmtab	*a;
 	int	f, n, i;
 
 	lgf++;
@@ -1678,23 +1805,28 @@ casefspacewidth(void)
 	if ((f = findft(i, 1)) < 0)
 		return;
 	if (skip(0)) {
-		fontab[f][0] = dev.res * dev.unitwidth / 72 / 3;
-		if (afmtab && (i = fontbase[f]->afmpos - 1) >= 0) {
-			a = afmtab[i];
-			np = afmnamelook(a, "space");
-			if (np->afpos != 0)
-				fontab[f][0] = fontab[f][np->afpos];
-		}
+		fontbase[f]->cspacewidth = -1;
+		fontab[f][0] = fontbase[f]->spacewidth;
 	} else {
 		noscale++;
 		n = atoi();
 		noscale--;
 		unitsPerEm = 1000;
-		fontab[f][0] = _unitconv(n);
+		if (n >= 0)
+			fontbase[f]->cspacewidth = fontab[f][0] = _unitconv(n);
+		else if (warn & WARN_RANGE)
+			errprint("ignoring negative space width %d", n);
 	}
 	zapwcache(1);
 }
 
+void
+casespacewidth(void)
+{
+	noscale++;
+	spacewidth = skip(0) || atoi();
+	noscale--;
+}
 
 tchar xlss(void)
 {
@@ -1809,6 +1941,7 @@ loadafm(int nf, int rq, char *file, char *supply, int required, enum spec spec)
 	char	*path, *contents;
 	struct afmtab	*a;
 	int	i, have = 0;
+	struct namecache	*np;
 
 	if (nf < 0)
 		nf = nextfp();
@@ -1876,6 +2009,11 @@ done:	afmtab = realloc(afmtab, (nafm+1) * sizeof *afmtab);
 	if (nf >= Nfont)
 		growfonts(nf+1);
 	a->Font.afmpos = nafm+1;
+	if ((np = afmnamelook(a, "space")) != NULL)
+		a->Font.spacewidth = a->fontab[np->afpos];
+	else
+		a->Font.spacewidth = a->fontab[0];
+	a->Font.cspacewidth = -1;
 	fontbase[nf] = &afmtab[nafm]->Font;
 	fontlab[nf] = rq;
 	free(fontab[nf]);
@@ -1889,8 +2027,7 @@ done:	afmtab = realloc(afmtab, (nafm+1) * sizeof *afmtab);
 	memcpy(fontab[nf], a->fontab, a->nchars * sizeof *fontab[nf]);
 	memcpy(kerntab[nf], a->kerntab, a->nchars * sizeof *kerntab[nf]);
 	memcpy(codetab[nf], a->codetab, a->nchars * sizeof *codetab[nf]);
-	memcpy(fitab[nf], a->fitab, (128-32+nchtab+psmaxcode+1) *
-			sizeof *fitab[nf]);
+	memcpy(fitab[nf], a->fitab, a->fichars * sizeof *fitab[nf]);
 	bdtab[nf] = cstab[nf] = ccstab[nf] = 0;
 	zoomtab[nf] = 0;
 	fallbacktab[nf] = NULL;
@@ -1989,7 +2126,7 @@ void
 casehidechar(void)
 {
 	int	savfont = font, savfont1 = font1;
-	int	i, j, n, m;
+	int	i, j;
 	tchar	k;
 
 	if (skip(1))
@@ -2002,11 +2139,10 @@ casehidechar(void)
 	while ((i = cbits(k = getch())) != '\n') {
 		if (fbits(k) != j || ismot(k) || i == ' ')
 			continue;
-		n = 128 - 32 + nchtab;
-		if (afmtab && (m=(fontbase[j]->afmpos)-1) >= 0)
-			n += afmtab[m]->nchars;
-		if (i < n)
-			fitab[j][i - 32] = 0;
+		if (i >= nchtab + 128-32 && afmtab &&
+				fontbase[j]->afmpos - 1 >= 0)
+			i -= nchtab + 128;
+		fitab[j][i - 32] = 0;
 	}
 	font = savfont;
 	font1 = savfont1;
@@ -2017,9 +2153,7 @@ casehidechar(void)
 void
 casefzoom(void)
 {
-	char	*buf = NULL, *bp;
-	int	c, i, j;
-	int	n = 0, sz = 0;
+	int	i, j;
 	float	f;
 
 	if (skip(1))
@@ -2028,20 +2162,13 @@ casefzoom(void)
 	if ((j = findft(i, 1)) < 0)
 		return;
 	skip(1);
-	do {
-		c = getach();
-		if (n >= sz)
-			buf = realloc(buf, (sz += 8) * sizeof *buf);
-		buf[n++] = c;
-	} while (c);
-	f = strtod(buf, &bp);
-	if (*bp == '\0' && f >= 0) {
+	f = atof();
+	if (!nonumb && f >= 0) {
 		zoomtab[j] = f;
 		zapwcache(0);
-		if (realpage && j == xfont)
+		if (realpage && j == xfont && !ascii)
 			ptps();
 	}
-	free(buf);
 }
 
 double
@@ -2155,8 +2282,10 @@ setpapersize(int setmedia)
 		}
 	}
 	pl = defaultpl = y;
-	if (numtab[NL].val > pl)
+	if (numtab[NL].val > pl) {
 		numtab[NL].val = pl;
+		prwatchn(NL);
+	}
 	po = x > 6 * PO ? PO : x / 8;
 	ll = ll1 = lt = lt1 = x - 2 * po;
 	setnel();
@@ -2551,6 +2680,15 @@ un2tr(int c, int *fp)
 				if ((j = postchar(up->u.psc, fp)) != 0)
 					return j;
 			while ((up = up->next) != NULL);
+			up = um;
+			do
+				if ((j = _ps2cc(up->u.psc, 0)) != 0) {
+					j += nchtab + 128 + 32 +
+						128 - 32 + nchtab;
+					if (chartab[j] != NULL)
+						return j;
+				}
+			while ((up = up->next) != NULL);
 		}
 		if (fallbacktab[font])
 			for (j = 0; fallbacktab[font][j] != 0; j++) {
@@ -2710,8 +2848,8 @@ static struct psnnode {
 	int	code;
 } **psntable;
 
-int
-ps2cc(const char *name)
+static int
+_ps2cc(const char *name, int create)
 {
 	struct psnnode	*pp;
 	unsigned	h;
@@ -2722,9 +2860,17 @@ ps2cc(const char *name)
 	for (pp = psntable[h]; pp; pp = pp->next)
 		if (strcmp(name, pp->name) == 0)
 			return pp->code;
+	if (create == 0)
+		return 0;
 	pp = calloc(1, sizeof *pp);
 	pp->name = strdup(name);
 	pp->next = psntable[h];
 	psntable[h] = pp;
 	return pp->code = ++psmaxcode;
+}
+
+int
+ps2cc(const char *name)
+{
+	return _ps2cc(name, 1);
 }

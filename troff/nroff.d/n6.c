@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n6.c	1.38 (gritter) 7/9/06
+ * Sccsid @(#)n6.c	1.47 (gritter) 8/12/06
  */
 
 /*
@@ -72,6 +72,8 @@ width(register tchar j)
 {
 	register int i, k;
 
+	if (isadjspc(j))
+		return(0);
 	if (j & (ZBIT|MOT)) {
 		if (iszbit(j))
 			return(0);
@@ -83,6 +85,8 @@ width(register tchar j)
 		return(k);
 	}
 	i = cbits(j);
+	if (isxfunc(j, CHAR))
+		return(charout[sbits(j)].width);
 	if (i < ' ') {
 		if (i == '\b')
 			return(-widthp);
@@ -163,7 +167,7 @@ setch(int delim)
 			if (j != ']')
 				nodelim(']');
 			else if (warn & WARN_CHAR)
-				errprint("missing glyph [%s]", temp);
+				errprint("missing glyph \\[%s]", temp);
 			return 0;
 		}
 	} else {
@@ -189,9 +193,15 @@ setabs (void)		/* set absolute char from \C'...' */
 	n = 0;
 	n = inumb(&n);
 	getch();
-	if (nonumb)
+	if (nonumb || n + nchtab + _SPECCHAR_ST >= NCHARS)
 		return 0;
 	return n + nchtab + _SPECCHAR_ST;
+}
+
+int
+tr2un(tchar c, int f)
+{
+	return(cbits(c));
 }
 
 int 
@@ -222,7 +232,7 @@ mchbits(void)
 {
 	chbits = 0;
 	setfbits(chbits, font);
-	sps = width(' ' | chbits);
+	ses = sps = width(' ' | chbits);
 }
 
 
@@ -311,7 +321,7 @@ setfont(int a)
 	if (a)
 		i = getrq(3);
 	else 
-		i = getsn();
+		i = getsn(0);
 	if (!i || i == 'P') {
 		j = font1;
 		goto s0;
@@ -332,13 +342,15 @@ setwd(void)
 {
 	register int base, wid;
 	register tchar i;
-	int	delim, emsz, k;
+	tchar	delim;
+	int	emsz, k;
 	int	savhp, savapts, savapts1, savfont, savfont1, savpts, savpts1;
+	int	savlgf;
 
 	base = numtab[ST].val = numtab[ST].val = wid = numtab[CT].val = 0;
 	if (ismot(i = getch()))
 		return;
-	delim = cbits(i);
+	delim = i;
 	savhp = numtab[HP].val;
 	numtab[HP].val = 0;
 	savapts = apts;
@@ -347,8 +359,10 @@ setwd(void)
 	savfont1 = font1;
 	savpts = pts;
 	savpts1 = pts1;
+	savlgf = lgf;
+	lgf = 0;
 	setwdf++;
-	while (cbits(i = getch()) != delim && !nlflg) {
+	while (i = getch(), !issame(i, delim) && !nlflg) {
 		k = width(i);
 		wid += k;
 		numtab[HP].val += k;
@@ -367,9 +381,11 @@ setwd(void)
 		if ((k = base + emsz) > numtab[ST].val)
 			numtab[ST].val = k;
 	}
-	if (cbits(i) != delim)
+	if (!issame(i, delim))
 		nodelim(delim);
 	setn1(wid, 0, (tchar) 0);
+	setnr("rst", 0, 0);
+	setnr("rsb", 0, 0);
 	numtab[HP].val = savhp;
 	apts = savapts;
 	apts1 = savapts1;
@@ -377,6 +393,7 @@ setwd(void)
 	font1 = savfont1;
 	pts = savpts;
 	pts1 = savpts1;
+	lgf = savlgf;
 	mchbits();
 	setwdf = 0;
 }
@@ -404,17 +421,18 @@ mot(void)
 {
 	register int j, n;
 	register tchar i;
-	int	delim;
+	tchar	c, delim;
 
 	j = HOR;
-	delim = cbits(getch()); /*eat delim*/
+	delim = getch(); /*eat delim*/
 	if (n = atoi()) {
 		if (vflag)
 			j = VERT;
 		i = makem(quant(n, j));
 	} else
 		i = 0;
-	if (cbits(getch()) != delim)
+	c = getch();
+	if (!issame(c, delim))
 		nodelim(delim);
 	vflag = 0;
 	dfact = 1;
@@ -543,6 +561,11 @@ casevs(void)
 	i = inumb(&lss);
 	if (nonumb)
 		i = lss1;
+	if (xflag && i < 0) {
+		if (warn & WARN_RANGE)
+			errprint("negative vertical spacing ignored");
+		i = lss1;
+	}
 	if (i < VERT)
 		i = VERT;	/* was VERT */
 	lss1 = lss;

@@ -1,7 +1,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)pt.h	1.50 (gritter) 7/11/06
+ * Sccsid @(#)pt.h	1.52 (gritter) 8/12/06
  */
 
 /* t6.c */
@@ -9,6 +9,7 @@ extern int	width(register tchar);
 extern void	zapwcache(int);
 extern int	getcw(register int);
 extern int	abscw(int);
+extern int	onfont(tchar);
 extern int	getascender(void);
 extern int	getdescender(void);
 extern int	kernadjust(tchar, tchar);
@@ -47,6 +48,7 @@ extern void	casess(int);
 extern void	caseminss(void);
 extern void	caseletadj(void);
 extern void	casefspacewidth(void);
+extern void	casespacewidth(void);
 extern tchar	xlss(void);
 extern void	casetrack(void);
 extern void	casefallback(void);

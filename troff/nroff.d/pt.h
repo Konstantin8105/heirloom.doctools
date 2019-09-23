@@ -1,7 +1,7 @@
 /*
  *	Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- *	Sccsid @(#)pt.h	1.39 (gritter) 7/11/06
+ *	Sccsid @(#)pt.h	1.41 (gritter) 8/12/06
  */
 
 /* n10.c */
@@ -23,6 +23,7 @@ extern void	pttrailer();
 extern int	width(register tchar);
 extern tchar	setch(int);
 extern tchar	setabs(void);
+extern int	tr2un(tchar, int);
 extern int	findft(register int, int);
 extern void	caseps(void);
 extern void	mchbits(void);
@@ -69,6 +70,7 @@ extern void	casedummy(void);
 #define	casebleedat	casedummy
 #define	casecropat	casedummy
 #define	casefspacewidth	casedummy
+#define	casespacewidth	casedummy
 #define	casefdeferlig	casedummy
 #define	casefkern	casedummy
 #define	caseminss	casedummy

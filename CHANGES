@@ -1,3 +1,131 @@
+Release 060813
+* [nt]roff: A new type of traps is available: output-line traps. They are
+  set with the new "\P" escape sequence and are invoked when the line that
+  contains the corresponding sequence has been output.
+* [nt]roff: The ".index" request has been added to determine the position
+  of a string within a string or macro.
+* [nt]roff: Floating-point registers have been introduced; they can be
+  created and modified with the ".nrf" request and are otherwise like
+  standard integer number registers, with which they share a common name
+  space.
+* [nt]roff: The ".if f expr" condition has been introduced to evaluate
+  an expression with floating-point computation.
+* [nt]roff: Exponential notation, as in "1e+10", is now supported in
+  numerical expressions.
+* [nt]roff: Debugging requests for watching macros, strings, and number
+  registers have been added.
+* [nt]roff: The ".errprint" request has been added to write custom strings
+  in the same format as internal error messages.
+* [nt]roff: The ".cp" request has been added to control compatibility with
+  groff.
+* [nt]roff: The "-mg" macro package has been added for improved support of
+  groff documents, preprocessors, and macro sets.
+* [nt]roff: The ".while", ".break", and ".continue" requests have been
+  added as another method to process input repeatedly.
+* [nt]roff: Space characters inside parentheses in numerical expressions
+  are now permissible, i.e. they are discarded and do not terminate the
+  expression.
+* [nt]roff: The ".char", ".fchar", and ".rchar" requests have been added
+  to transform a single input character to multiple output characters.
+* [nt]roff: The ".ecs" and ".ecr" requests have been added to save and
+  restore the escape character.
+* [nt]roff: The ".shc" request has been added to set the soft hyphen
+  character.
+* [nt]roff: The ".hcode" request has been added to specify character
+  mappings for hyphenation purposes.
+* [nt]roff: The sets of sentence-ending and transparent characters are
+  now configurable with the ".sentchar" and ".transchar" requests.
+* [nt]roff: The set of optional line break characters (normally hyphen
+  and em dash) is now configurable with the ".breakchar" request.
+* [nt]roff: The ".nhychar" request defines a set of hyphenation-
+  inhibiting characters (as hyphen and em dash with traditional troff
+  hyphenation).
+* troff: The second argument to the ".ss" request now actually sets the
+  size of the sentence-end space instead of just switching it on or off.
+* [nt]roff: The ".unformat" and ".asciify" requests have been added to
+  remove the effects of adjustment, and font and point size information,
+  respectively, from a diversion.
+* [nt]roff: The "\Z'string'" escape sequence (print string and restore
+  the position afterwards) has been introduced.
+* [nt]roff: The ".als" request has been added to create an alias name
+  for a request, macro, or string.
+* [nt]roff: The ".aln" request has been added to create an alias name
+  for a number register.
+* [nt]roff: The ".rnn" request has been added to rename a number register.
+* [nt]roff: The ".box" request has been added; it is like ".di" but saves
+  and restores a previous partially filled line.
+* [nt]roff: The ".spacewidth" request has been introduced to default to
+  the width of the space character as obtained from the font metrics file.
+* [nt]roff: The ".rj" request (right-align next input lines) has been
+  added. The ".rj" number register that holds the number of remaining
+  lines to be right-adjusted has been added.
+* [nt]roff: The ".ce" number register that holds the number of remaining
+  lines to be centered with the ".ce" request has been added.
+* troff: The "\Yx", "\Y(xx", or "\Y[xxx]" escape sequence has been added
+  to output the contents of the string or macro x, xx, or xxx, respectively,
+  as a device control function.
+* [nt]roff: The "\$0" escape sequence has been added to refer to the name
+  of the current macro or string.
+* [nt]roff: The "(c;e)" numerical expression function has been added to
+  evaluate "e" using "c" as default scale indicator.
+* [nt]roff: The "M" (Em/100), "s" (= "u"), and "z" (= "p") scale indicators
+  have been added.
+* [nt]roff: The ".ta T Nt Mu" syntax to set tab stops repeatedly is now
+  supported.
+* [nt]roff: The "\n(.S" and "\n[.tabs]" registers have been added to save
+  and restore tab stops.
+* [nt]roff: The "\n[.ev]" number register has been added as a method to
+  determine the name of the current environment.
+* troff: The "\n[rst]" and "\n[rsb]" registers are set by the width function
+  to the highest and lowest extent of the bounding box of any character.
+  This currently only works for Type 1 and TrueType fonts.
+* troff: The "\n[.cht]" and "\n[.cdp]" registers are set to the highest
+  and lowest extent of the bounding box of the previous character. This
+  currently only works for Type 1 and TrueType fonts.
+* [nt]roff: In extension level 1, long string "\*[xxx]", register "\n[xxx]",
+  and font "\f[xxx]" names are no longer recognized unless they are on a
+  line beginning with the ".do" request.
+* [nt]roff: The "\n[.ps]" number register, which holds the current font
+  size in device units, has been added.
+* [nt]roff: The "\E" escape sequence has been fixed; it does not resolve
+  to a printable but to an effective escape character now.
+* [nt]roff: The "\)" escape sequence (like "\&" but transparent for
+  sentence ending) has been added.
+* [nt]roff: Static limits on word and line size have been eliminated.
+* [nt]roff: The "\{", "\}", "\&", "\%", "\c", and "\(space)" escape
+  sequences terminate two-character request names now.
+* [nt]roff: The ".tm" and ".write" commands now discard formatted motion
+  sequences.
+* troff: The ".psbb" request now reads a "%%HiResBoundingBox" DSC comment
+  in preference to "%%BoundingBox"; the registers it assigns to are now
+  floating-point registers.
+* troff: The ".psbb" request now properly supports the "(atend)" syntax in
+  PostScript DSC input files.
+* nroff: The ".psbb" request has been made a no-op since nroff cannot
+  otherwise handle EPS documents anyway.
+* [nt]roff: The "right-brace" warning category has been added.
+* [nt]roff: Calls of ".vs" that result in negative numbers are now
+  ignored.
+* [nt]roff: The width function "\w" now takes pairwise kerning into
+  account.
+* [nt]roff: The ".return" request has been fixed not to ignore the next
+  line of input when followed by text on the same line.
+* [nt]roff: The second argument of the ".ss" request now also applies
+  to sequences of space characters that follow a sentence end character.
+* [nt]roff: The "\k[name]" escape sequence has been fixed to work if
+  "name" has not been previously been used.
+* [nt]roff: The "\(dq" character has been introduced as an alternate name
+  for the ASCII double quote character.
+* dpost: Character height and slant changes now only apply to the current
+  font as documented.
+* tbl: When ending macros in generated code, ".00" is now used instead
+  of "..". This allows the use of ".ig" and similar requests within "T{"
+  etc. without interference.
+* pic: Accept "{lower|upper} {left|right} of" as aliases for ".nw", ".sw",
+  ".ne", and ".se".
+* pic: Continued newlines in expressions like "center \<newline>of" are
+  now accepted.
+
 Release 060716
 * troff: The ".letadj" request has been added to enable dynamic letter
   spacing and letter reshaping when justifying lines.

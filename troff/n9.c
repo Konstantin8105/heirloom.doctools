@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n9.c	1.46 (gritter) 7/3/06
+ * Sccsid @(#)n9.c	1.62 (gritter) 8/13/06
  */
 
 /*
@@ -98,14 +98,14 @@ void
 setline(void)
 {
 	register tchar *i;
-	tchar c;
+	tchar c, delim;
 	int	length;
-	int	w, cnt, delim, rem, temp;
+	int	w, cnt, rem, temp;
 	tchar linebuf[NC];
 
 	if (ismot(c = getch()))
 		return;
-	delim = cbits(c);
+	delim = c;
 	vflag = 0;
 	dfact = EM;
 	length = quant(atoi(), HOR);
@@ -115,7 +115,7 @@ setline(void)
 		return;
 	}
 s0:
-	if ((cbits(c = getch())) == delim) {
+	if (c = getch(), issame(c, delim)) {
 		ch = c;
 		c = RULE | chbits;
 	} else if (cbits(c) == FILLER)
@@ -149,14 +149,14 @@ s1:
 }
 
 
-int 
-eat(register int c)
+tchar 
+eat(tchar c)
 {
-	register int i;
+	register tchar i;
 
-	while ((i = cbits(getch())) != c &&  (i != '\n'))
+	while (i = getch(), !issame(i, c) &&  (cbits(i) != '\n'))
 		;
-	if (c != ' ' && i != c)
+	if (cbits(c) != ' ' && !issame(i, c))
 		nodelim(c);
 	return(i);
 }
@@ -166,17 +166,17 @@ void
 setov(void)
 {
 	register int j, k;
-	tchar i, o[NOV];
-	int delim, w[NOV];
+	tchar i, delim, o[NOV];
+	int w[NOV];
 
 	if (ismot(i = getch()))
 		return;
-	delim = cbits(i);
-	for (k = 0; (k < NOV) && ((j = cbits(i = getch())) != delim) &&  (j != '\n'); k++) {
+	delim = i;
+	for (k = 0; (k < NOV) && (j = cbits(i = getch()), !issame(i, delim)) &&  (j != '\n'); k++) {
 		o[k] = i;
 		w[k] = width(i);
 	}
-	if (j != delim)
+	if (!issame(j, delim))
 		nodelim(delim);
 	o[k] = w[k] = 0;
 	if (o[0])
@@ -216,13 +216,13 @@ void
 setbra(void)
 {
 	register int k;
-	tchar i, *j, dwn;
-	int	cnt, delim;
+	tchar i, *j, dwn, delim;
+	int	cnt;
 	tchar brabuf[NC];
 
 	if (ismot(i = getch()))
 		return;
-	delim = cbits(i);
+	delim = i;
 	j = brabuf + 1;
 	cnt = 0;
 #ifdef NROFF
@@ -231,12 +231,12 @@ setbra(void)
 #ifndef NROFF
 	dwn = sabsmot((int)EM) | MOT | VMOT;
 #endif
-	while (((k = cbits(i = getch())) != delim) && (k != '\n') &&  (j <= (brabuf + NC - 4))) {
+	while ((k = cbits(i = getch()), !issame(delim, i)) && (k != '\n') &&  (j <= (brabuf + NC - 4))) {
 		*j++ = i | ZBIT;
 		*j++ = dwn;
 		cnt++;
 	}
-	if (k != delim)
+	if (!issame(i, delim))
 		nodelim(delim);
 	if (--cnt < 0)
 		return;
@@ -260,14 +260,14 @@ void
 setvline(void)
 {
 	register int i;
-	tchar c, rem, ver, neg;
-	int	cnt, delim, v;
+	tchar c, d, delim, rem, ver, neg;
+	int	cnt, v;
 	tchar vlbuf[NC];
 	register tchar *vlp;
 
 	if (ismot(c = getch()))
 		return;
-	delim = cbits(c);
+	delim = c;
 	dfact = lss;
 	vflag++;
 	i = quant(atoi(), VERT);
@@ -277,10 +277,13 @@ setvline(void)
 		vflag = 0;
 		return;
 	}
-	if ((cbits(c = getch())) == delim) {
+	if (c = getch(), issame(c, delim)) {
 		c = BOXRULE | chbits;	/*default box rule*/
-	} else 
-		getch();
+	} else {
+		d = getch();
+		if (!issame(d, delim))
+			nodelim(delim);
+	}
 	c |= ZBIT;
 	neg = 0;
 	if (i < 0) {
@@ -320,9 +323,10 @@ setvline(void)
 void
 setdraw (void)	/* generate internal cookies for a drawing function */
 {
-	int i, dx[NPAIR], dy[NPAIR], delim, type;
-	tchar c;
+	int i, dx[NPAIR], dy[NPAIR], type;
+	tchar c, delim;
 #ifndef	NROFF
+	int	hpos, vpos;
 	int j, k;
 	tchar drawbuf[NC];
 #endif	/* NROFF */
@@ -343,30 +347,32 @@ setdraw (void)	/* generate internal cookies for a drawing function */
 
 	if (ismot(c = getch()))
 		return;
-	delim = cbits(c);
+	delim = c;
 	type = cbits(getch());
 	for (i = 0; i < NPAIR ; i++) {
 		c = getch();
-		if (cbits(c) == delim)
+		if (issame(c, delim))
 			break;
 	/* ought to pick up optional drawing character */
 		if (cbits(c) != ' ')
 			ch = c;
 		vflag = 0;
-		dfact = EM;
+		dfact = type == DRAWTHICKNESS ? 1 : EM;
 		dx[i] = quant(atoi(), HOR);
 		if (dx[i] > MAXMOT)
 			dx[i] = MAXMOT;
 		else if (dx[i] < -MAXMOT)
 			dx[i] = -MAXMOT;
-		if (cbits((c = getch())) == delim) {	/* spacer */
+		if (c = getch(), issame(c, delim)) {	/* spacer */
 			dy[i++] = 0;
 			break;
 		}
 		vflag = 1;
 		dfact = lss;
 		dy[i] = quant(atoi(), VERT);
-		if (dy[i] > MAXMOT)
+		if (type == DRAWTHICKNESS)
+			dy[i] = 0;
+		else if (dy[i] > MAXMOT)
 			dy[i] = MAXMOT;
 		else if (dy[i] < -MAXMOT)
 			dy[i] = -MAXMOT;
@@ -377,15 +383,25 @@ setdraw (void)	/* generate internal cookies for a drawing function */
 	drawbuf[0] = DRAWFCN | chbits | ZBIT;
 	drawbuf[1] = type | chbits | ZBIT;
 	drawbuf[2] = '.' | chbits | ZBIT;	/* use default drawing character */
+	hpos = vpos = 0;
 	for (k = 0, j = 3; k < i; k++) {
 		drawbuf[j++] = MOT | ((dx[k] >= 0) ?
 				sabsmot(dx[k]) : (NMOT | sabsmot(-dx[k])));
 		drawbuf[j++] = MOT | VMOT | ((dy[k] >= 0) ?
 				sabsmot(dy[k]) : (NMOT | sabsmot(-dy[k])));
+		hpos += dx[k];
+		vpos += dy[k];
 	}
-	if (type == DRAWELLIPSE) {
+	if (type == DRAWELLIPSE || type == DRAWELLIPSEFI) {
 		drawbuf[5] = drawbuf[4] | NMOT;	/* so the net vertical is zero */
 		j = 6;
+	}
+	if (gflag && (type == DRAWPOLYGON || type == DRAWPOLYGONFI) &&
+			(hpos || vpos)) {
+		drawbuf[j++] = MOT | ((hpos < 0) ?
+				sabsmot(-hpos) : (NMOT | sabsmot(hpos)));
+		drawbuf[j++] = MOT | VMOT | ((vpos < 0) ?
+				sabsmot(-vpos) : (NMOT | sabsmot(vpos)));
 	}
 	drawbuf[j++] = DRAWFCN | chbits | ZBIT;	/* marks end for ptout */
 	drawbuf[j] = 0;
@@ -430,6 +446,8 @@ setfield(int x)
 		rchar = tabc | chbits;
 	else if (x ==  ldrch) 
 		rchar = dotc | chbits;
+	if (chartab[trtab[cbits(rchar)]] != 0)
+		rchar = setchar(rchar);
 	temp = npad = ws = 0;
 	savfc = fc;
 	savtc = tabch;
@@ -546,7 +564,7 @@ s1:
 		if (length)
 			jj = sabsmot(length) | MOT;
 		else 
-			jj = getch0();
+			jj = 0;
 	} else {
 		/*center tab*/
 		/*right tab*/
@@ -610,7 +628,9 @@ rtn:
 	gchtab[tabch] = TABBIT;
 	gchtab[ldrch] |= LDRBIT;
 	numtab[HP].val = savepos;
-	return(jj);
+	if (pbp < pbsize-3 || growpbbuf())
+		pbbuf[pbp++] = mkxfunc(FLDMARK, x);
+	return(jj | ADJBIT);
 }
 
 
@@ -697,6 +717,7 @@ caselc_ctype(void)
 #endif
 }
 
+#ifndef	NROFF
 struct fg {
 	char	buf[512];
 	char	*bp;
@@ -704,6 +725,27 @@ struct fg {
 	int	fd;
 	int	eof;
 };
+
+static int
+psskip(struct fg *fp, size_t n)
+{
+	size_t	i;
+
+	if (fp->eof)
+		return -1;
+	if (fp->bp < fp->ep) {
+		i = fp->ep - fp->bp;
+		if (i > n) {
+			fp->bp += n;
+			return 0;
+		}
+		fp->bp = fp->buf;
+		n -= i;
+	}
+	if (lseek(fp->fd, n, SEEK_CUR) == (off_t)-1)
+		return -1;
+	return 0;
+}
 
 static int
 psgetline(struct fg *fp, char **linebp, size_t *linesize)
@@ -722,7 +764,9 @@ psgetline(struct fg *fp, char **linebp, size_t *linesize)
 		for (;;) {
 			if (*linesize < n + 2)
 				*linebp = realloc(*linebp, *linesize += 128);
-			if (fp->bp >= fp->ep || *fp->bp == '\n' || nl) {
+			if (fp->bp >= fp->ep)
+				break;
+			if (*fp->bp == '\n' || nl) {
 				nl = 2;
 				break;
 			}
@@ -757,14 +801,18 @@ getcom(const char *cp, const char *tp)
 }
 
 static void
-getpsbb(const char *name, int bb[4])
+getpsbb(const char *name, double bb[4])
 {
 	struct fg	*fp;
 	char	*buf = NULL;
 	char	*cp;
 	size_t	size = 0;
-	int	fd, n;
+	int	fd, n, k;
 	int	lineno = 0;
+	int	found = 0;
+	int	atend = 0;
+	int	state = 0;
+	int	indoc = 0;
 
 	if ((fd = open(name, O_RDONLY)) < 0) {
 		errprint("can't open %s", name);
@@ -779,36 +827,125 @@ getpsbb(const char *name, int bb[4])
 					"PostScript document", name);
 			break;
 		}
-		if (n > 0 && (cp = getcom(buf, "%%BoundingBox:")) != NULL) {
+		if (n > 0 && state != 1 &&
+				(cp = getcom(buf, "%%BoundingBox:")) != NULL) {
+			while (*cp == ' ' || *cp == '\t')
+				cp++;
+			if (strncmp(cp, "(atend)", 7) == 0) {
+				atend++;
+				continue;
+			}
 			bb[0] = strtol(cp, &cp, 10);
 			if (*cp)
 				bb[1] = strtol(cp, &cp, 10);
 			if (*cp)
 				bb[2] = strtol(cp, &cp, 10);
-			if (*cp)
+			if (*cp) {
 				bb[3] = strtol(cp, &cp, 10);
-			break;
+				found = 1;
+			} else
+				errprint("missing arguments to "
+					"%%%%BoundingBox: in %s, line %d\n",
+					name, lineno);
+			continue;
 		}
-		if (n == 0 || getcom(buf, "%%EndComments") != NULL ||
-				buf[0] != '%' || buf[1] == ' ' ||
-				buf[1] == '\t' || buf[1] == '\r' ||
-				buf[1] == '\n') {
-			errprint("%s lacks a %%BoundingBox: DSC comment", name);
-			break;
+		if (n > 0 && state != 1 &&
+				(cp = getcom(buf, "%%HiResBoundingBox:"))
+				!= NULL) {
+			while (*cp == ' ' || *cp == '\t')
+				cp++;
+			if (strncmp(cp, "(atend)", 7) == 0) {
+				atend++;
+				continue;
+			}
+			bb[0] = strtod(cp, &cp);
+			if (*cp)
+				bb[1] = strtod(cp, &cp);
+			if (*cp)
+				bb[2] = strtod(cp, &cp);
+			if (*cp) {
+				bb[3] = strtod(cp, &cp);
+				break;
+			} else {
+				errprint("missing arguments to "
+					"%%%%HiResBoundingBox: in %s, "
+					"line %d\n",
+					name, lineno);
+				continue;
+			}
+		}
+		if (n == 0 || state == 0 &&
+				(getcom(buf, "%%EndComments") != NULL ||
+				 buf[0] != '%' || buf[1] == ' ' ||
+				 buf[1] == '\t' || buf[1] == '\r' ||
+				 buf[1] == '\n')) {
+		eof:	if (found == 0 && (atend == 0 || n == 0))
+				errprint("%s lacks a %%%%BoundingBox: DSC "
+					"comment", name);
+			if (atend == 0 || n == 0)
+				break;
+			state = 1;
+			continue;
+		}
+		if (indoc == 0 && getcom(buf, "%%EOF") != NULL) {
+			n = 0;
+			goto eof;
+		}
+		if (state == 1 && indoc == 0 &&
+				getcom(buf, "%%Trailer") != NULL) {
+			state = 2;
+			continue;
+		}
+		if (state == 1 && getcom(buf, "%%BeginDocument:") != NULL) {
+			indoc++;
+			continue;
+		}
+		if (state == 1 && indoc > 0 &&
+				getcom(buf, "%%EndDocument") != NULL) {
+			indoc--;
+			continue;
+		}
+		if (state == 1 &&
+				(cp = getcom(buf, "%%BeginBinary:")) != NULL) {
+			if ((k = strtol(cp, &cp, 10)) > 0)
+				psskip(fp, k);
+			continue;
+		}
+		if (state == 1 && (cp = getcom(buf, "%%BeginData:")) != NULL) {
+			if ((k = strtol(cp, &cp, 10)) > 0) {
+				while (*cp == ' ' || *cp == '\t')
+					cp++;
+				while (*cp && *cp != ' ' && *cp != '\t')
+					cp++;
+				while (*cp == ' ' || *cp == '\t')
+					cp++;
+				if (strncmp(cp, "Bytes", 5) == 0)
+					psskip(fp, k);
+				else if (strncmp(cp, "Lines", 5) == 0) {
+					while (k--) {
+						n = psgetline(fp, &buf, &size);
+						if (n == 0)
+							goto eof;
+					}
+				}
+			}
+			continue;
 		}
 	}
 	free(fp);
 	free(buf);
 	close(fd);
 }
+#endif	/* !NROFF */
 
 void
 casepsbb(void)
 {
+#ifndef	NROFF
 	char	*buf = NULL;
 	int	c;
 	int	n = 0, sz = 0;
-	int	bb[4] = { 0, 0, 0, 0 };
+	double	bb[4] = { 0, 0, 0, 0 };
 
 	lgf++;
 	skip(1);
@@ -820,10 +957,11 @@ casepsbb(void)
 	} while (c);
 	getpsbb(buf, bb);
 	free(buf);
-	setnr("llx", bb[0], 0);
-	setnr("lly", bb[1], 0);
-	setnr("urx", bb[2], 0);
-	setnr("ury", bb[3], 0);
+	setnrf("llx", bb[0], 0);
+	setnrf("lly", bb[1], 0);
+	setnrf("urx", bb[2], 0);
+	setnrf("ury", bb[3], 0);
+#endif	/* !NROFF */
 }
 
 static const struct {
@@ -837,9 +975,12 @@ static const struct {
 	{ WARN_DELIM,	"delim" },
 	{ WARN_EL,	"el" },
 	{ WARN_SCALE,	"scale" },
+	{ WARN_RANGE,	"range" },
+	{ WARN_SYNTAX,	"syntax" },
 	{ WARN_DI,	"di" },
 	{ WARN_MAC,	"mac" },
 	{ WARN_REG,	"reg" },
+	{ WARN_RIGHT_BRACE, "right-brace" },
 	{ WARN_MISSING,	"missing" },
 	{ WARN_INPUT,	"input" },
 	{ WARN_ESCAPE,	"escape" },
@@ -916,7 +1057,7 @@ casewarn(void)
 void
 nosuch(int rq)
 {
-	if (rq && rq != RIGHT && warn & WARN_MAC)
+	if (rq && rq != RIGHT && rq != PAIR(RIGHT, RIGHT) && warn & WARN_MAC)
 		errprint("%s: no such request", macname(rq));
 }
 
@@ -935,7 +1076,7 @@ void
 nodelim(int delim)
 {
 	if (warn & WARN_DELIM)
-		errprint("%c delimiter missing", delim);
+		errprint("%c delimiter missing", (int)delim);
 }
 
 void
@@ -955,6 +1096,44 @@ illseq(int wc, const char *mb, int n)
 }
 
 void
+storerq(int i)
+{
+	tchar	tp[6];
+
+	tp[0] = mkxfunc(RQ1, i & 037);
+	tp[1] = mkxfunc(RQ2, i >> 5 & 037);
+	tp[2] = mkxfunc(RQ3, i >> 10 & 037);
+	tp[3] = mkxfunc(RQ4, i >> 15 & 037);
+	tp[4] = mkxfunc(RQ5, i >> 20 & 037);
+	tp[5] = 0;
+	pushback(tp);
+}
+
+int
+fetchrq(tchar *tp)
+{
+	int	i;
+
+	i = 0;
+	if (ismot(tp[0]) || !isxfunc(tp[0], RQ1))
+		return 0;
+	i |= sbits(tp[0]) & 037;
+	if (ismot(tp[1]) || !isxfunc(tp[1], RQ2))
+		return 0;
+	i |= (sbits(tp[1]) & 037) << 5;
+	if (ismot(tp[2]) || !isxfunc(tp[2], RQ3))
+		return 0;
+	i |= (sbits(tp[2]) & 037) << 10;
+	if (ismot(tp[3]) || !isxfunc(tp[3], RQ4))
+		return 0;
+	i |= (sbits(tp[3]) & 037) << 15;
+	if (ismot(tp[4]) || !isxfunc(tp[4], RQ5))
+		return 0;
+	i |= (sbits(tp[4]) & 037) << 20;
+	return i;
+}
+
+void
 morechars(int n)
 {
 	int	i, nnc;
@@ -969,7 +1148,11 @@ morechars(int n)
 		trtab[i] = i;
 	gchtab = realloc(gchtab, nnc * sizeof *gchtab);
 	memset(&gchtab[NCHARS], 0, (nnc-NCHARS) * sizeof *gchtab);
+	chartab = realloc(chartab, nnc * sizeof *chartab);
+	memset(&chartab[NCHARS], 0, (nnc-NCHARS) * sizeof *chartab);
 #ifndef	NROFF
+	fchartab = realloc(fchartab, nnc * sizeof *fchartab);
+	memset(&fchartab[NCHARS], 0, (nnc-NCHARS) * sizeof *fchartab);
 	for (i = 0; i <= nfonts; i++) {
 		extern short	**fitab;
 		if (fitab != NULL && fitab[i] != NULL) {

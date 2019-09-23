@@ -23,7 +23,7 @@
 /*
  * Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)afm.c	1.56 (gritter) 7/9/06
+ * Sccsid @(#)afm.c	1.60 (gritter) 8/12/06
  */
 
 #include <stdlib.h>
@@ -206,6 +206,7 @@ const struct names punctnames[] = {
 	{ "aa","acute" },
 	{ "ga","grave" },
 	{ "rs","backslash" },
+	{ "dq","quotedbl" },
 	{ 0,	0 }
 };
 
@@ -690,14 +691,21 @@ afmaddchar(struct afmtab *a, int C, int tp, int cl, int WX, int B[4], char *N,
 			a->fontab[0] = _unitconv(WX);
 	}
 	a->fontab[a->nchars] = _unitconv(WX);
+	if (B) {
+		a->bbtab[a->nchars] = malloc(4 * sizeof **a->bbtab);
+		a->bbtab[a->nchars][0] = _unitconv(B[0]);
+		a->bbtab[a->nchars][1] = _unitconv(B[1]);
+		a->bbtab[a->nchars][2] = _unitconv(B[2]);
+		a->bbtab[a->nchars][3] = _unitconv(B[3]);
 	/*
 	 * Crude heuristics mainly based on observations with the existing
 	 * fonts for -Tpost and on tests with eqn.
 	 */
-	if (B[1] <= -10)
-		a->kerntab[a->nchars] |= 1;
-	if (B[3] > (a->xheight + a->capheight) / 2)
-		a->kerntab[a->nchars] |= 2;
+		if (B[1] <= -10)
+			a->kerntab[a->nchars] |= 1;
+		if (B[3] > (a->xheight + a->capheight) / 2)
+			a->kerntab[a->nchars] |= 2;
+	}
 	/*
 	 * Only map a character directly if it maps to an ASCII
 	 * equivalent or to a troff special character.
@@ -836,6 +844,7 @@ afmalloc(struct afmtab *a, int n)
 	a->fitab = calloc(a->fichars, sizeof *a->fitab);
 	a->fontab = malloc((n+NCHARLIB+1)*sizeof *a->fontab);
 	a->fontab[0] = dev.res * dev.unitwidth / 72 / 3;
+	a->bbtab = calloc(n+NCHARLIB+1, sizeof *a->bbtab);
 	a->kerntab = calloc(n+NCHARLIB+1, sizeof *a->kerntab);
 	a->codetab = malloc((n+NCHARLIB+1)*sizeof *a->codetab);
 	a->codetab[0] = 0;
@@ -988,6 +997,8 @@ makefont(int nf, char *devfontab, char *devkerntab, char *devcodetab,
 		codetab[nf][i] = devcodetab[i]&0377;
 	if (devfitab) for (i = 0; i < 128 - 32 + nchtab; i++)
 		fitab[nf][i] = devfitab[i]&0377;
+	fontbase[nf]->spacewidth = fontab[nf][0];
+	fontbase[nf]->cspacewidth = -1;
 }
 
 #ifndef	DPOST

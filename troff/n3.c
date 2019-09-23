@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n3.c	1.102 (gritter) 7/11/06
+ * Sccsid @(#)n3.c	1.141 (gritter) 8/12/06
  */
 
 /*
@@ -54,6 +54,7 @@
 
 
 #include <stdlib.h>
+#include <ctype.h>
 #include <string.h>
 #include "tdef.h"
 #ifdef NROFF
@@ -75,24 +76,42 @@ tchar *wbuf;
 tchar *corebuf;
 
 static void	_collect(int);
+static int	_findmn(int, int);
+static void	casewatchlength(void);
 static void	caseshift(void);
 static void	casesubstring(void);
 static void	caselength(void);
-static int	getls(int, int *);
+static void	caseindex(void);
+static void	caseasciify(void);
+static void	caseunformat(int);
+static int	getls(int, int *, int);
 static void	addcon(int, char *, void(*)(int));
 
 static const struct {
 	char	*n;
 	void	(*f)(int);
 } longrequests[] = {
+	{ "aln",		(void(*)(int))casealn },
+	{ "als",		(void(*)(int))caseals },
+	{ "asciify",		(void(*)(int))caseasciify },
 	{ "bleedat",		(void(*)(int))casebleedat },
 	{ "blm",		(void(*)(int))caseblm },
+	{ "box",		(void(*)(int))casebox},
+	{ "boxa",		(void(*)(int))caseboxa},
+	{ "break",		(void(*)(int))casebreak},
+	{ "breakchar",		(void(*)(int))casebreakchar },
 	{ "brp",		(void(*)(int))casebrp },
+	{ "char",		(void(*)(int))casechar },
 	{ "chop",		(void(*)(int))casechop },
 	{ "close",		(void(*)(int))caseclose },
+	{ "continue",		(void(*)(int))casecontinue },
 	{ "cropat",		(void(*)(int))casecropat },
+	{ "ecs",		(void(*)(int))caseecs },
+	{ "ecr",		(void(*)(int))caseecr },
+	{ "errprint",		(void(*)(int))caseerrprint },
 	{ "evc",		(void(*)(int))caseevc },
 	{ "fallback",		(void(*)(int))casefallback },
+	{ "fchar",		(void(*)(int))casefchar },
 	{ "fdeferlig",		(void(*)(int))casefdeferlig },
 	{ "feature",		(void(*)(int))casefeature },
 	{ "fkern",		(void(*)(int))casefkern },
@@ -101,9 +120,11 @@ static const struct {
 	{ "fspacewidth",	(void(*)(int))casefspacewidth },
 	{ "ftr",		(void(*)(int))caseftr },
 	{ "fzoom",		(void(*)(int))casefzoom },
+	{ "hcode",		(void(*)(int))casehcode },
 	{ "hidechar",		(void(*)(int))casehidechar },
 	{ "hlm",		(void(*)(int))casehlm },
 	{ "hylang",		(void(*)(int))casehylang },
+	{ "index",		(void(*)(int))caseindex },
 	{ "itc",		(void(*)(int))caseitc },
 	{ "kern",		(void(*)(int))casekern },
 	{ "kernafter",		(void(*)(int))casekernafter },
@@ -115,24 +136,39 @@ static const struct {
 	{ "lhang",		(void(*)(int))caselhang },
 	{ "mediasize",		(void(*)(int))casemediasize },
 	{ "minss",		(void(*)(int))caseminss },
+	{ "nhychar",		(void(*)(int))casenhychar },
 	{ "nop",		(void(*)(int))casenop },
+	{ "nrf",		(void(*)(int))casenrf },
 	{ "open",		(void(*)(int))caseopen },
 	{ "opena",		(void(*)(int))caseopena },
 	{ "output",		(void(*)(int))caseoutput },
 	{ "papersize",		(void(*)(int))casepapersize },
 	{ "psbb",		(void(*)(int))casepsbb },
 	{ "pso",		(void(*)(int))casepso },
+	{ "rchar",		(void(*)(int))caserchar },
 	{ "recursionlimit",	(void(*)(int))caserecursionlimit },
 	{ "return",		(void(*)(int))casereturn },
 	{ "rhang",		(void(*)(int))caserhang },
+	{ "rnn",		(void(*)(int))casernn },
+	{ "sentchar",		(void(*)(int))casesentchar },
+	{ "shc",		(void(*)(int))caseshc },
 	{ "shift",		(void(*)(int))caseshift },
+	{ "spacewidth",		(void(*)(int))casespacewidth },
 	{ "spreadwarn",		(void(*)(int))casespreadwarn },
 	{ "substring",		(void(*)(int))casesubstring },
 	{ "tmc",		(void(*)(int))casetmc },
 	{ "track",		(void(*)(int))casetrack },
+	{ "transchar",		(void(*)(int))casetranschar },
 	{ "trimat",		(void(*)(int))casetrimat },
+	{ "unformat",		(void(*)(int))caseunformat },
+	{ "unwatch",		(void(*)(int))caseunwatch },
+	{ "unwatchn",		(void(*)(int))caseunwatchn },
 	{ "vpt",		(void(*)(int))casevpt },
 	{ "warn",		(void(*)(int))casewarn },
+	{ "watch",		(void(*)(int))casewatch },
+	{ "watchlength",	(void(*)(int))casewatchlength },
+	{ "watchn",		(void(*)(int))casewatchn },
+	{ "while",		(void(*)(int))casewhile },
 	{ "write",		(void(*)(int))casewrite },
 	{ "writec",		(void(*)(int))casewritec },
 	{ "xflag",		(void(*)(int))casexflag },
@@ -215,17 +251,20 @@ casern(void)
 	skip(1);
 	if ((i = getrq(0)) == 0)
 		return;
-	if ((oldmn = findmn(i)) < 0) {
+	if ((oldmn = _findmn(i, 0)) < 0) {
 		nosuch(i);
 		return;
 	}
 	skip(1);
 	j = getrq(1);
-	clrmn(findmn(j));
+	clrmn(_findmn(j, 0));
 	if (j) {
 		munhash(&contab[oldmn]);
 		contab[oldmn].rq = j;
 		maddhash(&contab[oldmn]);
+		if (contab[oldmn].flags & FLAG_WATCH)
+			errprint("%s: %s renamed to %s", macname(lastrq),
+					macname(i), macname(j));
 	}
 }
 
@@ -284,11 +323,25 @@ mrehash(void)
 void
 caserm(void)
 {
-	int j, cnt = 0;
+	int i, j, k, cnt = 0;
 
 	lgf++;
-	while (!skip(!cnt++) && (j = getrq(0)) != 0)
-		clrmn(findmn(j));
+	while (!skip(!cnt++) && (j = getrq(0)) != 0) {
+		if ((k = _findmn(j, 0)) < 0)
+			continue;
+		if (contab[k].als) {
+			i = _findmn(j, 1);
+			if (--contab[i].nlink <= 0)
+				clrmn(i);
+		}
+		if (contab[k].nlink > 0)
+			contab[k].nlink--;
+		if (contab[k].flags & FLAG_WATCH)
+			errprint("%s: %s removed", macname(lastrq),
+					macname(j));
+		if (contab[k].nlink <= 0)
+			clrmn(k);
+	}
 	lgf--;
 }
 
@@ -322,6 +375,7 @@ casede(void)
 {
 	register int i, req;
 	register filep savoff;
+	int	k, nlink;
 
 	if (dip != d)
 		wbfl();
@@ -337,13 +391,26 @@ casede(void)
 	else 
 		req = copyb();
 	wbfl();
+	if (oldmn >= 0 && (nlink = contab[oldmn].nlink) > 0)
+		k = contab[oldmn].rq;
+	else {
+		k = i;
+		nlink = 0;
+	}
 	clrmn(oldmn);
 	if (newmn) {
 		if (contab[newmn].rq)
 			munhash(&contab[newmn]);
-		contab[newmn].rq = i;
+		contab[newmn].rq = k;
+		contab[newmn].nlink = nlink;
+		if (ds)
+			contab[newmn].flags |= FLAG_STRING;
+		else
+			contab[newmn].flags &= ~FLAG_STRING;
 		maddhash(&contab[newmn]);
-	}
+		prwatch(newmn);
+	} else if (apptr)
+		prwatch(findmn(i));
 	if (apptr) {
 		savoff = offset;
 		offset = apptr;
@@ -359,41 +426,66 @@ de1:
 }
 
 
-int 
-findmn(register int i)
+static int 
+_findmn(register int i, int als)
 {
 	register struct contab *p;
 
 	for (p = mhash[MHASH(i)]; p; p = p->link)
-		if (i == p->rq)
+		if (i == p->rq) {
+			if (als && p->als)
+				return(_findmn(p->als, als));
 			return(p - contab);
+		}
 	return(-1);
+}
+
+
+int
+findmn(int i)
+{
+	return _findmn(i, 1);
 }
 
 
 void
 clrmn(register int i)
 {
+	struct s	*s;
+
 	if (i >= 0) {
-		if (contab[i].mx)
+		if (contab[i].flags & FLAG_USED) {
+			if (warn & WARN_MAC)
+				errprint("Macro %s removed while in use",
+						macname(contab[i].rq));
+			for (s = frame; s != stk; s = s->pframe)
+				if (s->contp == i)
+					s->contp = 0;
+		} else if (contab[i].mx)
 			ffree((filep)contab[i].mx);
 		munhash(&contab[i]);
+		memset(&contab[i], 0, sizeof contab[i]);
 		contab[i].rq = 0;
 		contab[i].mx = 0;
 		contab[i].f = 0;
+		contab[i].als = 0;
+		contab[i].nlink = 0;
 	}
 }
 
 
-filep 
-finds(register int mn)
+static filep 
+_finds(register int mn, int als)
 {
 	register tchar i;
 	register filep savip;
+	enum flags	flags = 0;
 
-	oldmn = findmn(mn);
+	oldmn = _findmn(mn, als);
 	newmn = 0;
 	apptr = (filep)0;
+	if (oldmn >= 0)
+		flags = contab[oldmn].flags;
 	if (app && oldmn >= 0 && contab[oldmn].mx) {
 		savip = ip;
 		ip = (filep)contab[oldmn].mx;
@@ -412,26 +504,36 @@ finds(register int mn)
 			if (contab[i].rq == 0)
 				break;
 		}
-		if (i == NM && growcontab() == NULL || (nextb = alloc()) == 0) {
+		nextb = 0;
+		if (i == NM && growcontab() == NULL ||
+				als && (nextb = alloc()) == 0) {
 			app = 0;
 			if (macerr++ > 1)
 				done2(02);
 			errprint("Too many (%d) string/macro names", NM);
 			edone(04);
-			return(offset = 0);
+			return(als ? offset = 0 : 0);
 		}
 		contab[i].mx = (unsigned) nextb;
+		newmn = i;
 		if (!diflg) {
-			newmn = i;
 			if (oldmn == -1)
 				contab[i].rq = -1;
 		} else {
 			contab[i].rq = mn;
 			maddhash(&contab[i]);
 		}
+		contab[i].flags = flags & (FLAG_WATCH|FLAG_STRING);
 	}
 	app = 0;
-	return(offset = nextb);
+	return(als ? offset = nextb : 1);
+}
+
+
+filep
+finds(int mn)
+{
+	return _finds(mn, 1);
 }
 
 
@@ -715,7 +817,7 @@ tchar
 popi(void)
 {
 	register struct s *p;
-	tchar	c;
+	tchar	c, d;
 
 	if (frame == stk)
 		return(0);
@@ -726,11 +828,22 @@ popi(void)
 		free(p->argt);
 		free(p->argsp);
 	}
+	if (p->contp > 0)
+		contab[p->contp].flags &= ~FLAG_USED;
 	frame = p->pframe;
 	ip = p->pip;
 	pendt = p->ppendt;
 	lastpbp = p->lastpbp;
 	c = p->pch;
+	if (p->loopf & LOOP_NEXT) {
+		d = ch;
+		ch = c;
+		pushi(p->newip, p->mname);
+		c = 0;
+		ch = d;
+	} else
+		if (p->loopf & LOOP_FREE)
+			ffree(p->newip);
 	free(p);
 	return(c);
 }
@@ -748,8 +861,15 @@ pushi(filep newip, int mname)
 	p->pch = ch;
 	p->lastpbp = lastpbp;
 	p->mname = mname;
-	p->frame_cnt = frame->frame_cnt + 1;
-	p->tail_cnt = frame->tail_cnt + 1;
+	if (mname != LOOP) {
+		p->frame_cnt = frame->frame_cnt + 1;
+		p->tail_cnt = frame->tail_cnt + 1;
+	} else {
+		p->frame_cnt = frame->frame_cnt;
+		p->tail_cnt = frame->tail_cnt;
+		p->loopf = LOOP_EVAL;
+	}
+	p->newip = newip;
 	lastpbp = pbp;
 	pendt = ch = 0;
 	frame = nxf;
@@ -766,7 +886,7 @@ setbrk(int x)
 
 
 static int
-_getsn(int *strp)
+_getsn(int *strp, int create)
 {
 	register int i;
 
@@ -774,30 +894,37 @@ _getsn(int *strp)
 		return(0);
 	if (i == '(')
 		return(getrq2());
-	else if (i == '[' && xflag != 0)
-		return(getls(']', strp));
+	else if (i == '[' && xflag > 1)
+		return(getls(']', strp, create));
 	else 
 		return(i);
 }
 
 int
-getsn(void)
+getsn(int create)
 {
-	return _getsn(0);
+	return _getsn(0, create);
 }
 
 
 int 
 setstr(void)
 {
-	register int i, j;
+	register int i, j, k;
 	int	space = 0;
+	tchar	c;
 
 	lgf++;
-	if ((i = _getsn(&space)) == 0 || (j = findmn(i)) == -1 ||
+	if ((i = _getsn(&space, 0)) == 0 || (j = findmn(i)) == -1 ||
 			!contab[j].mx) {
-		if (space)
-			nodelim(']');
+		if (space) {
+			do {
+				if (cbits(c = getch()) == ']')
+					break;
+			} while (!nlflg);
+			if (nlflg)
+				nodelim(']');
+		}
 		nosuch(i);
 		lgf--;
 		return(0);
@@ -808,7 +935,10 @@ setstr(void)
 			nxf->nargs = 0;
 		strflg++;
 		lgf--;
-		return pushi((filep)contab[j].mx, i);
+		contab[j].flags |= FLAG_USED;
+		k = pushi((filep)contab[j].mx, i);
+		frame->contp = j;
+		return(k);
 	}
 }
 
@@ -849,8 +979,13 @@ _collect(int termc)
 			ch = i;
 		while (1) {
 			i = getch();
-			if (termc && i == termc)
+			if (termc && i == termc) {
+				if (nsp >= asp)
+					savnxf->argsp = realloc(savnxf->argsp,
+						++asp * sizeof *savnxf->argsp);
+				savnxf->argsp[nsp++] = 0;
 				goto rtn;
+			}
 			if (nlflg || (!quote && cbits(i) == ' '))
 				break;
 			if (   quote
@@ -884,7 +1019,9 @@ seta(void)
 {
 	register int c, i;
 	char q[] = { 0, 0 };
+	struct s	*s;
 
+	for (s = frame; s->loopf && s != stk; s = s->pframe);
 	switch (c = cbits(getch())) {
 	case '@':
 		q[0] = '"';
@@ -892,10 +1029,10 @@ seta(void)
 	case '*':
 		if (xflag == 0)
 			goto dfl;
-		for (i = frame->nargs; i >= 1; i--) {
+		for (i = s->nargs; i >= 1; i--) {
 			if (q[0])
 				cpushback(q);
-			pushback(&frame->argsp[frame->argt[i - 1]]);
+			pushback(&s->argsp[s->argt[i - 1]]);
 			if (q[0])
 				cpushback(q);
 			if (i > 1)
@@ -919,8 +1056,10 @@ seta(void)
 		goto assign;
 	default:
 	dfl:	i = c - '0';
-	assign:	if (i > 0 && i <= frame->nargs)
-			pushback(&frame->argsp[frame->argt[i - 1]]);
+	assign:	if (i > 0 && i <= s->nargs)
+			pushback(&s->argsp[s->argt[i - 1]]);
+		else if (i == 0)
+			cpushback(macname(s->mname));
 	}
 }
 
@@ -928,47 +1067,87 @@ static void
 caseshift(void)
 {
 	int	i, j;
+	struct s	*s;
 
+	for (s = frame; s->loopf && s != stk; s = s->pframe);
 	if (skip(0))
 		i = 1;
-	else
+	else {
+		noscale++;
 		i = atoi();
+		noscale--;
+	}
 	if (nonumb)
 		return;
-	if (i > 0 && i <= frame->nargs) {
-		frame->nargs -= i;
-		for (j = 1; j <= frame->nargs; j++)
-			frame->argt[j - 1] = frame->argt[j + i - 1];
+	if (i > 0 && i <= s->nargs) {
+		s->nargs -= i;
+		for (j = 1; j <= s->nargs; j++)
+			s->argt[j - 1] = s->argt[j + i - 1];
 	}
 }
 
+
 void
-caseda(void)
+casebox(void)
+{
+	casedi(1);
+}
+
+void
+caseboxa(void)
+{
+	caseda(1);
+}
+
+void
+caseda(int box)
 {
 	app++;
-	casedi();
+	casedi(box);
 }
 
 
 void
-casedi(void)
+casedi(int box)
 {
 	register int i, j;
 	register int *k;
+	int	nlink;
 
 	lgf++;
 	if (skip(0) || (i = getrq(1)) == 0) {
 		if (dip != d)
 			wbt((tchar)0);
 		if (dilev > 0) {
+#ifdef	DEBUG
+			if (debug & DB_MAC)
+				fdprintf(stderr, "ending diversion %s\n",
+						macname(dip->curd));
+#endif	/* DEBUG */
 			numtab[DN].val = dip->dnl;
 			numtab[DL].val = dip->maxl;
+			prwatchn(DN);
+			prwatchn(DL);
+			if (dip->boxenv) {
+				free(line);
+				free(word);
+				free(hcode);
+				evcline(&env, dip->boxenv);
+				free(dip->boxenv->_line);
+				free(dip->boxenv->_word);
+				free(dip->boxenv->_hcode);
+				free(dip->boxenv);
+			}
 			dip = &d[--dilev];
 			offset = dip->op;
 		} else if (warn & WARN_DI)
 			errprint(".di outside active diversion");
 		goto rtn;
 	}
+#ifdef	DEBUG
+	if (debug & DB_MAC)
+		fdprintf(stderr, "starting diversion %s\n", macname(i));
+#endif	/* DEBUG */
 	if (++dilev == NDI) {
 		struct d	*nd;
 		const int	inc = 5;
@@ -987,11 +1166,32 @@ casedi(void)
 	dip = &d[dilev];
 	dip->op = finds(i);
 	dip->curd = i;
+	if (newmn && oldmn >= 0 && (nlink = contab[oldmn].nlink) > 0) {
+		munhash(&contab[newmn]);
+		j = contab[oldmn].rq;
+	} else {
+		j = i;
+		nlink = 0;
+	}
 	clrmn(oldmn);
+	if (newmn) {
+		contab[newmn].rq = j;
+		contab[newmn].nlink = nlink;
+		contab[newmn].flags &= ~FLAG_STRING;
+		if (i != j)
+			maddhash(&contab[newmn]);
+		prwatch(newmn);
+	}
 	k = (int *) & dip->dnl;
 	dip->flss = 0;
 	for (j = 0; j < 10; j++)
 		k[j] = 0;	/*not op and curd*/
+	if (box) {
+		dip->boxenv = malloc(sizeof *dip->boxenv);
+		*dip->boxenv = env;
+		evc(&env, &env);
+	} else
+		dip->boxenv = 0;
 rtn:
 	app = 0;
 	diflg = 0;
@@ -1013,11 +1213,197 @@ casedt(void)
 
 
 void
+caseals(void)
+{
+	int	i, j, k, t;
+	int	flags = 0;
+
+	if (skip(1))
+		return;
+	i = getrq(1);
+	if (skip(1))
+		return;
+	j = getrq(1);
+	if ((k = findmn(j)) < 0) {
+		nosuch(j);
+		return;
+	}
+	if (contab[k].nlink == 0) {
+		munhash(&contab[k]);
+		t = makerq(NULL);
+		contab[k].rq = t;
+		maddhash(&contab[k]);
+		if (_finds(j, 0) != 0 && newmn) {
+			contab[newmn].als = t;
+			contab[newmn].rq = j;
+			maddhash(&contab[newmn]);
+			contab[k].nlink = 1;
+		}
+	} else
+		t = j;
+	if (_finds(i, 0) != 0) {
+		if (oldmn > 0 && newmn)
+			flags = contab[oldmn].flags | contab[newmn].flags;
+		flags &= FLAG_WATCH|FLAG_STRING;
+		clrmn(oldmn);
+		if (newmn) {
+			if (contab[newmn].rq)
+				munhash(&contab[newmn]);
+			contab[newmn].als = t;
+			contab[newmn].rq = i;
+			maddhash(&contab[newmn]);
+			contab[k].nlink++;
+			if (flags & FLAG_WATCH)
+				errprint("%s: creating alias %s to %s",
+						macname(lastrq),
+						macname(i), macname(j));
+		}
+	}
+}
+
+
+void
+casewatch(int unwatch)
+{
+	int	i, j;
+
+	lgf++;
+	if (skip(1))
+		return;
+	do {
+		if (!(j = getrq(1)))
+			break;
+		if ((i = findmn(j)) < 0) {
+			if (_finds(j, 0) == 0 || !newmn)
+				continue;
+			if (contab[newmn].rq)
+				munhash(&contab[newmn]);
+			contab[newmn].rq = j;
+			maddhash(&contab[newmn]);
+			i = newmn;
+		}
+		if (unwatch)
+			contab[i].flags &= ~FLAG_WATCH;
+		else
+			contab[i].flags |= FLAG_WATCH;
+	} while (!skip(0));
+}
+
+
+void
+caseunwatch(void)
+{
+	casewatch(1);
+}
+
+
+static int	watchlength = 30;
+
+
+static void
+casewatchlength(void)
+{
+	int	i;
+
+	if (!skip(1)) {
+		noscale++;
+		i = atoi();
+		noscale--;
+		if (!nonumb)
+			watchlength = i;
+		if (watchlength < 0)
+			watchlength = 0;
+	}
+}
+
+
+void
+prwatch(int i)
+{
+	const char prtab[] = {
+		'a',000,000,000,000,000,000,000,
+		'b','t','n',000,000,000,000,000,
+		'{','}','&',000,'%','c','e',' ',
+		'!',000,000,000,000,000,000,'~',
+		000
+	};
+	char	*buf = NULL;
+	filep	savip;
+	tchar	c;
+	int	j, k;
+
+	if (i < 0 || i >= NM)
+		return;
+	if (contab[i].flags & FLAG_WATCH) {
+		if (watchlength <= 10) {
+			errprint("%s: %s %s redefined", macname(lastrq),
+				contab[i].flags & FLAG_STRING ? "string" :
+					"macro",
+				macname(contab[i].rq));
+			return;
+		}
+		savip = ip;
+		ip = (filep)contab[i].mx;
+		app++;
+		j = 0;
+		buf = malloc(watchlength);
+		while ((c = rbf()) != 0) {
+			while (isxfunc(c, CHAR))
+				c = charout[sbits(c)].ch;
+#if !defined (NROFF) && defined (EUC)
+			if (iscopy(c) && (k = wctomb(&buf[j], cbits(c))) > 0)
+				j += k;
+			else
+#endif	/* !NROFF && EUC */
+			if (ismot(c))
+				buf[j++] = '?';
+			else if ((k = cbits(c)) < 0177) {
+				if (isprint(k))
+					buf[j++] = k;
+				else if (k < ' ' && prtab[k]) {
+					buf[j++] = '\\';
+					buf[j++] = prtab[k];
+				} else if (k < ' ') {
+					buf[j++] = '^';
+					buf[j++] = k + 0100;
+				} else
+					buf[j++] = '?';
+			} else if (k == ACUTE)
+				buf[j++] = '\'';
+			else if (k == GRAVE)
+				buf[j++] = '`';
+			else if (j == UNDERLINE)
+				buf[j++] = '_';
+			else if (j == MINUS)
+				buf[j++] = '-';
+			else
+				buf[j++] = '?';
+			if (j >= watchlength - 5 - mb_cur_max) {
+				buf[j++] = '.';
+				buf[j++] = '.';
+				buf[j++] = '.';
+				break;
+			}
+		}
+		buf[j] = 0;
+		ip = savip;
+		app--;
+		errprint("%s: %s %s redefined to \"%s\"", macname(lastrq),
+				contab[i].flags & FLAG_STRING ? "string" :
+					"macro",
+				macname(contab[i].rq), buf);
+		free(buf);
+	}
+}
+
+
+void
 casetl(void)
 {
 	register int j;
 	int w[3];
-	tchar buf[LNSIZE];
+	tchar *buf = NULL;
+	int	bufsz = 0;
 	register tchar *tp;
 	tchar i, delim, nexti;
 	int oev;
@@ -1029,6 +1415,8 @@ casetl(void)
 		delim = '\'';
 	} else 
 		delim = cbits(delim);
+	bufsz = LNSIZE;
+	buf = malloc(bufsz * sizeof *buf);
 	tp = buf;
 	numtab[HP].val = 0;
 	w[0] = w[1] = w[2] = 0;
@@ -1045,7 +1433,7 @@ casetl(void)
 		} else {
 			if (cbits(i) == pagech) {
 				setn1(numtab[PN].val, numtab[findr('%')].fmt,
-				      i&SFMASK);
+				      sfmask(i));
 				nexti = getch();
 				continue;
 			}
@@ -1054,8 +1442,14 @@ casetl(void)
 			nexti = getch();
 			if (ev == oev)
 				numtab[HP].val += kernadjust(i, nexti);
-			if (tp < &buf[LNSIZE-10])
-				*tp++ = i;
+			if (tp >= &buf[bufsz-10]) {
+				tchar	*k;
+				bufsz += 100;
+				k = realloc(buf, bufsz * sizeof *buf);
+				tp += k - buf;
+				buf = k;
+			}
+			*tp++ = i;
 		}
 	}
 	if (j<3)
@@ -1086,6 +1480,7 @@ casetl(void)
 		if (numtab[NL].val > dip->hnl)
 			dip->hnl = numtab[NL].val;
 	}
+	free(buf);
 }
 
 void
@@ -1106,7 +1501,7 @@ casechop(void)
 	skip(1);
 	if ((i = getrq(0)) == 0)
 		return;
-	if ((j = findmn(i)) < 0) {
+	if ((j = findmn(i)) < 0 || !contab[j].mx) {
 		nosuch(i);
 		return;
 	}
@@ -1121,13 +1516,14 @@ casechop(void)
 	}
 	ip = savip;
 	offset = dip->op;
+	prwatch(j);
 }
 
 void
 casesubstring(void)
 {
 	int	i, j, k, sz = 0, st;
-	int	n1, n2 = -1;
+	int	n1, n2 = -1, nlink;
 	tchar	*tp = NULL, c;
 	filep	savip;
 
@@ -1137,15 +1533,17 @@ casesubstring(void)
 	skip(1);
 	if ((i = getrq(0)) == 0)
 		return;
-	if ((j = findmn(i)) < 0) {
+	if ((j = findmn(i)) < 0 || !contab[j].mx) {
 		nosuch(i);
 		return;
 	}
 	if (skip(1))
 		return;
+	noscale++;
 	n1 = atoi();
 	if (skip(0) == 0)
 		n2 = atoi();
+	noscale--;
 	savip = ip;
 	ip = (filep)contab[j].mx;
 	k = 0;
@@ -1184,12 +1582,20 @@ casesubstring(void)
 			}
 		}
 		wbt(0);
+		if (oldmn >= 0 && (nlink = contab[oldmn].nlink) > 0)
+			k = contab[oldmn].rq;
+		else {
+			k = i;
+			nlink = 0;
+		}
 		clrmn(oldmn);
 		if (newmn) {
 			if (contab[newmn].rq)
 				munhash(&contab[newmn]);
-			contab[newmn].rq = i;
+			contab[newmn].rq = k;
+			contab[newmn].nlink = nlink;
 			maddhash(&contab[newmn]);
+			prwatch(newmn);
 		}
 	}
 	free(tp);
@@ -1200,7 +1606,7 @@ casesubstring(void)
 void
 caselength(void)
 {
-	int	i, j;
+	int	i, j, k;
 
 	lgf++;
 	skip(1);
@@ -1214,7 +1620,178 @@ caselength(void)
 			j++;
 	}
 	copyf--;
-	numtab[findr(i)].val = j;
+	numtab[k = findr(i)].val = j;
+	prwatchn(k);
+}
+
+void
+caseindex(void)
+{
+	int	i, j, k, n, N, M;
+	int	*sp = NULL, as = 0, ns = 0, *np;
+	tchar	c;
+	filep	savip;
+
+	lgf++;
+	skip(1);
+	if ((N = getrq(1)) == 0)
+		return;
+	skip(1);
+	if ((i = getrq(1)) == 0)
+		return;
+	if ((M = findmn(i)) < 0 || !contab[M].mx) {
+		nosuch(i);
+		return;
+	}
+	copyf++;
+	if (!skip(0)) {
+		while ((c = getch()) != 0 && !ismot(c) &&
+				(i = cbits(c)) != '\n') {
+			if (ns >= as)
+				sp = realloc(sp, (as += 10) * sizeof *sp);
+			sp[ns++] = i;
+		}
+		np = malloc((ns + 1) * sizeof *np);
+		i = 0;
+		j = -1;
+		for (;;) {
+			np[i++] = j++;
+			if (i >= ns)
+				break;
+			while (j >= 0 && sp[i] != sp[j])
+				j = np[j];
+		}
+		savip = ip;
+		ip = (filep)contab[M].mx;
+		app = 1;
+		j = 0;
+		n = 0;
+		while ((c = rbf()) != 0 && j < ns) {
+			while (j >= 0 && cbits(c) != sp[j])
+				j = np[j];
+			j++;
+			n++;
+		}
+		n = j == ns ? n - ns : -1;
+		app = 0;
+		ip = savip;
+		free(sp);
+		free(np);
+	} else
+		n = -1;
+	copyf--;
+	numtab[k = findr(N)].val = n;
+	prwatchn(k);
+}
+
+static void
+caseasciify(void)
+{
+	caseunformat(1);
+}
+
+static void
+caseunformat(int flag)
+{
+	int	i, j, k, nlink;
+	int	ns = 0, as = 0;
+	tchar	*tp = NULL, c;
+	filep	savip;
+	int	noout = 0;
+
+	if (dip != d)
+		wbfl();
+	lgf++;
+	skip(1);
+	if ((i = getrq(0)) == 0)
+		return;
+	if ((j = findmn(i)) < 0 || !contab[j].mx) {
+		nosuch(i);
+		return;
+	}
+	savip = ip;
+	ip = (filep)contab[j].mx;
+	ns = 0;
+	app = 1;
+	while ((c = rbf()) != 0) {
+		if (ns >= as) {
+			as += 512;
+			tp = realloc(tp, as * sizeof *tp);
+		}
+		tp[ns++] = c;
+	}
+	app = 0;
+	ip = savip;
+	if ((offset = finds(i)) != 0) {
+		for (j = 0; j < ns; j++) {
+			if (!ismot(c) && cbits(c) == '\n')
+				noout = 0;
+			else if (j+1 < ns && isxfunc(tp[j+1], HYPHED))
+				noout = 1;
+			c = tp[j];
+			while (flag & 1 && isxfunc(c, CHAR))
+				c = charout[sbits(c)].ch;
+			if (isadjspc(c)) {
+				if (cbits(c) == WORDSP)
+					setcbits(c, ' ');
+				c &= ~ADJBIT;
+			} else if (c == WORDSP) {
+				j++;
+				continue;
+			} else if (c == FLSS) {
+				j++;
+				continue;
+			} else if (cbits(c) == XFUNC) {
+				switch (fbits(c)) {
+				case FLDMARK:
+					if ((c = sbits(c)) == 0)
+						continue;
+					break;
+				case LETSP:
+				case NLETSP:
+				case LETSH:
+				case NLETSH:
+					continue;
+				}
+			} else if (isadjmot(c))
+				continue;
+			if (flag & 1 && !ismot(c) && cbits(c) != SLANT) {
+#ifndef	NROFF
+				int	m = cbits(c);
+				int	f = fbits(c);
+				int	k;
+				if (islig(c) && lgrevtab && lgrevtab[f] &&
+						lgrevtab[f][m]) {
+					for (k = 0; lgrevtab[f][m][k]; k++)
+						if (!noout)
+							wbf(lgrevtab[f][m][k]);
+					continue;
+				} else
+#endif
+					c = cbits(c);
+			}
+			if (!noout)
+				wbf(c);
+		}
+		wbt(0);
+		if (oldmn >= 0 && (nlink = contab[oldmn].nlink) > 0)
+			k = contab[oldmn].rq;
+		else {
+			k = i;
+			nlink = 0;
+		}
+		clrmn(oldmn);
+		if (newmn) {
+			if (contab[newmn].rq)
+				munhash(&contab[newmn]);
+			contab[newmn].rq = k;
+			contab[newmn].nlink = nlink;
+			maddhash(&contab[newmn]);
+			prwatch(newmn);
+		}
+	}
+	free(tp);
+	offset = dip->op;
 }
 
 
@@ -1225,9 +1802,55 @@ caselength(void)
  */
 #define	MAXRQ2	0200000
 
+static struct map {
+	struct map	*link;
+	int	n;
+} *map[128];
 static char	**had;
 static int	hadn;
 static int	alcd;
+
+#define	maphash(cp)	(_pjw(cp) & 0177)
+
+static unsigned
+_pjw(const char *cp)
+{
+	unsigned	h = 0, g;
+
+	cp--;
+	while (*++cp) {
+		h = (h << 4 & 0xffffffff) + (*cp&0377);
+		if ((g = h & 0xf0000000) != 0) {
+			h = h ^ g >> 24;
+			h = h ^ g;
+		}
+	}
+	return h;
+}
+
+static int
+mapget(const char *cp)
+{
+	int	h = maphash(cp);
+	struct map	*mp;
+
+	for (mp = map[h]; mp; mp = mp->link)
+		if (strcmp(had[mp->n], cp) == 0)
+			return mp->n;
+	return hadn;
+}
+
+static void
+mapadd(const char *cp, int n)
+{
+	int	h = maphash(cp);
+	struct map	*mp;
+
+	mp = calloc(1, sizeof *mp);
+	mp->n = n;
+	mp->link = map[h];
+	map[h] = mp;
+}
 
 void
 casepm(void)
@@ -1239,17 +1862,24 @@ casepm(void)
 	kk = cnt = tcnt = 0;
 	tot = !skip(0);
 	for (i = 0; i < NM; i++) {
-		if ((xx = contab[i].rq) == 0 || contab[i].mx == 0)
-			continue;
-		tcnt++;
-		j = (filep) contab[i].mx;
-		k = 1;
-		while ((j = blist[blisti(j)]) != (unsigned) ~0) {
-			k++; 
+		if ((xx = contab[i].rq) == 0 || contab[i].mx == 0) {
+			if (contab[i].als && (k = findmn(xx)) >= 0) {
+				if (contab[k].rq == 0 || contab[k].mx == 0)
+					continue;
+			} else
+				continue;
 		}
-		cnt++;
+		tcnt++;
+		if (contab[i].als == 0 && (j = (filep) contab[i].mx) != 0) {
+			k = 1;
+			while ((j = blist[blisti(j)]) != (unsigned) ~0) {
+				k++; 
+			}
+			cnt++;
+		} else
+			k = 0;
 		kk += k;
-		if (!tot)
+		if (!tot && contab[i].nlink == 0)
 			fdprintf(stderr, "%s %d\n", macname(xx), k);
 	}
 	fdprintf(stderr, "pm: total %d, macros %d, space %d\n", tcnt, cnt, kk);
@@ -1262,7 +1892,8 @@ stackdump (void)	/* dumps stack of macros in process */
 
 	if (frame != stk) {
 		for (p = frame; p != stk; p = p->pframe)
-			fdprintf(stderr, "%s ", macname(p->mname));
+			if (p->mname != LOOP)
+				fdprintf(stderr, "%s ", macname(p->mname));
 		fdprintf(stderr, "\n");
 	}
 }
@@ -1272,38 +1903,44 @@ static char	laststr[NC+1];
 char *
 macname(int rq)
 {
-	static char	buf[3];
+	static char	buf[4][3];
+	static int	i;
 	if (rq < 0) {
 		return laststr;
 	} else if (rq < MAXRQ2) {
-		buf[0] = rq&0177;
-		buf[1] = (rq>>BYTE)&0177;
-		buf[2] = 0;
-		return buf;
+		i &= 3;
+		buf[i][0] = rq&0177;
+		buf[i][1] = (rq>>BYTE)&0177;
+		buf[i][2] = 0;
+		return buf[i++];
 	} else if (rq - MAXRQ2 < hadn)
 		return had[rq - MAXRQ2];
 	else
 		return "???";
 }
 
+const char nmctab[] = {
+	000,000,000,000,000,000,000,000,
+	000,000,000,000,000,000,000,000,
+	001,002,003,000,004,005,000,006,
+	000,000,000,000,000,000,000,000,
+	000
+};
+
 static tchar
 mgetach(void)
 {
-	static const char nmctab[] = {
-		000,000,000,000,000,000,000,000,
-		000,000,000,000,000,000,000,000,
-		001,001,001,000,001,001,000,001,
-		000,000,000,000,000,000,000,000,
-		000
-	};
 	tchar	i;
 	int	j;
 
 	lgf++;
-	j = cbits(i = getch());
+	i = getch();
+	while (isxfunc(i, CHAR))
+		i = charout[sbits(i)].ch;
+	j = cbits(i);
 	if (ismot(i) || j == ' ' || j == '\n' || j >= 0200 ||
 			j < sizeof nmctab && nmctab[j]) {
-		if (j >= 0200)
+		if (!ismot(i) && j >= 0200)
 			illseq(j, NULL, -3);
 		ch = i;
 		j = 0;
@@ -1345,10 +1982,7 @@ maybemore(int sofar, int flags)
 	buf[i] = 0;
 	if (i == 3)
 		goto retn;
-	for (n = 0; n < hadn; n++)
-		if (strcmp(had[n], buf) == 0)
-			break;
-	if (n == hadn) {
+	if ((n = mapget(buf)) >= hadn) {
 		if ((flags & 1) == 0) {
 			strcpy(laststr, buf);
 		retn:	buf[i-1] = c;
@@ -1365,7 +1999,7 @@ maybemore(int sofar, int flags)
 					errprint("%s: no such request", buf);
 				sofar = 0;
 			} else if (warn & WARN_SPACE && i > 3 &&
-					findmn(sofar) >= 0) {
+					_findmn(sofar, 0) >= 0) {
 				buf[i-1] = 0;
 				errprint("%s: missing space", macname(sofar));
 			}
@@ -1376,6 +2010,7 @@ maybemore(int sofar, int flags)
 		had[n] = malloc(strlen(buf) + 1);
 		strcpy(had[n], buf);
 		hadn = n+1;
+		mapadd(buf, n);
 	}
 	pb[0] = c;
 	if (xflag < 3)
@@ -1386,7 +2021,7 @@ maybemore(int sofar, int flags)
 }
 
 static int
-getls(int termc, int *strp)
+getls(int termc, int *strp, int create)
 {
 	char	c, buf[NC+1];
 	int	i = 0, j = -1, n = -1;
@@ -1411,12 +2046,19 @@ getls(int termc, int *strp)
 	else if (i <= 2) {
 		j = PAIR(buf[0], buf[1]);
 	} else {
-		for (n = 0; n < hadn; n++)
-			if (strcmp(had[n], buf) == 0)
-				break;
-		if (n == hadn) {
-			n = -1;
-			strcpy(laststr, buf);
+		if ((n = mapget(buf)) >= hadn) {
+			if (create) {
+				if (hadn++ >= alcd)
+					had = realloc(had, (alcd += 20) *
+							sizeof *had);
+				had[n] = malloc(strlen(buf) + 1);
+				strcpy(had[n], buf);
+				hadn = n + 1;
+				mapadd(buf, n);
+			} else {
+				n = -1;
+				strcpy(laststr, buf);
+			}
 		}
 	}
 	return n >= 0 ? MAXRQ2 + n : j;
@@ -1425,18 +2067,24 @@ getls(int termc, int *strp)
 int
 makerq(const char *name)
 {
+	static int	t;
+	char	_name[20];
 	int	n;
 
+	if (name == NULL) {
+		roff_sprintf(_name, "\13%d", ++t);
+		name = _name;
+	}
 	if (name[0] == 0 || name[1] == 0 || name[2] == 0)
 		return PAIR(name[0], name[1]);
-	for (n = 0; n < hadn; n++)
-		if (strcmp(had[n], name) == 0)
-			return MAXRQ2 + n;
+	if ((n = mapget(name)) < hadn)
+		return MAXRQ2 + n;
 	if (hadn++ >= alcd)
 		had = realloc(had, (alcd += 20) * sizeof *had);
 	had[n] = malloc(strlen(name) + 1);
 	strcpy(had[n], name);
 	hadn = n + 1;
+	mapadd(name, n);
 	return MAXRQ2 + n;
 }
 
@@ -1450,4 +2098,5 @@ addcon(int t, char *rs, void(*f)(int))
 	had[n] = rs;
 	contab[t].rq = MAXRQ2 + n;
 	contab[t].f = f;
+	mapadd(rs, n);
 }

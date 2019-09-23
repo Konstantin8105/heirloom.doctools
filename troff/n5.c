@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n5.c	1.52 (gritter) 7/9/06
+ * Sccsid @(#)n5.c	1.84 (gritter) 8/12/06
  */
 
 /*
@@ -141,7 +141,6 @@ casefi(void)
 	tbreak();
 	fi++;
 	pendnf = 0;
-	lnsize = LNSIZE;
 }
 
 
@@ -185,6 +184,7 @@ chget(int c)
 {
 	tchar i = 0;
 
+	charf++;
 	if (skip(0) || ismot(i = getch()) || cbits(i) == ' ' || cbits(i) == '\n') {
 		ch = i;
 		return(c);
@@ -267,6 +267,38 @@ casehlm(void)
 		hlm = -1;
 }
 
+void
+casehcode(void)
+{
+	tchar	c, d;
+	int	k;
+
+	lgf++;
+	if (skip(1))
+		return;
+	do {
+		c = getch();
+		if (skip(1))
+			break;
+		d = getch();
+		if (c && d && !ismot(c) && !ismot(d)) {
+			if ((k = cbits(c)) >= nhcode) {
+				hcode = realloc(hcode, (k+1) * sizeof *hcode);
+				memset(&hcode[nhcode], 0,
+					(k+1-nhcode) * sizeof *hcode);
+				nhcode = k+1;
+			}
+			hcode[k] = cbits(d);
+		}
+	} while (!skip(0));
+}
+
+void
+caseshc(void)
+{
+	shc = skip(0) ? 0 : getch();
+}
+
 int 
 max(int aa, int bb)
 {
@@ -286,8 +318,8 @@ min(int aa, int bb)
 }
 
 
-void
-casece(void)
+static void
+cerj(int dorj)
 {
 	register int i;
 
@@ -297,8 +329,29 @@ casece(void)
 	if (nonumb)
 		i = 1;
 	tbreak();
-	ce = i;
+	if (dorj) {
+		rj = i;
+		ce = 0;
+	} else {
+		ce = i;
+		rj = 0;
+	}
 	noscale = 0;
+}
+
+
+void
+casece(void)
+{
+	cerj(0);
+}
+
+
+void
+caserj(void)
+{
+	if (xflag)
+		cerj(1);
 }
 
 
@@ -408,8 +461,10 @@ casepl(void)
 		pl = defaultpl ? defaultpl : 11 * INCH; /*11in*/
 	else 
 		pl = i;
-	if (numtab[NL].val > pl)
+	if (numtab[NL].val > pl) {
 		numtab[NL].val = pl;
+		prwatchn(NL);
+	}
 }
 
 
@@ -475,6 +530,14 @@ casevpt(void)
 }
 
 
+tchar
+setolt(void)
+{
+	storerq(getsn(1));
+	return mkxfunc(OLT, 0);
+}
+
+
 int 
 findn(int i)
 {
@@ -495,6 +558,7 @@ casepn(void)
 	skip(1);
 	noscale++;
 	i = max(inumb(&numtab[PN].val), 0);
+	prwatchn(PN);
 	noscale = 0;
 	if (!nonumb) {
 		npn = i;
@@ -526,7 +590,7 @@ casebp(void)
 
 
 static void
-tmtmcwr(int ab, int tmc, int wr)
+tmtmcwr(int ab, int tmc, int wr, int ep)
 {
 	const char tmtab[] = {
 		'a',000,000,000,000,000,000,000,
@@ -548,7 +612,7 @@ tmtmcwr(int ab, int tmc, int wr)
 			tmbuf[i++] = '\n';
 			break;
 		}
-		j = cbits(c);
+	c:	j = cbits(c);
 #if !defined (NROFF) && defined (EUC)
 		if (iscopy(c)) {
 			int	n;
@@ -562,6 +626,8 @@ tmtmcwr(int ab, int tmc, int wr)
 			tmbuf[i++] = c;
 			continue;
 		}
+		if (ismot(c))
+			continue;
 		tmbuf[i++] = '\\';
 		if (c == (OHC|BLBIT))
 			j = ':';
@@ -577,6 +643,14 @@ tmtmcwr(int ab, int tmc, int wr)
 			j = '-';
 		else
 			i--;
+		if (j == XFUNC)
+			switch (fbits(c)) {
+			case CHAR:
+				c = charout[sbits(c)].ch;
+				goto c;
+			default:
+				continue;
+			}
 		tmbuf[i++] = j;
 	}
 	if (i == NTM - 2)
@@ -586,7 +660,10 @@ tmtmcwr(int ab, int tmc, int wr)
 	tmbuf[i] = 0;
 	if (ab)	/* truncate output */
 		obufp = obuf;	/* should be a function in n2.c */
-	if (wr < 0) {
+	if (ep) {
+		flusho();
+		errprint("%s", tmbuf);
+	} else if (wr < 0) {
 		flusho();
 		fdprintf(stderr, "%s", tmbuf);
 	} else if (i)
@@ -598,13 +675,19 @@ tmtmcwr(int ab, int tmc, int wr)
 void
 casetm(int ab)
 {
-	tmtmcwr(ab, 0, -1);
+	tmtmcwr(ab, 0, -1, 0);
 }
 
 void
 casetmc(void)
 {
-	tmtmcwr(0, 1, -1);
+	tmtmcwr(0, 1, -1, 0);
+}
+
+void
+caseerrprint(void)
+{
+	tmtmcwr(0, 1, -1, 1);
 }
 
 static struct stream {
@@ -665,7 +748,7 @@ write1(int writec)
 		return;
 	if ((i = getstream(nextf)) < 0)
 		return;
-	tmtmcwr(0, writec, streams[i].fd);
+	tmtmcwr(0, writec, streams[i].fd, 0);
 }
 
 void
@@ -732,10 +815,13 @@ casesp(int a)
 void
 casebrp(void)
 {
-	spread++;
-	flushi();
-	pendt++;
-	text();
+	if (nc) {
+		spread++;
+		flushi();
+		pendt++;
+		text();
+	} else
+		tbreak();
 }
 
 
@@ -909,6 +995,13 @@ e1:
 	*op = env;
 	env = *np;
 	ev = nxev;
+	if (evname == NULL)
+		if (name)
+			evname = name;
+		else {
+			evname = malloc(20);
+			roff_sprintf(evname, "%d", ev);
+		}
 }
 
 void
@@ -916,32 +1009,115 @@ caseevc(void)
 {
 	char	*name;
 	int	nxev;
-	struct env	tmpenv, *ep;
+	struct env	*ep;
 
 	if (getev(&nxev, &name) == 0 || (ep = findev(&nxev, name)) == NULL)
 		return;
-	tmpenv = env;
-	env = *ep;
-	env._pendnf = 0;
-	env._pendw = 0;
-	env._pendt = 0;
-	env._wch = 0;
-	env._wne = 0;
-	env._wdstart = 0;
-	env._wdend = 0;
-	env._linep = line;
-	env._wordp = 0;
-	env._spflg = 0;
-	env._ce = 0;
-	env._nn = 0;
-	env._ndf = 0;
-	env._nms = 0;
-	env._ni = 0;
-	env._ul = 0;
-	env._cu = 0;
-	env._it = 0;
-	env._itmac = 0;
-	env._pendnf = 0;
+	free(env._hcode);
+	free(env._line);
+	free(env._word);
+	evc(&env, ep);
+}
+
+void
+evc(struct env *dp, struct env *sp)
+{
+	char	*name;
+
+	if (dp != sp) {
+		name = dp->_evname;
+		memcpy(dp, sp, sizeof *dp);
+		dp->_hcode = malloc(dp->_nhcode * sizeof *dp->_hcode);
+		memcpy(dp->_hcode, sp->_hcode, dp->_nhcode * sizeof *dp->_hcode);
+		dp->_evname = name;
+	}
+	dp->_pendnf = 0;
+	dp->_pendw = 0;
+	dp->_pendt = 0;
+	dp->_wch = 0;
+	dp->_wne = 0;
+	dp->_wdstart = 0;
+	dp->_wdend = 0;
+	dp->_lnsize = 0;
+	dp->_line = NULL;
+	dp->_linep = NULL;
+	dp->_wdsize = 0;
+	dp->_word = 0;
+	dp->_wordp = 0;
+	dp->_spflg = 0;
+	dp->_seflg = 0;
+	dp->_ce = 0;
+	dp->_rj = 0;
+	dp->_nn = 0;
+	dp->_ndf = 0;
+	dp->_nms = 0;
+	dp->_ni = 0;
+	dp->_ul = 0;
+	dp->_cu = 0;
+	dp->_it = 0;
+	dp->_itc = 0;
+	dp->_itmac = 0;
+	dp->_pendnf = 0;
+	dp->_nc = 0;
+	dp->_un = 0;
+	dp->_un1 = -1;
+	dp->_nwd = 0;
+	dp->_hyoff = 0;
+	dp->_nb = 0;
+	dp->_spread = 0;
+	dp->_lnmod = 0;
+	dp->_hlc = 0;
+	dp->_cht = 0;
+	dp->_cdp = 0;
+	dp->_maxcht = 0;
+	dp->_maxcdp = 0;
+	setnel();
+}
+
+void
+evcline(struct env *dp, struct env *sp)
+{
+	if (dp == sp)
+		return;
+#ifndef	NROFF
+	dp->_lspnc = sp->_lspnc;
+	dp->_lsplow = sp->_lsplow;
+	dp->_lsphigh = sp->_lsphigh;
+	dp->_lspcur = sp->_lspcur;
+	dp->_lsplast = sp->_lsplast;
+	dp->_lshwid = sp->_lshwid;
+	dp->_lshlow = sp->_lshlow;
+	dp->_lshhigh = sp->_lshhigh;
+	dp->_lshcur = sp->_lshcur;
+#endif
+	dp->_fldcnt = sp->_fldcnt;
+	dp->_hyoff = sp->_hyoff;
+	dp->_hlc = sp->_hlc;
+	dp->_nel = sp->_nel;
+	dp->_adflg = sp->_adflg;
+	dp->_adspc = sp->_adspc;
+	dp->_wne = sp->_wne;
+	dp->_ne = sp->_ne;
+	dp->_nc = sp->_nc;
+	dp->_nwd = sp->_nwd;
+	dp->_un = sp->_un;
+	dp->_wch = sp->_wch;
+	dp->_rhang = sp->_rhang;
+	dp->_cht = sp->_cht;
+	dp->_cdp = sp->_cdp;
+	dp->_maxcht = sp->_maxcht;
+	dp->_maxcdp = sp->_maxcdp;
+	if (icf == 0)
+		dp->_ic = sp->_ic;
+	memcpy(dp->_hyptr, sp->_hyptr, NHYP * sizeof *sp->_hyptr);
+	dp->_line = malloc((dp->_lnsize = sp->_lnsize) * sizeof *dp->_line);
+	memcpy(dp->_line, sp->_line, sp->_lnsize * sizeof *sp->_line);
+	dp->_word = malloc((dp->_wdsize = sp->_wdsize) * sizeof *dp->_word);
+	memcpy(dp->_word, sp->_word, sp->_wdsize * sizeof *sp->_word);
+	dp->_linep = sp->_linep + (dp->_line - sp->_line);
+	dp->_wordp = sp->_wordp + (dp->_word - sp->_word);
+	dp->_wdend = sp->_wdend + (dp->_word - sp->_word);
+	dp->_wdstart = sp->_wdstart + (dp->_word - sp->_word);
 }
 
 void
@@ -977,6 +1153,7 @@ caseif(int x)
 	register int notflag, true;
 	tchar i, j;
 	enum warn w = warn;
+	int	flt = 0;
 
 	if (x == 3)
 		goto i2;
@@ -989,11 +1166,21 @@ caseif(int x)
 	skip(1);
 	if ((cbits(i = getch())) == '!') {
 		notflag = 1;
+		if (xflag && (cbits(i = getch())) == 'f')
+			flt = 1;
+		else
+			ch = i;
+	} else if (xflag && cbits(i) == 'f') {
+		flt = 1;
+		notflag = 0;
 	} else {
 		notflag = 0;
 		ch = i;
 	}
-	i = (int)atoi0();
+	if (flt)
+		i = atof0() > 0;
+	else
+		i = (int)atoi0();
 	if (!nonumb) {
 		if (i > 0)
 			true++;
@@ -1063,6 +1250,12 @@ i1:
 		iflist[ifx] = !true;
 	}
 	if (true) {
+		if (frame->loopf & LOOP_EVAL) {
+			if (nonumb)
+				goto i3;
+			frame->loopf &= ~LOOP_EVAL;
+			frame->loopf |= LOOP_NEXT;
+		}
 i2:
 		while ((cbits(i = getch())) == ' ')
 			;
@@ -1071,6 +1264,9 @@ i2:
 		ch = i;
 		nflush++;
 	} else {
+i3:
+		if (frame->loopf & LOOP_EVAL)
+			frame->loopf = LOOP_FREE;
 		copyf++;
 		falsef++;
 		eatblk(0);
@@ -1088,7 +1284,103 @@ casenop(void)
 void
 casereturn(void)
 {
+	flushi();
+	nflush++;
+	while (frame->loopf) {
+		frame->loopf = LOOP_FREE;
+		popi();
+	}
 	popi();
+}
+
+void
+casewhile(void)
+{
+	tchar	c;
+	int	k, level, nl;
+	filep	newip;
+
+	if (dip != d)
+		wbfl();
+	if ((nextb = alloc()) == 0) {
+		errprint("out of space");
+		edone(04);
+		return;
+	}
+	newip = offset = nextb;
+	wbf(mkxfunc(CC, 0));
+	wbf(XFUNC);	/* caseif */
+	wbf(' ');
+	copyf++, clonef++;
+	nl = level = 0;
+	do {
+		nlflg = 0;
+		k = cbits(c = getch());
+		switch (k) {
+		case LEFT:
+			level++;
+			break;
+		case RIGHT:
+			level--;
+			break;
+		}
+		wbf(c);
+	} while (!nlflg || level > 0);
+	if (level < 0 && warn & WARN_DELIM)
+		errprint("%d excess delimiter(s)", -level);
+	wbt(0);
+	copyf--, clonef--;
+	pushi(newip, LOOP);
+	offset = dip->op;
+}
+
+void
+casebreak(void)
+{
+	casecontinue(1);
+}
+
+void
+casecontinue(int _break)
+{
+	int	i, j;
+	struct s	*s;
+
+	noscale++;
+	if (skip(0) || (i = atoi()) <= 0 || nonumb)
+		i = 1;
+	noscale--;
+	j = 0;
+	for (s = frame; s != stk; s = s->pframe)
+		if (s->loopf && ++j >= i)
+			break;
+	if (j != i) {
+		if (i == 1) {
+			if (warn & WARN_RANGE)
+				errprint("%s outside loop", macname(lastrq));
+			return;
+		}
+		if (warn & WARN_RANGE)
+			errprint("%s: breaking out of %d current loop "
+					"levels but %d requested",
+				macname(lastrq), j, i);
+		_break = 1;
+		i = j;
+	}
+	flushi();
+	nflush++;
+	while (i > 1 || _break && i > 0) {
+		if (frame->loopf) {
+			frame->loopf = LOOP_FREE;
+			i--;
+		}
+		popi();
+	}
+	if (i == 1) {
+		while (frame->loopf == 0)
+			popi();
+		popi();
+	}
 }
 
 void
@@ -1301,15 +1593,37 @@ caseeo(void)
 
 
 void
+caseecs(void)
+{
+	ecs = eschar;
+}
+
+
+void
+caseecr(void)
+{
+	eschar = ecs;
+}
+
+
+void
 caseta(void)
 {
-	register int i;
+	int	T[NTAB];
+	register int i, j, n = 0;
 
 	tabtab[0] = nonumb = 0;
+	Tflg = 1;
 	for (i = 0; ((i < (NTAB - 1)) && !nonumb); i++) {
 		if (skip(0))
 			break;
 		tabtab[i] = max(hnumb(&tabtab[max(i-1,0)]), 0) & TABMASK;
+		if (nonumb && cbits(ch) == 'T') {
+			ch = 0;
+			nonumb = 0;
+			Tflg = 0;
+			goto T;
+		}
 		if (!nonumb) 
 			switch (cbits(ch)) {
 			case 'C':
@@ -1322,6 +1636,36 @@ caseta(void)
 				break;
 			}
 		nonumb = ch = 0;
+	}
+	Tflg = 0;
+	tabtab[i] = 0;
+	return;
+T:
+	for (j = 0; j < NTAB - 1 && !nonumb; j++) {
+		if (skip(0))
+			break;
+		T[j] = atoi() & TABMASK;
+		if (!nonumb)
+			switch (cbits(ch)) {
+			case 'C':
+				T[j] |= CTAB;
+				break;
+			case 'R':
+				T[j] |= RTAB;
+				break;
+			default:
+				break;
+			}
+		nonumb = ch = 0;
+	}
+	T[j] = 0;
+	while (i < NTAB - 1) {
+		if (T[j] == 0) {
+			j = 0;
+			n = (i ? tabtab[i-1] : 0) & TABMASK;
+		}
+		tabtab[i++] = n + (T[j] & TABMASK) | T[j] & ~TABMASK;
+		j++;
 	}
 	tabtab[i] = 0;
 }
@@ -1462,10 +1806,53 @@ casemc(void)
 }
 
 
+static void
+propchar(int *tp)
+{
+	int	c, *tpp;
+	tchar	i;
+
+	if (skip(0)) {
+		*tp = IMP;
+		return;
+	}
+	tpp = tp;
+	do {
+		while (!ismot(c = cbits(i = getch())) &&
+				c != ' ' && c != '\n')
+			if (tpp < &tp[NSENT])
+				*tpp++ = c;
+	} while (!skip(0));
+}
+
+void
+casesentchar(void)
+{
+	propchar(sentch);
+}
+
+void
+casetranschar(void)
+{
+	propchar(transch);
+}
+
+void
+casebreakchar(void)
+{
+	propchar(breakch);
+}
+
+void
+casenhychar(void)
+{
+	propchar(nhych);
+}
+
 void
 casemk(void)
 {
-	register int i, j;
+	register int i, j, k;
 
 	if (dip != d)
 		j = dip->dnl; 
@@ -1477,7 +1864,8 @@ casemk(void)
 	}
 	if ((i = getrq(1)) == 0)
 		return;
-	numtab[findr(i)].val = j;
+	numtab[k = findr(i)].val = j;
+	prwatchn(k);
 }
 
 
@@ -1524,6 +1912,7 @@ casenm(void)
 	i = inumb(&numtab[LN].val);
 	if (!nonumb)
 		numtab[LN].val = max(i, 0);
+	prwatchn(LN);
 	getnm(&ndf, 1);
 	getnm(&nms, 0);
 	getnm(&ni, 0);

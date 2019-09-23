@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n2.c	1.22 (gritter) 7/3/06
+ * Sccsid @(#)n2.c	1.28 (gritter) 8/9/06
  */
 
 /*
@@ -147,7 +147,10 @@ pchar(register tchar i)
 void
 pchar1(register tchar i)
 {
+	static int	_olt;
+	static tchar	_olp[5];
 	register int j;
+	filep	savip;
 	extern void ptout(tchar);
 
 	j = cbits(i);
@@ -172,6 +175,39 @@ pchar1(register tchar i)
 	if (tflg) {	/* transparent mode, undiverted */
 		outtp(i);
 		return;
+	}
+	if (cbits(i) == XFUNC) {
+		switch (fbits(i)) {
+		case OLT:
+			olt = realloc(olt, (nolt + 1) * sizeof *olt);
+			_olt = 1;
+			return;
+		case CHAR:
+#ifndef	NROFF
+			if (!ascii)
+				break;
+#endif	/* !NROFF */
+			savip = ip;
+			ip = charout[sbits(i)].op;
+			app++;
+			fmtchar++;
+			while ((i = rbf()) != 0 && cbits(i) != '\n' &&
+					cbits(i) != FLSS)
+				pchar(i);
+			fmtchar--;
+			app--;
+			ip = savip;
+			return;
+		}
+	}
+	if (cbits(i) == 'x')
+		fmtchar = fmtchar;
+	if (_olt) {
+		_olp[_olt - 1] = i;
+		if (_olt++ < NSRQ)
+			return;
+		olt[nolt++] = fetchrq(_olp);
+		_olt = 0;
 	}
 #ifndef NROFF
 	if (ascii)
@@ -204,6 +240,7 @@ outmb(tchar i)
 	wchar_t	wc;
 	char	mb[MB_LEN_MAX+1];
 	int	n;
+	int	f;
 #endif	/* EUC */
 
 	if (j < 0177) {
@@ -211,7 +248,13 @@ outmb(tchar i)
 		return;
 	}
 #ifdef	EUC
-	wc = tr2un(j, fbits(i));
+	if (iscopy(i))
+		wc = cbits(i);
+	else {
+		if ((f = fbits(i)) == 0)
+			f = font;
+		wc = tr2un(j, f);
+	}
 	if (wc != -1 && (n = wctomb(mb, wc)) > 0) {
 		mb[n] = 0;
 		oputs(mb);
@@ -236,6 +279,8 @@ outascii (	/* print i in best-guess ascii */
 
 	if (j == FILLER)
 		return;
+	if (isadjspc(i))
+		return;
 	if (ismot(i)) {
 		oput(' ');
 		return;
@@ -244,6 +289,8 @@ outascii (	/* print i in best-guess ascii */
 		oput(j);
 		return;
 	}
+	if (f == 0)
+		f = xfont;
 	if (j == DRAWFCN)
 		oputs("\\D");
 	else if (j == HYPHEN || j == MINUS)
@@ -252,7 +299,7 @@ outascii (	/* print i in best-guess ascii */
 		oputs("\\X");
 	else if (islig(i) && lgrevtab && lgrevtab[f] && lgrevtab[f][j]) {
 		for (k = 0; lgrevtab[f][j][k]; k++)
-			outmb(i & SFMASK | lgrevtab[f][j][k]);
+			outmb(sfmask(i) | lgrevtab[f][j][k]);
 	} else if (j == WORDSP)
 		;	/* nothing at all */
 	else if (j > 0177)
@@ -374,8 +421,7 @@ done1(int x)
 		flusho();
 		done3(0);
 	} else {
-		if (!gflag)
-			pttrailer();
+		pttrailer();
 		done2(0);
 	}
 }
