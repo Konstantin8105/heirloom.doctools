@@ -1,3 +1,43 @@
+Release 050920
+* troff: The handling of locale-dependent characters in copy mode has been
+  fixed. Previously when such a character was given e.g. in an argument to
+  a macro, it was chosen from the font in effect at the time when the macro
+  call was read, instead of the one in effect at the time when the macro
+  was executed.
+* troff: The lookup of kerning pairs from the predefined tables has been
+  fixed. It previously located inappropriate pairs in some cases.
+* troff: Is now more resistent against invalid AFM files whose character
+  count following the "StartCharMetrics" keyword is too large. Previously,
+  no characters outside the default troff character set were accessible
+  with such files.
+* dpost: When an AFM-based font was mounted more than once in troff,
+  localized input characters are now printed properly in all positions.
+  Previously, localized characters were only printed properly on the
+  position that was used first in the document.
+* troff: Several requests for handling fonts did not recognize font names
+  with more than two characters correctly with the "-x" option; they have
+  been fixed.
+* troff: The characters "\(aa", "\(ga", """, "\-", "<", ">", "@", "\", "^",
+  and "~" are now always chosen from the Times Roman special font with
+  AFM-based devices too, as it has been the case with other devices. To get
+  the character from another PostScript font, use the PostScript character
+  name, e.g. "\[less]". In contrast, "\(12", "\(14", and "\(34" are now
+  chosen from the current font, as it has been the case with historic C/A/T
+  output, but not with -Tpost.
+* [nt]roff: The "-mm" macros no longer print "Sun Microsystems" in calls to
+  ".AU" macros and the like.
+* troff: The "\S" escape sequence has been fixed; its use could lead to core
+  dumps with the previous release.
+* troff: The procedure to determine whether to set the "2" value of the
+  "\n(ct" register with AFM fonts should now work properly. This fixes the
+  position of accents above lower-case characters with eqn.
+* dpost: The maximum number of fonts that can appear in a single PostScript
+  output file has been raised to 1536.
+* eqn: All Greek upper-case letters, i.e. "ALPHA", "BETA", etc. are now
+  recognized.
+* [nt]roff: The escape sequence \U'n' sets the character at Unicode position
+  "U+n", where "n" is a hexadecimal number.
+
 Release 050915
 * troff: Can now directly handle .afm/.pfb/.pfa files (i.e. PostScript
   Type 1 fonts) to select fonts. The ".fp" request has been extended

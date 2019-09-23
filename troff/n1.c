@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n1.c	1.37 (gritter) 9/11/05
+ * Sccsid @(#)n1.c	1.41 (gritter) 9/18/05
  */
 
 /*
@@ -955,6 +955,12 @@ gx:
 		if ((i = setch(k)) == 0)
 			goto g0;
 		return(i);
+	case 'U':	/* Unicode character */
+		if (xflag == 0)
+			goto dfl;
+		if ((i = setuc()) == 0)
+			goto g0;
+		return(i);
 	case 'E':	/* printable version of current eschar */
 		if (xflag == 0)
 			goto dfl;
@@ -1121,21 +1127,18 @@ g2:
 			mbstate_t	state;
 			memset(&state, 0, sizeof state);
 			if ((n = mbrtowc(&twc, mbbuf1, mbbuf1p-mbbuf1, &state))
-					==(size_t)-1) {
+					==(size_t)-1 ||
+					twc & ~(wchar_t)0x1FFFFF) {
 				mbbuf1p = mbbuf1;
 				*mbbuf1p = 0;
 				i &= 0177;
 			} else if (n == (size_t)-2)
 				goto again;
 			else {
-				int	f;
 				mbbuf1p = mbbuf1;
 				*mbbuf1p = 0;
-				if ((i = un2tr(twc, &f)) != 0) {
-					i |= chbits & ~FMASK;
-					setfbits(i, f);
-					goto g4;
-				}
+				i = twc | COPYBIT;
+				goto g4;
 			}
 		} else {
 			mbbuf1p = mbbuf1;
@@ -1195,6 +1198,8 @@ g2:
 		goto again;
 	}
 g4:
+	if (!copyf && iscopy(i))
+		i = setuc0(cbits(i));
 #ifndef EUC
 	if (copyf == 0 && (i & ~BYTEMASK) == 0)
 #else
@@ -1426,6 +1431,28 @@ getname(void)
 	ch = i;
 	lgf--;
 	return(nextf[0]);
+}
+
+tchar
+setuc(void)
+{
+	char	c, d, b[NC], *bp;
+	int	i = 0, n;
+
+	d = getach();
+	do {
+		c = getach();
+		if (i >= sizeof b)
+			return 0;
+		b[i++] = c;
+	} while (c && c != d);
+	b[--i] = 0;
+	if (i == 0 || c != d)
+		return 0;
+	n = strtol(b, &bp, 16);
+	if (n == 0 || *bp != '\0')
+		return 0;
+	return setuc0(n);
 }
 
 

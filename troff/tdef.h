@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)tdef.h	1.43 (gritter) 9/11/05
+ * Sccsid @(#)tdef.h	1.47 (gritter) 9/18/05
  */
 
 /*
@@ -195,33 +195,29 @@ extern	int	NCHARS;	/* maximum size of troff character set */
 	Internally, every character is carried around as
 	a 64 bit cookie, called a "tchar" (typedef long long).
 	Bits are numbered 63..0 from left to right.
-	If bit 15 is 1, the character is motion, with
-		if bit 16 it's vertical motion
-		if bit 17 it's negative motion
-	If bit 15 is 0, the character is a real character.
+	If bit 21 is 1, the character is motion, with
+		if bit 22 it's vertical motion
+		if bit 23 it's negative motion
+	If bit 21 is 0, the character is a real character.
 		if bit 63	zero motion
 		bits 62..40	size
 		bits 39..32	font
-ifndef EUC
-		bit 8		absolute char number in 7..0
-	This implies at most 256-32 characters in a single font,
-	which is going to be a problem somewhere
-else
+if defined (EUC) && defined (NROFF)
 		bits 14,13	identifier for the colunm of print of character.
 		bits 12,11	multibyte position identifier
 	Currently, this applies only to nroff.
-endif EUC
+endif EUC && NROFF
 */
 
 /* in the following, "LL" should really be a tchar, but ... */
 
-#define	MOT	(01LL<<15)	/* motion character indicator */
-#define	VMOT	(01LL<<16)	/* vert motion bit */
-#define	NMOT	(01LL<<17)	/* negative motion indicator*/
-#define	BMBITS	077777LL	/* basic absolute motion bits */
-#define	XMBITS	0x7FFC0000LL	/* extended absolute motion bits */
+#define	MOT	(01LL<<21)	/* motion character indicator */
+#define	VMOT	(01LL<<22)	/* vert motion bit */
+#define	NMOT	(01LL<<23)	/* negative motion indicator*/
+#define	BMBITS	0x001FFFFFLL	/* basic absolute motion bits */
+#define	XMBITS	0x03000000LL	/* extended absolute motion bits */
 #define	XMSHIFT	3		/* extended absolute motion shift */
-#define	MAXMOT	0x0FFFFFFFLL	/* bad way to write this!!! */
+#define	MAXMOT	0x007FFFFFLL	/* bad way to write this!!! */
 
 #define	ismot(n)	((n) & MOT)
 #define	isvmot(n)	((n) & VMOT)	/* must have tested MOT previously */
@@ -233,7 +229,8 @@ endif EUC
 #define	iszbit(n)	((n) & ZBIT)
 #define	BLBIT		(01ULL << 31)	/* optional break-line char */
 #define	isblbit(n)	((n) & BLBIT)
-#define	ABSCHAR		0400	/* absolute char number in this font */
+#define	COPYBIT		(01ULL << 30)	/* wide character in copy mode */
+#define	iscopy(n)	((n) & COPYBIT)
 
 #define	SMASK		(037777777LL << 40)
 #define	FMASK		(0377LL << 32)
@@ -241,13 +238,12 @@ endif EUC
 #define	sbits(n)	(unsigned)(((n) >> 40) & 037777777)
 #define	fbits(n)	(((n) >> 32) & 0377)
 #define	sfbits(n)	(unsigned)(037777777777UL & (((n) & SFMASK) >> 32))
-#define	cbits(n)	(unsigned)(0177777 & (n))	/* isolate bottom 16 bits  */
-#define	absbits(n)	(cbits(n) & ~ABSCHAR)
+#define	cbits(n)	(unsigned)(0x003FFFFFLL & (n))	/* isolate bottom 22 bits  */
 
 #define	setsbits(n,s)	n = (n & ~SMASK) | (tchar)(s) << 40
 #define	setfbits(n,f)	n = (n & ~FMASK) | (tchar)(f) << 32
 #define	setsfbits(n,sf)	n = (n & ~SFMASK) | (tchar)(sf) << 32
-#define	setcbits(n,c)	n = (n & ~077777LL | (c))	/* set character bits */
+#define	setcbits(n,c)	n = (n & ~0x001FFFFFLL | (c))	/* set character bits */
 
 #define	BYTEMASK	0377
 #define	BYTE	8
@@ -692,6 +688,7 @@ void casepm(void);
 void stackdump(void);
 char *macname(int);
 int maybemore(int, int);
+tchar setuc(void);
 /* n4.c */
 void *grownumtab(void);
 void setn(void);

@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)dpost.c	1.80 (gritter) 9/13/05
+ * Sccsid @(#)dpost.c	1.83 (gritter) 9/20/05
  */
 
 /*
@@ -339,7 +339,7 @@ int		eflag;
 
 char		seenfonts[MAXINTERNAL+1];
 int		docfonts = 0;
-struct afmtab	*afmfonts[MAXINTERNAL+1];
+struct afmtab	**afmfonts;
 int		afmcount = 0;
 
 
@@ -1441,9 +1441,13 @@ devcntrl(
 		/*
 		 * This used to be "strcpy(devname, realdev);" but
 		 * it does not work when DESC is a text file because
-		 * the fonts are in a different directory.
+		 * the fonts are in a different directory. As an
+		 * exception, -Taps output is processed old-style.
 		 */
-		realdev = devname;
+		if (strcmp(devname, "aps"))
+			realdev = devname;
+		else
+			strcpy(devname, realdev);
 		break;
 
 	case 't':			/* trailer */
@@ -1699,6 +1703,7 @@ loadfont (
 		goto fail;
 	}
 	free(contents);
+	afmfonts = realloc(afmfonts, (afmcount+1) * sizeof *afmfonts);
 	afmfonts[afmcount] = a;
 	snprintf(a->Font.intname, sizeof a->Font.intname,
 			"%d", dev.nfonts + ++afmcount);
@@ -2739,7 +2744,8 @@ t_sf(void)
 		t_dosupply(fontname[font].afm->fontname);
 		fontname[font].afmmap = printencvector(fontname[font].afm);
 	    }
-	}
+	} else if (fontname[font].afm && fontname[font].afmmap == NULL)
+		fontname[font].afmmap = printencvector(fontname[font].afm);
 	seenfonts[fnum] = 1;
     }	/* End if */
 

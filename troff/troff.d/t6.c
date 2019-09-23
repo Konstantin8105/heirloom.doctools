@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)t6.c	1.83 (gritter) 9/13/05
+ * Sccsid @(#)t6.c	1.88 (gritter) 9/18/05
  */
 
 /*
@@ -349,7 +349,7 @@ findchar(tchar c)
 	f = fbits(c);
 	c = cbits(c);
 	i = c - 32;
-	if (c != ' ' && i < nchtab + 128 - 32 && fitab[f][i] == 0) {
+	if (c != ' ' && i > 0 && i < nchtab + 128 - 32 && fitab[f][i] == 0) {
 		int	ii, jj;
 		if (fallbacktab[f]) {
 			for (jj = 0; fallbacktab[f][jj] != 0; jj++) {
@@ -404,14 +404,16 @@ getkw(tchar c, tchar d)
 		return 0;
 	if (sbits(c) != sbits(d))
 		return 0;
-	if ((f = fbits(c)) == 0)
-		f = xfont;
-	if (cstab[f])
-		return 0;
-	if ((s = sbits(c)) == 0)
+	f = fbits(c);
+	if ((s = sbits(c)) == 0) {
 		s = xpts;
+		if (f == 0)
+			f = xfont;
+	}
 	i = cbits(c);
 	j = cbits(d);
+	if (i == SLANT || j == SLANT || cstab[f])
+		return 0;
 	k = 0;
 	if (i >= 32 && j >= 32) {
 		if (ktable != NULL && (kp = klook(c, d)) != NULL)
@@ -950,7 +952,8 @@ caseflig(void)
 	int	i, j;
 
 	skip();
-	i = getrq();
+	if ((i = getrq()) >= 256)
+		i = maybemore(i, 0);
 	if ((j = findft(i)) < 0 || skip())
 		return;
 	fontbase[j]->ligfont = atoi() & 037;
@@ -1066,7 +1069,7 @@ setfp(int pos, int f, char *truename)	/* mount font f at position pos[0...nfonts
 	if (realpage && ap == NULL)
 		ptfpcmd(pos, shortname);
 	if (pos == 0)
-		ch = (tchar) FONTPOS | (tchar) f << 16;
+		ch = (tchar) FONTPOS | (tchar) f << 22;
 	return(pos);
 }
 
@@ -1077,7 +1080,11 @@ casecs(void)
 
 	noscale++;
 	skip();
-	if (!(i = getrq()) || (i = findft(i)) < 0)
+	if (!(i = getrq()))
+		goto rtn;
+	if (i >= 256)
+		i = maybemore(i, 0);
+	if ((i = findft(i)) < 0)
 		goto rtn;
 	skip();
 	cstab[i] = atoi();
@@ -1100,7 +1107,9 @@ casebd(void)
 	zapwcache(0);
 	k = 0;
 bd0:
-	if (skip() || !(i = getrq()) || (j = findft(i)) == -1) {
+	if (skip() || !(i = getrq()) ||
+			(i = i >= 256 ? maybemore(i, 0) : i,
+			(j = findft(i)) == -1)) {
 		if (k)
 			goto bd1;
 		else 
@@ -1368,7 +1377,8 @@ casetrack(void)
 	int	i, j, s1, n1, s2, n2;
 
 	skip();
-	i = getrq();
+	if ((i = getrq()) >= 256)
+		i = maybemore(i, 0);
 	if ((j = findft(i)) < 0)
 		return;
 	s1 = tracknum();
@@ -1397,12 +1407,14 @@ casefallback(void)
 	int	i, j, n = 0;
 
 	skip();
-	i = getrq();
+	if ((i = getrq()) >= 256)
+		i = maybemore(i, 0);
 	if ((j = findft(i)) < 0)
 		return;
 	do {
 		skip();
-		i = getrq();
+		if ((i = getrq()) >= 256)
+			i = maybemore(i, 0);
 		fb = realloc(fb, (n+2) * sizeof *fb);
 		fb[n++] = i;
 	} while (i);
@@ -1416,7 +1428,8 @@ casehidechar(void)
 	tchar	k;
 
 	skip();
-	i = getrq();
+	if ((i = getrq()) >= 256)
+		i = maybemore(i, 0);
 	if ((j = findft(i)) < 0)
 		return;
 	while ((i = cbits(k = getch())) != '\n') {
@@ -1440,7 +1453,8 @@ casefzoom(void)
 	float	f;
 
 	skip();
-	i = getrq();
+	if ((i = getrq()) >= 256)
+		i = maybemore(i, 0);
 	if ((j = findft(i)) < 0)
 		return;
 	skip();
@@ -1563,7 +1577,8 @@ hang(int **tp)
 	tchar	k;
 
 	skip();
-	i = getrq();
+	if ((i = getrq()) >= 256)
+		i = maybemore(i, 0);
 	if ((j = findft(i)) < 0)
 		return;
 	font = font1 = j;
@@ -1604,7 +1619,8 @@ casekernpair(void)
 	tchar	c, d;
 
 	skip();
-	i = getrq();
+	if ((i = getrq()) >= 256)
+		i = maybemore(i, 0);
 	if ((f = findft(i)) < 0)
 		return;
 	font = font1 = f;
@@ -1614,7 +1630,8 @@ casekernpair(void)
 	c = getch();
 	if (fbits(c) != f || skip())
 		goto done;
-	i = getrq();
+	if ((i = getrq()) >= 256)
+		i = maybemore(i, 0);
 	if ((g = findft(i)) < 0)
 		goto done;
 	font = font1 = g;
@@ -1653,7 +1670,8 @@ kernsingle(int **tp)
 	tchar	c;
 
 	skip();
-	i = getrq();
+	if ((i = getrq()) >= 256)
+		i = maybemore(i, 0);
 	if ((f = findft(i)) < 0)
 		return;
 	font = font1 = f;
@@ -1695,11 +1713,47 @@ un2tr(int c, int *fp)
 {
 	int	i, j;
 
-	for (i = 0; unimap[i].psc; i++)
-		if (unimap[i].code == c)
-			if ((j = postchar(unimap[i].psc, fp)) != 0)
-				return j;
-	return 0;
+	switch (c) {
+	case 0x00A0:
+		*fp = xfont;
+		return UNPAD;
+	case 0x00AD:
+		*fp = xfont;
+		return ohc;
+	case 0x2002:
+		return makem((int)(EM)/2);
+	case 0x2003:
+		return makem((int)EM);
+	case 0x2004:
+		return makem((int)EM/3);
+	case 0x2005:
+		return makem((int)EM/4);
+	case 0x2006:
+		return makem((int)EM/6);
+	case 0x2007:
+		return makem(width('0' | chbits));
+	case 0x2008:
+		return makem(width('.' | chbits));
+	case 0x2009:
+		return makem((int)EM/6);
+	case 0x200A:
+		return makem((int)EM/12);
+	case 0x2010:
+		*fp = xfont;
+		return '-';
+	case 0x2027:
+		*fp = xfont;
+		return OHC | BLBIT;
+	case 0x2060:
+		*fp = xfont;
+		return FILLER;
+	default:
+		for (i = 0; unimap[i].psc; i++)
+			if (unimap[i].code == c)
+				if ((j = postchar(unimap[i].psc, fp)) != 0)
+					return j;
+		return 0;
+	}
 }
 
 int
@@ -1723,6 +1777,19 @@ tr2un(tchar i, int f)
 					return unimap[c].code;
 	}
 	return -1;
+}
+
+tchar
+setuc0(int n)
+{
+	int	f;
+	tchar	c;
+
+	if ((c = un2tr(n, &f)) != 0 && !ismot(c)) {
+		c |= chbits & ~FMASK;
+		setfbits(c, f);
+	}
+	return c;
 }
 
 int

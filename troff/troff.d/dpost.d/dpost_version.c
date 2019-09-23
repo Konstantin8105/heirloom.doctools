@@ -5,16 +5,16 @@
 #else
 #define	USED
 #endif
-static const char sccsid[] USED = "@(#)dpost.sl	4.1 (gritter) 9/15/05";
-const char creator[] = "Heirloom Documentation Tools - dpost 4.1 (gritter) 9/15/05";
+static const char sccsid[] USED = "@(#)dpost.sl	4.10 (gritter) 9/20/05";
+const char creator[] = "Heirloom Documentation Tools - dpost 4.10 (gritter) 9/20/05";
 /* SLIST */
 /*
 asciitype.c:	Sccsid @(#)asciitype.c	1.4 (gritter) 4/17/03	
 asciitype.h:	Sccsid @(#)asciitype.h	1.6 (gritter) 9/9/05	
 color.c: * Sccsid @(#)color.c	1.3 (gritter) 8/9/05
 comments.h: * Sccsid @(#)comments.h	1.5 (gritter) 8/23/05
-dpost.c: * Sccsid @(#)dpost.c	1.80 (gritter) 9/13/05
-dpost.h: * Sccsid @(#)dpost.h	1.4 (gritter) 9/8/05
+dpost.c: * Sccsid @(#)dpost.c	1.83 (gritter) 9/20/05
+dpost.h: * Sccsid @(#)dpost.h	1.5 (gritter) 9/20/05
 dpost_afm.c: * Sccsid @(#)dpost_afm.c	1.1 (gritter) 8/20/05
 dpost_draw.c: * Sccsid @(#)draw.c	1.3 (gritter) 8/9/05
 dpost_makedev.c: * Sccsid @(#)dpost_makedev.c	1.1 (gritter) 9/4/05
@@ -28,8 +28,8 @@ pictures.c: * Sccsid @(#)pictures.c	1.4 (gritter) 9/9/05
 ps_include.c: * Sccsid @(#)ps_include.c	1.5 (gritter) 8/13/05
 request.c: * Sccsid @(#)request.c	1.3 (gritter) 8/9/05
 request.h: * Sccsid @(#)request.h	1.3 (gritter) 8/9/05
-../afm.c: * Sccsid @(#)afm.c	1.23 (gritter) 9/11/05
-../afm.h: * Sccsid @(#)afm.h	1.10 (gritter) 9/11/05
+../afm.c: * Sccsid @(#)afm.c	1.30 (gritter) 9/20/05
+../afm.h: * Sccsid @(#)afm.h	1.11 (gritter) 9/20/05
 ../makedev.c: * Sccsid @(#)makedev.c	1.10 (gritter) 9/8/05
 ../dev.h: * Sccsid @(#)dev.h	1.7 (gritter) 9/8/05
 */
