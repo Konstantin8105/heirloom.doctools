@@ -23,7 +23,7 @@
 /*
  * Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)afm.h	1.24 (gritter) 2/17/06
+ * Sccsid @(#)afm.h	1.28 (gritter) 3/16/06
  */
 
 #ifndef	TROFF_AFM_H
@@ -39,10 +39,12 @@ enum spec {
 	SPEC_S		= 02000
 };
 
-struct kernpair {
-	unsigned short	ch1;
-	unsigned short	ch2;
-	short	k;
+#define	NKERNPAIRS	46
+struct kernpairs {
+	struct kernpairs	*next;
+	int	cnt;
+	unsigned short	ch2[NKERNPAIRS];
+	short	k[NKERNPAIRS];
 };
 
 struct namecache {
@@ -81,18 +83,19 @@ extern struct afmtab {
 	int	*encmap;
 	struct namecache	*namecache;
 	int	nameprime;
-	struct kernpair	*kernpairs;
+	struct kernpairs	*kernpairs;
 	struct charpair	*gid2tr;
-	int	nkernpairs;
-	int	kernprime;
 	int	nspace;
 	struct feature	**features;
 	int	rq;
 	int	lineno;
 	int	nchars;
+	int	fichars;
 	int	capheight;
 	int	xheight;
 	int	isFixedPitch;
+	int	ascender;
+	int	descender;
 	enum spec	spec;
 	enum {
 		TYPE_AFM,
@@ -120,7 +123,7 @@ extern	void	afmremap(struct afmtab *);
 extern	int	afmmapname(const char *, enum spec);
 extern	void	afmaddchar(struct afmtab *, int, int, int, int, int[],
 			char *, enum spec, int);
-extern	struct kernpair	*afmkernlook(struct afmtab *, int, int);
+extern void	afmaddkernpair(struct afmtab *, int, int, int);
 extern	int	nextprime(int n);
 extern	unsigned	pjw(const char *);
 extern	char	*afmencodepath(const char *);
@@ -130,5 +133,9 @@ extern	char	*afmdecodepath(const char *);
 extern	int	otfcff(const char *, char *, size_t, size_t *, size_t *);
 extern	int	otft42(char *, char *, char *, size_t, FILE *);
 #endif
+
+extern struct dev	dev;
+
+#define	_unitconv(i)	(unitsPerEm * 72 == dev.res ? (i) : unitconv(i))
 
 #endif	/* !TROFF_AFM_H */

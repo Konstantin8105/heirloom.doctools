@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)n5.c	1.36 (gritter) 2/17/06
+ * Sccsid @(#)n5.c	1.39 (gritter) 3/13/06
  */
 
 /*
@@ -463,7 +463,6 @@ casevpt(void)
 	if (skip(1))
 		return;
 	vpt = atoi() != 0;
-	setnr(".vpt", vpt, 0);
 }
 
 
@@ -1399,9 +1398,9 @@ void
 caseuf(void)
 {
 	register int i, j;
-	extern int findft(int);
+	extern int findft(int, int);
 
-	if (skip(0) || !(i = getrq()) || i == 'S' ||  (j = findft(i))  == -1)
+	if (skip(0) || !(i = getrq()) || i == 'S' ||  (j = findft(i, 1))  == -1)
 		ulfont = ULFONT; /*default underline position*/
 	else 
 		ulfont = j;
@@ -1440,7 +1439,7 @@ casemc(void)
 	if (icf > 1)
 		ic = 0;
 	icf = 0;
-	if (skip(1))
+	if (skip(0))
 		return;
 	ic = getch();
 	icf = 1;

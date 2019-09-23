@@ -23,7 +23,7 @@
 /*
  * Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)otf.c	1.39 (gritter) 2/17/06
+ * Sccsid @(#)otf.c	1.52 (gritter) 3/17/06
  */
 
 #include <stdio.h>
@@ -60,6 +60,7 @@ short	indexToLocFormat;
 static struct afmtab	*a;
 static int	nc;
 static int	fsType;
+static int	WeightClass;
 static int	isFixedPitch;
 static int	minMemType42;
 static int	maxMemType42;
@@ -1530,7 +1531,9 @@ error(const char *fmt, ...)
 	longjmp(breakpoint, 1);
 }
 
-static uint16_t
+#define _pbe16(cp) ((uint16_t)((cp)[1]&0377) + ((uint16_t)((cp)[0]&0377) << 8))
+
+static uint32_t
 pbe16(const char *cp)
 {
 	return (uint16_t)(cp[1]&0377) +
@@ -1563,7 +1566,7 @@ pbeXX(const char *cp, int n)
 	case 1:
 		return *cp&0377;
 	case 2:
-		return pbe16(cp);
+		return _pbe16(cp);
 	case 3:
 		return pbe24(cp);
 	case 4:
@@ -2318,14 +2321,26 @@ get_OS_2(void)
 	o = table_directories[pos_OS_2].offset;
 	if (pbe16(&contents[o]) > 0x0003)
 		goto dfl;
+	if (table_directories[pos_OS_2].length >= 6)
+		WeightClass = pbe16(&contents[o+4]);
+	else
+		WeightClass = -1;
 	if (table_directories[pos_OS_2].length >= 10)
 		fsType = pbe16(&contents[o+8]);
 	else
 		fsType = -1;
-	if (table_directories[pos_OS_2].length >= 98) {
+	if (table_directories[pos_OS_2].length >= 72) {
 		if (a) {
-			a->xheight = pbe16(&contents[o + 94]);
-			a->capheight = pbe16(&contents[o + 96]);
+			a->ascender =
+				_unitconv((int16_t)pbe16(&contents[o + 68]));
+			a->descender =
+				_unitconv((int16_t)pbe16(&contents[o + 70]));
+		}
+	}
+	if (table_directories[pos_OS_2].length >= 92) {
+		if (a) {
+			a->xheight = _unitconv(pbe16(&contents[o + 88]));
+			a->capheight = _unitconv(pbe16(&contents[o + 90]));
 		}
 	} else {
 	dfl:	if (a) {
@@ -2445,7 +2460,7 @@ open_class(int o)
 	}
 }
 
-static void
+static inline void
 get_class(struct class *cp, int *gp, int *vp)
 {
 	int	Start, End;
@@ -2454,14 +2469,15 @@ get_class(struct class *cp, int *gp, int *vp)
 	case 1:
 		if (cp->cnt < cp->GlyphCount) {
 			*gp = cp->StartGlyph + cp->cnt;
-			*vp = pbe16(&contents[cp->offset+6+2*cp->cnt++]);
+			*vp = _pbe16(&contents[cp->offset+6+2*cp->cnt]);
+			cp->cnt++;
 			return;
 		}
 		goto dfl;
 	case 2:
 		while (cp->cnt < cp->ClassRangeCount) {
-			Start = pbe16(&contents[cp->offset+4+6*cp->cnt]);
-			End = pbe16(&contents[cp->offset+4+6*cp->cnt+2]);
+			Start = _pbe16(&contents[cp->offset+4+6*cp->cnt]);
+			End = _pbe16(&contents[cp->offset+4+6*cp->cnt+2]);
 			if (cp->gid > End) {
 				cp->gid = -1;
 				cp->cnt++;
@@ -2470,7 +2486,7 @@ get_class(struct class *cp, int *gp, int *vp)
 			if (cp->gid < Start)
 				cp->gid = Start;
 			*gp = cp->gid++;
-			*vp = pbe16(&contents[cp->offset+4+6*cp->cnt+4]);
+			*vp = _pbe16(&contents[cp->offset+4+6*cp->cnt+4]);
 			return;
 		}
 		/*FALLTHRU*/
@@ -2501,85 +2517,76 @@ get_value_size(int ValueFormat1, int ValueFormat2)
 	return sz;
 }
 
-static int
+static inline int
 get_x_adj(int ValueFormat1, int o)
 {
 	int	x = 0;
 	int	z = 0;
 
 	if (ValueFormat1 & 0x0001) {
-		x += (int16_t)pbe16(&contents[o+z]);
+		x += (int16_t)_pbe16(&contents[o+z]);
 		z += 2;
 	}
 	if (ValueFormat1 & 0x0002)
 		z += 2;
 	if (ValueFormat1 & 0x0004) {
-		x += (int16_t)pbe16(&contents[o+z]);
+		x += (int16_t)_pbe16(&contents[o+z]);
 		z += 2;
 	}
 	return x;
 }
 
-static void	kernpair(int, int, int);
+static void	kerninit(void);
 static void	kernfinish(void);
 
-static int	nkerntmp;
+static int	got_kern;
 
-#ifndef	DUMP
-static struct kernpair	*kerntmp;
-static int	akerntmp;
+#ifdef	DUMP
+static void	kernpair(int, int, int);
+#else	/* !DUMP */
 
-static void
-kernpair1(int ch1, int ch2, int k)
-{
-	if (nkerntmp >= akerntmp) {
-		if (akerntmp == 0)
-			akerntmp = 4096;
-		else
-			akerntmp *= 2;
-		kerntmp = realloc(kerntmp, akerntmp * sizeof *kerntmp);
-	}
-	kerntmp[nkerntmp].ch1 = ch1;
-	kerntmp[nkerntmp].ch2 = ch2;
-	kerntmp[nkerntmp].k = k;
-	nkerntmp++;
-}
+static struct namecache	**nametable;
 
 static void
-kernpair(int first, int second, int x)
+kerninit(void)
 {
 	char	*cp;
-	struct namecache	*np1, *np2;
-	int	i, j;
+	int	i;
 
-	if ((cp = GID2SID(first)) == NULL)
+	got_kern = 0;
+	nametable = calloc(nc, sizeof *nametable);
+	for (i = 0; i < nc; i++)
+		if ((cp = GID2SID(i)) != NULL)
+			nametable[i] = afmnamelook(a, cp);
+}
+
+#define	GID2name(gid)	((gid) < 0 || (gid) >= nc ? NULL : nametable[gid])
+
+static inline void
+kernpair(int first, int second, int x)
+{
+	struct namecache	*np1, *np2;
+
+	if (x == 0 || (x = _unitconv(x)) == 0)
 		return;
-	np1 = afmnamelook(a, cp);
-	if ((cp = GID2SID(second)) == NULL)
+	np1 = GID2name(first);
+	np2 = GID2name(second);
+	if (np1 == NULL || np2 == NULL)
 		return;
-	np2 = afmnamelook(a, cp);
-	x = unitconv(x);
-	for (i = 0; i < 2; i++)
-		if (np1->fival[i] >= 0)
-			for (j = 0; j < 2; j++)
-				if (np2->fival[j] >= 0)
-					kernpair1(np1->fival[i],
-							np2->fival[j], x);
+	if (np1->fival[0] >= 0 && np2->fival[0] >= 0)
+		afmaddkernpair(a, np1->fival[0], np2->fival[0], x);
+	if (np1->fival[0] >= 0 && np2->fival[1] >= 0)
+		afmaddkernpair(a, np1->fival[0], np2->fival[1], x);
+	if (np1->fival[1] >= 0 && np2->fival[0] >= 0)
+		afmaddkernpair(a, np1->fival[1], np2->fival[0], x);
+	if (np1->fival[1] >= 0 && np2->fival[1] >= 0)
+		afmaddkernpair(a, np1->fival[1], np2->fival[1], x);
 }
 
 static void
 kernfinish(void)
 {
-	int	i;
-
-	a->nkernpairs = nkerntmp;
-	a->kernprime = nextprime(a->nkernpairs);
-	a->kernpairs = calloc(a->kernprime, sizeof *a->kernpairs);
-	for (i = 0; i < nkerntmp; i++)
-		*afmkernlook(a, kerntmp[i].ch1, kerntmp[i].ch2) = kerntmp[i];
-	nkerntmp = akerntmp = 0;
-	free(kerntmp);
-	kerntmp = NULL;
+	free(nametable);
 }
 #endif	/* !DUMP */
 
@@ -2589,7 +2596,7 @@ get_PairValueRecord(int first, int ValueFormat1, int ValueFormat2, int o)
 	int	second;
 	int	x;
 
-	second = pbe16(&contents[o]);
+	second = _pbe16(&contents[o]);
 	x = get_x_adj(ValueFormat1, o+2);
 	kernpair(first, second, x);
 }
@@ -2601,7 +2608,7 @@ get_PairSet(int first, int ValueFormat1, int ValueFormat2, int o)
 	int	i;
 	int	sz;
 
-	PairValueCount = pbe16(&contents[o]);
+	PairValueCount = _pbe16(&contents[o]);
 	sz = get_value_size(ValueFormat1, ValueFormat2);
 	for (i = 0; i < PairValueCount; i++)
 		get_PairValueRecord(first, ValueFormat1, ValueFormat2,
@@ -2637,9 +2644,10 @@ get_PairPosFormat2(int o)
 	int	ValueFormat1, ValueFormat2;
 	int	ClassDef1, ClassDef2;
 	int	Class1Count, Class2Count;
-	int	g1, g2;
-	int	v1, v2;
+	int	g, *g2 = NULL;
+	int	v, *v2 = NULL;
 	int	sz;
+	int	i, n, a;
 	int	x;
 
 	ValueFormat1 = pbe16(&contents[o+4]);
@@ -2650,35 +2658,59 @@ get_PairPosFormat2(int o)
 	Class2Count = pbe16(&contents[o+14]);
 	sz = get_value_size(ValueFormat1, ValueFormat2);
 	if ((c1 = open_class(ClassDef1)) != NULL) {
-		while (get_class(c1, &g1, &v1), g1 >= 0) {
-			if ((c2 = open_class(ClassDef2)) != NULL) {
-				while (get_class(c2, &g2, &v2), g2 >= 0) {
-					if (v1 >= 0 && v1 < Class1Count &&
-							v2 >= 0 &&
-							v2 < Class2Count) {
-						x = get_x_adj(ValueFormat1,
-							o + 16 +
-							v1*Class2Count*sz +
-							v2*sz);
-						kernpair(g1, g2, x);
-					}
+		if ((c2 = open_class(ClassDef2)) != NULL) {
+			n = a = 0;
+			while (get_class(c2, &g, &v), g >= 0) {
+				if (v < 0 || v >= Class2Count)
+					continue;
+				if (n >= a) {
+					a = a ? 2*a : 128;
+					g2 = realloc(g2, a * sizeof *g2);
+					v2 = realloc(v2, a * sizeof *v2);
 				}
-				free_class(c2);
+				g2[n] = g;
+				v2[n] = v;
+				n++;
 			}
+			while (get_class(c1, &g, &v), g >= 0) {
+				if (v < 0 || v >= Class1Count)
+					continue;
+				for (i = 0; i < n; i++) {
+					x = get_x_adj(ValueFormat1,
+						o + 16 +
+						v*Class2Count*sz +
+						v2[i]*sz);
+					kernpair(g, g2[i], x);
+				}
+			}
+			free_class(c2);
 		}
 		free_class(c1);
 	}
+	free(g2);
+	free(v2);
 }
 
 static void
-get_GPOS_kern(int _t, int o, const char *_name)
+get_GPOS_kern1(int _t, int o, const char *_name)
 {
 	int	PosFormat;
 
+	got_kern = 1;
 	switch (PosFormat = pbe16(&contents[o])) {
 	case 1:
 		get_PairPosFormat1(o);
 		break;
+	}
+}
+
+static void
+get_GPOS_kern2(int _t, int o, const char *_name)
+{
+	int	PosFormat;
+
+	got_kern = 1;
+	switch (PosFormat = pbe16(&contents[o])) {
 	case 2:
 		get_PairPosFormat2(o);
 		break;
@@ -3000,6 +3032,7 @@ get_kern_subtable(int o)
 			(coverage&4) != 0 ||	/* . . . not perpendicular */
 			((coverage&0xff00) != 0))	/* . . . format 0 */
 		return;
+	got_kern = 1;
 	nPairs = pbe16(&contents[o+6]);
 	for (i = 0; i < nPairs; i++) {
 		if (o + 14 + 3 * (i+1) > o + length)
@@ -3300,8 +3333,8 @@ otft42(char *font, char *path, char *_contents, size_t _size, FILE *fp)
 				yMax * 1000 / unitsPerEm);
 		fprintf(fp, "/PaintType 0 def\n");
 		fprintf(fp, "/Encoding StandardEncoding def\n");
-		if (fsType != -1 || Notice || Copyright) {
-			fprintf(fp, "/FontInfo 3 dict dup begin\n");
+		if (fsType != -1 || Notice || Copyright || WeightClass) {
+			fprintf(fp, "/FontInfo 4 dict dup begin\n");
 			if (fsType != -1)
 				fprintf(fp, "/FSType %d def\n", fsType);
 			if (Notice)
@@ -3310,6 +3343,19 @@ otft42(char *font, char *path, char *_contents, size_t _size, FILE *fp)
 			if (Copyright)
 				fprintf(fp, "/Copyright (%s) readonly def\n",
 						Copyright);
+			if (WeightClass) {
+				if (WeightClass <= 350)
+					cp = "Light";
+				else if (WeightClass <= 550)
+					cp = "Medium";
+				else if (WeightClass <= 750)
+					cp = "Bold";
+				else if (WeightClass <= 850)
+					cp = "Ultra";
+				else
+					cp = "Heavy";
+				fprintf(fp, "/Weight (%s) readonly def\n", cp);
+			}
 			fprintf(fp, "end readonly def\n");
 		}
 		fprintf(fp, "/CharStrings %d dict dup begin\n", nc);
@@ -3368,10 +3414,12 @@ otfget(struct afmtab *_a, char *_contents, size_t _size)
 			get_ttf();
 		}
 #ifndef	DPOST
+		kerninit();
 		get_feature(pos_GSUB, "liga", 4, get_LigatureSubstFormat1);
-		get_feature(pos_GPOS, "kern", 2, get_GPOS_kern);
+		get_feature(pos_GPOS, "kern", 2, get_GPOS_kern1);
+		get_feature(pos_GPOS, "kern", 2, get_GPOS_kern2);
 		get_feature(pos_GSUB, NULL, -1, get_substitutions);
-		if (ttf && nkerntmp == 0)
+		if (ttf && got_kern == 0)
 			get_kern();
 		kernfinish();
 		get_cmap(0);

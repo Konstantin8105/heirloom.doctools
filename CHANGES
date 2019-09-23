@@ -1,3 +1,66 @@
+Release 060321
+* An revised version of the "Nroff/Troff User's Manual" is now available
+  in the directory "doc/troff". It replaces the "NEWS" and "PDFS" text
+  files; these have been removed.
+* A typeset version of "Font Handling in Troff With PostScript Devices"
+  is now available in the directory "doc/fonts". It replaces the "FONTS"
+  text file that has been removed.
+* [nt]roff: Hyphenation is now enabled by default. This is compatible
+  with most other versions of troff, but differs from Solaris troff.
+* troff/dpost: The characters \(or \- \` \' " # < > @ \ ^ ~ are now
+  taken from the current font instead of the special font by default 
+  if possible with the "ps" and "psmed" devices. The new DESC keyword
+  "allpunct" controls this.
+* troff: Kerning pairs from font metrics files that include "\[name]"
+  characters now work correctly; they could previously apply to wrong
+  characters with font files containing more than 260 characters, and
+  were ineffective with smaller ones.
+* troff: OpenType and TrueType kerning pairs with a position difference
+  of zero are now completely ignored. They could previously overwrite a
+  previous positioning difference for the same pair. Also if a kerning
+  pair occurs more than once in the metrics file, the first definition
+  read is now used instead of the last one.
+* troff: In an OpenType font, if a kerning pair occurs in both a "Pair
+  Positioning Adjustment" format 1 (kerning by specific glyphs) and a
+  format 2 (kerning by glyph classes) table, the format 1 definition
+  is now always used.
+* tbl: Storage space expansions because of long lines inside a table are
+  now done properly.
+* troff: The "\n[.ascender]" and "\n[.descender]" registers contain the
+  typical extents of the current font above and below the base line,
+  scaled to the current point size.
+* troff: Zero-width space characters are no longer considered word space
+  when a line is justified. This fixes "\X" device control functions in
+  diversions.
+* dpost: The metrics of the underscore character in the PostScript Symbol
+  font (which is mapped to "\(ul" and is used to draw horizontal lines)
+  are now dynamically adjusted in the generated PostScript code. This
+  works around varying metrics of this character in different versions
+  of the Symbol font. Note that this does not work in PDF unless the
+  font is embedded at the time the document is distilled.
+* dpost: The "\(sq" glyph is now filled in any font with a "Weight" entry
+  of "Bold", "Ultra", or "Heavy".
+* dpost: The "post" device works again; dpost previously crashed with a
+  null pointer dereference when it was used.
+* troff/dpost: EPS files that contain carriage-return characters as
+  newline indicators are now correctly handled with the ".psbb" request
+  and the picture inclusion mechanism.
+* [nt]roff: The "\(.z" number register handles diversion names longer
+  than two characters properly now.
+* [nt]roff: Requests like ".bd" or ".kernpair" now warn when an invalid
+  font name is given.
+* [nt]roff: No "illegal number" warning is printed anymore when a "\}" is
+  found as part of a possibly numeric argument, as in e.g. ".bp \}".
+* [nt]roff: The ".mc" request does not require an argument so no warning
+  is printed if it is given none.
+* dpost: When a PDFMark Bookmark command is issued at the beginning of
+  a page of intermediate output before any text has been printed, the
+  value "4" is now substracted automatically to make the PDF viewer
+  show the whole page top including margin.
+* -mm macros: An error that was introduced when the macros were converted
+  to use spaces between a request name and its arguments has been fixed.
+  It sometimes caused the page offset to be wrong.
+
 Release 060221
 * [nt]roff: With the ".hylang" request, the individual parts of words
   composed by "-" or "\(em" characters are now subject to hyphenation.

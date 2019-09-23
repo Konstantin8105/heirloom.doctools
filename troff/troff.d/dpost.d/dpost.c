@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)dpost.c	1.137 (gritter) 2/19/06
+ * Sccsid @(#)dpost.c	1.141 (gritter) 3/12/06
  */
 
 /*
@@ -2939,20 +2939,31 @@ dup length dict begin\n\
   currentdict\n\
 end\n",
 		a->fontname, a->Font.intname, n);
-	if (strcmp(a->fontname, "Symbol") == 0 && n == 0) {
-		fprintf(gf, "/Symbol-tmp-@%s exch definefont pop\n",
-			a->Font.intname);
-		fprintf(gf, "/Symbol-tmp-@%s /Symbol-@%s Sdefs cf\n",
-			a->Font.intname, a->Font.intname);
-		fprintf(gf, "/Symbol-tmp-@%s undefinefont\n",
-			a->Font.intname);
-	} else if (strcmp(a->fontname, "Times-Roman") == 0 && n == 0) {
-		fprintf(gf, "/Times-Roman-tmp-@%s exch definefont pop\n",
-			a->Font.intname);
-		fprintf(gf, "/Times-Roman-tmp-@%s /Times-Roman-@%s S1defs cf\n",
-			a->Font.intname, a->Font.intname);
-		fprintf(gf, "/Times-Roman-tmp-@%s undefinefont\n",
-			a->Font.intname);
+	if (a->spec & SPEC_S) {
+		fprintf(gf, "/%s-tmp-@%s", a->fontname, a->Font.intname);
+		if (n) fprintf(gf, "@%d", n);
+		fprintf(gf, " exch definefont pop\n");
+		fprintf(gf, "_Sdefsadj\n");
+		fprintf(gf, "/%s-tmp-@%s", a->fontname, a->Font.intname);
+		if (n) fprintf(gf, "@%d", n);
+		fprintf(gf, " /%s-@%s", a->fontname, a->Font.intname);
+		if (n) fprintf(gf, "@%d", n);
+		fprintf(gf, " Sdefs cf\n");
+		fprintf(gf, "/%s-tmp-@%s", a->fontname, a->Font.intname);
+		if (n) fprintf(gf, "@%d", n);
+		fprintf(gf, " undefinefont\n");
+	} else if (a->spec & SPEC_S1) {
+		fprintf(gf, "/%s-tmp-@%s", a->fontname, a->Font.intname);
+		if (n) fprintf(gf, "@%d", n);
+		fprintf(gf, " exch definefont pop\n");
+		fprintf(gf, "/%s-tmp-@%s", a->fontname, a->Font.intname);
+		if (n) fprintf(gf, "@%d", n);
+		fprintf(gf, " /%s-@%s", a->fontname, a->Font.intname);
+		if (n) fprintf(gf, "@%d", n);
+		fprintf(gf, " S1defs cf\n");
+		fprintf(gf, "/%s-tmp-@%s", a->fontname, a->Font.intname);
+		if (n) fprintf(gf, "@%d", n);
+		fprintf(gf, " undefinefont\n");
 	} else if (n)
 		fprintf(gf, "/%s-@%s@%d exch definefont pop\n",
 			a->fontname, a->Font.intname, n);
@@ -3959,7 +3970,7 @@ addoctal (
 
 
     oprep();
-    if (c >= 128 && fontname[font].afm->encmap) {
+    if (c >= 128 && fontname[font].afm && fontname[font].afm->encmap) {
 	    c = fontname[font].afm->encmap[c - 128];
 	    subfont = c >> 8;
 	    c &= 0377;
@@ -4322,7 +4333,7 @@ t_pdfmark(char *buf)
 			    "  /View [/XYZ -4 %g 0]\n"
 			    "/DEST pdfmark\n",
 			nBookmarks - 1,
-			pagelength - (lasty >= 0 ? vpos * 72.0 / res : 0));
+			pagelength - (lasty >= 0 ? vpos * 72.0 / res : -4));
 	} else
 		error(NON_FATAL, "unknown PDFMark attribute %s", buf);
 }

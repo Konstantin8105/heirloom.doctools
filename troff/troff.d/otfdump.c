@@ -23,7 +23,7 @@
 /*
  * Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)otfdump.c	1.11 (gritter) 12/20/05
+ * Sccsid @(#)otfdump.c	1.15 (gritter) 3/16/06
  */
 
 static enum show {
@@ -176,7 +176,7 @@ afmaddchar(struct afmtab *a, int C, int tp, int cl, int WX, int B[4], char *N,
 		enum spec s, int gid)
 {
 	if (N)
-		print(SHOW_CHARS, "char %s width %d", N, unitconv(WX));
+		print(SHOW_CHARS, "char %s width %d", N, _unitconv(WX));
 }
 
 void
@@ -184,12 +184,9 @@ afmalloc(struct afmtab *a, int n)
 {
 }
 
-struct kernpair *
-afmkernlook(struct afmtab *a, int ch1, int ch2)
+void
+afmaddkernpair(struct afmtab *a, int ch1, int ch2, int k)
 {
-	static struct kernpair	k;
-
-	return &k;
 }
 
 static void
@@ -198,17 +195,20 @@ kernpair(int first, int second, int x)
 	char	*s1, *s2;
 
 	if (x) {
-		nkerntmp++;
 		s1 = GID2SID(first);
 		s2 = GID2SID(second);
 		if (s1 && s2)
 			print(SHOW_KERNPAIRS, "kernpair %s %s width %d",
-				s1, s2, unitconv(x));
+				s1, s2, _unitconv(x));
 	}
+}
+
+static void
+kerninit(void)
+{
 }
 
 static void
 kernfinish(void)
 {
-	nkerntmp = 0;
 }

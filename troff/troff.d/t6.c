@@ -33,7 +33,7 @@
 /*
  * Portions Copyright (c) 2005 Gunnar Ritter, Freiburg i. Br., Germany
  *
- * Sccsid @(#)t6.c	1.123 (gritter) 2/21/06
+ * Sccsid @(#)t6.c	1.129 (gritter) 3/14/06
  */
 
 /*
@@ -191,7 +191,7 @@ getcw(register int i)
 		nocache = 1;
 		if (fallbacktab[xfont]) {
 			for (jj = 0; fallbacktab[xfont][jj] != 0; jj++) {
-				if ((ii = findft(fallbacktab[xfont][jj])) < 0)
+				if ((ii = findft(fallbacktab[xfont][jj],0)) < 0)
 					continue;
 				t = ftrans(ii, i + 32) - 32;
 				j = fitab[ii][t];
@@ -297,6 +297,45 @@ abscw(int n)	/* return index of abs char n in fontab[], etc. */
 	return 0;
 }
 
+static int
+fvert2pts(int f, int s, int k)
+{
+	float	z;
+
+	if (k != 0) {
+		k = (k * u2pts(s) + (Unitwidth / 2)) / Unitwidth;
+		if (dev.anysize && xflag && (z = zoomtab[f]) != 0)
+			k *= z;
+	}
+	return k;
+}
+
+int
+getascender(void)
+{
+	struct afmtab	*a;
+	int	n;
+
+	if ((n = fontbase[font]->afmpos - 1) >= 0) {
+		a = afmtab[n];
+		return fvert2pts(font, pts, a->ascender);
+	} else
+		return 0;
+}
+
+int
+getdescender(void)
+{
+	struct afmtab	*a;
+	int	n;
+
+	if ((n = fontbase[font]->afmpos - 1) >= 0) {
+		a = afmtab[n];
+		return fvert2pts(font, pts, a->descender);
+	} else
+		return 0;
+}
+
 int
 kernadjust(tchar c, tchar d)
 {
@@ -363,7 +402,7 @@ findchar(tchar c)
 		int	ii, jj;
 		if (fallbacktab[f]) {
 			for (jj = 0; fallbacktab[f][jj] != 0; jj++) {
-				if ((ii = findft(fallbacktab[f][jj])) < 0)
+				if ((ii = findft(fallbacktab[f][jj], 0)) < 0)
 					continue;
 				if (fitab[ii][i] != 0) {
 					f = ii;
@@ -406,7 +445,7 @@ getkw(tchar c, tchar d)
 {
 	struct knode	*kp;
 	struct afmtab	*a;
-	int	f, g, i, j, k, n, s;
+	int	f, g, i, j, k, n, s, I, J;
 	float	z;
 
 	lastkern = 0;
@@ -432,7 +471,13 @@ getkw(tchar c, tchar d)
 		else if ((n = (fontbase[f]->afmpos)-1) >= 0 &&
 				n == (fontbase[g]->afmpos)-1) {
 			a = afmtab[n];
-			k = afmgetkern(a, i - 32, j - 32);
+			I = i - 32;
+			J = j - 32;
+			if (I >= nchtab + 128)
+				I -= nchtab + 128;
+			if (J >= nchtab + 128)
+				J -= nchtab + 128;
+			k = afmgetkern(a, I, J);
 		}
 		if (j>32 && kernafter != NULL && kernafter[fbits(c)] != NULL)
 			k += kernafter[fbits(c)][i];
@@ -510,7 +555,7 @@ postchar(const char *temp, int *fp)
 		return c;
 	if (fallbacktab[font]) {
 		for (j = 0; fallbacktab[font][j] != 0; j++) {
-			if ((i = findft(fallbacktab[font][j])) < 0)
+			if ((i = findft(fallbacktab[font][j], 0)) < 0)
 				continue;
 			if ((c = postchar1(temp, i)) != 0) {
 				*fp = i;
@@ -596,15 +641,18 @@ tchar setabs(void)		/* set absolute char from \C'...' */
 
 
 int
-findft(register int i)
+findft(register int i, int required)
 {
 	register int k;
 
 	if ((k = i - '0') >= 0 && k <= nfonts && k < smnt)
 		return(k);
 	for (k = 0; fontlab[k] != i; k++)
-		if (k > nfonts)
+		if (k > nfonts) {
+			if (warn & WARN_FONT)
+				errprint("%s: no such font", macname(i));
 			return(-1);
+		}
 	return(k);
 }
 
@@ -794,7 +842,7 @@ setfont(int a)
 	}
 	if (i == 'S' || i == '0')
 		return;
-	if ((j = findft(i)) == -1)
+	if ((j = findft(i, 0)) == -1)
 		if ((j = setfp(0, i, 0)) == -1)	/* try to put it in position 0 */
 			return;
 s0:
@@ -980,7 +1028,7 @@ caseflig(void)
 		return;
 	if ((i = getrq()) >= 256)
 		i = maybemore(i, 2);
-	if ((j = findft(i)) < 0 || skip(1))
+	if ((j = findft(i, 1)) < 0 || skip(1))
 		return;
 	fontbase[j]->ligfont = atoi() & 037;
 	/*
@@ -1153,7 +1201,7 @@ casecs(void)
 		goto rtn;
 	if (i >= 256)
 		i = maybemore(i, 2);
-	if ((i = findft(i)) < 0)
+	if ((i = findft(i, 1)) < 0)
 		goto rtn;
 	skip(1);
 	cstab[i] = atoi();
@@ -1178,7 +1226,7 @@ casebd(void)
 bd0:
 	if (skip(1) || !(i = getrq()) ||
 			(i = i >= 256 ? maybemore(i, 2) : i,
-			(j = findft(i)) == -1)) {
+			(j = findft(i, 1)) == -1)) {
 		if (k)
 			goto bd1;
 		else 
@@ -1251,7 +1299,7 @@ casefspacewidth(void)
 		return;
 	if ((i = getrq()) >= 256)
 		i = maybemore(i, 2);
-	if ((f = findft(i)) < 0)
+	if ((f = findft(i, 1)) < 0)
 		return;
 	if (skip(0)) {
 		fontab[f][0] = dev.res * dev.unitwidth / 72 / 3;
@@ -1266,7 +1314,7 @@ casefspacewidth(void)
 		n = atoi();
 		noscale--;
 		unitsPerEm = 1000;
-		fontab[f][0] = unitconv(n);
+		fontab[f][0] = _unitconv(n);
 	}
 	zapwcache(1);
 }
@@ -1366,6 +1414,8 @@ checkenminus(int f)
 
 	if (afmtab == NULL || (i = fontbase[f]->afmpos - 1) < 0)
 		return;
+	if (c_endash == 0 || c_minus == 0)
+		specnames();
 	spec = afmtab[i]->spec;
 	if ((spec&(SPEC_PUNCT|SPEC_S1)) == SPEC_PUNCT) {
 		if (fitab[f][c_endash-32] == 0 && ftrtab[f][c_minus-32])
@@ -1392,6 +1442,8 @@ loadafm(int nf, int rq, char *file, char *supply, int required, enum spec spec)
 		if (access(path, 0) < 0)
 			path = getfontpath(file, "ttf");
 	}
+	if (dev.allpunct)
+		spec |= SPEC_PUNCT;
 	a = calloc(1, sizeof *a);
 	for (i = 0; i < nafm; i++)
 		if (strcmp(afmtab[i]->path, path) == 0 &&
@@ -1514,7 +1566,7 @@ casetrack(void)
 		return;
 	if ((i = getrq()) >= 256)
 		i = maybemore(i, 2);
-	if ((j = findft(i)) < 0)
+	if ((j = findft(i, 1)) < 0)
 		return;
 	s1 = tracknum();
 	if (!nonumb) {
@@ -1545,7 +1597,7 @@ casefallback(void)
 		return;
 	if ((i = getrq()) >= 256)
 		i = maybemore(i, 2);
-	if ((j = findft(i)) < 0)
+	if ((j = findft(i, 1)) < 0)
 		return;
 	do {
 		skip(0);
@@ -1568,7 +1620,7 @@ casehidechar(void)
 		return;
 	if ((i = getrq()) >= 256)
 		i = maybemore(i, 2);
-	if ((j = findft(i)) < 0)
+	if ((j = findft(i, 1)) < 0)
 		return;
 	font = font1 = j;
 	mchbits();
@@ -1599,7 +1651,7 @@ casefzoom(void)
 		return;
 	if ((i = getrq()) >= 256)
 		i = maybemore(i, 2);
-	if ((j = findft(i)) < 0)
+	if ((j = findft(i, 1)) < 0)
 		return;
 	skip(1);
 	do {
@@ -1783,7 +1835,7 @@ hang(int **tp)
 		return;
 	if ((i = getrq()) >= 256)
 		i = maybemore(i, 2);
-	if ((j = findft(i)) < 0)
+	if ((j = findft(i, 1)) < 0)
 		return;
 	font = font1 = j;
 	mchbits();
@@ -1793,7 +1845,7 @@ hang(int **tp)
 		noscale--;
 		if (fbits(k) == j && !ismot(k)) {
 			unitsPerEm = 1000;
-			n = unitconv(n);
+			n = _unitconv(n);
 			if (tp[j] == NULL)
 				tp[j] = calloc(NCHARS, sizeof *tp);
 			tp[j][i] = n;
@@ -1828,7 +1880,7 @@ casekernpair(void)
 		return;
 	if ((i = getrq()) >= 256)
 		i = maybemore(i, 2);
-	if ((f = findft(i)) < 0)
+	if ((f = findft(i, 1)) < 0)
 		return;
 	font = font1 = f;
 	mchbits();
@@ -1839,7 +1891,7 @@ casekernpair(void)
 		goto done;
 	if ((i = getrq()) >= 256)
 		i = maybemore(i, 2);
-	if ((g = findft(i)) < 0)
+	if ((g = findft(i, 1)) < 0)
 		goto done;
 	font = font1 = g;
 	mchbits();
@@ -1862,7 +1914,7 @@ casekernpair(void)
 		d = ' ';
 	setfbits(d, g);
 	unitsPerEm = 1000;
-	n = unitconv(n);
+	n = _unitconv(n);
 	kadd(c, d, n);
 done:
 	font = savfont;
@@ -1882,7 +1934,7 @@ kernsingle(int **tp)
 		return;
 	if ((i = getrq()) >= 256)
 		i = maybemore(i, 2);
-	if ((f = findft(i)) < 0)
+	if ((f = findft(i, 1)) < 0)
 		return;
 	font = font1 = f;
 	mchbits();
@@ -1898,7 +1950,7 @@ kernsingle(int **tp)
 		if (tp[f] == NULL)
 			tp[f] = calloc(NCHARS, sizeof *tp);
 		unitsPerEm = 1000;
-		tp[f][c] = unitconv(n);
+		tp[f][c] = _unitconv(n);
 	}
 	font = savfont;
 	font1 = savfont1;
@@ -1929,7 +1981,7 @@ caseftr(void)
 		return;
 	if ((i = getrq()) >= 256)
 		i = maybemore(i, 2);
-	if ((f = findft(i)) < 0)
+	if ((f = findft(i, 1)) < 0)
 		return;
 	font = font1 = f;
 	mchbits();
@@ -2010,7 +2062,7 @@ casefeature(void)
 		return;
 	if ((i = getrq()) >= 256)
 		i = maybemore(i, 2);
-	if ((f = findft(i)) < 0)
+	if ((f = findft(i, 1)) < 0)
 		return;
 	if ((j = (fontbase[f]->afmpos) - 1) < 0 ||
 			(a = afmtab[j])->type != TYPE_OTF &&
@@ -2106,7 +2158,7 @@ un2tr(int c, int *fp)
 		}
 		if (fallbacktab[font])
 			for (j = 0; fallbacktab[font][j] != 0; j++) {
-				if ((i = findft(fallbacktab[font][j])) < 0)
+				if ((i = findft(fallbacktab[font][j], 0)) < 0)
 					continue;
 				if ((i = ufmap(c, i, fp)) != 0)
 					return i;
